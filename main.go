@@ -298,6 +298,10 @@ func handleNotFound(event *handler.InteractionEvent) error {
 	return event.CreateMessage(discord.MessageCreate{Content: "Command not found", Flags: discord.MessageFlagEphemeral})
 }
 
+func formatMsg(msg, username string) string {
+	return msg
+}
+
 func addContextMessagesIfPossible(client bot.Client, llmer *llm.Llmer, channelID, messageID snowflake.ID) {
 	messages, err := client.Rest().GetMessages(channelID, 0, messageID, 0, maxContextMessages)
 	if err != nil {
@@ -311,7 +315,7 @@ func addContextMessagesIfPossible(client bot.Client, llmer *llm.Llmer, channelID
 		if msg.Author.ID == client.ID() {
 			role = llm.RoleAssistant
 		}
-		llmer.AddMessage(role, msg.Content)
+		llmer.AddMessage(role, formatMsg(msg.Content, msg.Author.Username))
 	}
 }
 
@@ -348,14 +352,16 @@ func handleLlm(event *handler.CommandEvent, model string) error {
 		// and we also want the last message in the channel
 		msg, err := event.Client().Rest().GetMessage(event.Channel().ID(), *lastMessage)
 		if err == nil && msg != nil {
-			llmer.AddMessage(llm.RoleUser, msg.Content)
+			llmer.AddMessage(llm.RoleUser, formatMsg(msg.Content, msg.Author.Username))
 		}
 	}
 
 	slog.Debug("handleLlm: got context messages", slog.Int("count", llmer.NumMessages()))
 
 	// and we also want the actual slash command prompt
-	llmer.AddMessage(llm.RoleUser, prompt)
+	llmer.AddMessage(llm.RoleUser, formatMsg(prompt, event.User().Username))
+
+	event.DeferCreateMessage(ephemeral)
 
 	response, err := llmer.RequestCompletion(model)
 	if err != nil {
@@ -367,9 +373,9 @@ func handleLlm(event *handler.CommandEvent, model string) error {
 		flags = discord.MessageFlagEphemeral
 	}
 
-	event.CreateMessage(discord.MessageCreate{
-		Content: response,
-		Flags:   flags,
+	event.UpdateInteractionResponse(discord.MessageUpdate{
+		Content: &response,
+		Flags:   &flags,
 	})
 
 	if isDm {
@@ -390,7 +396,7 @@ func handleLlmInteraction(event *events.MessageCreate) error {
 	slog.Debug("interaction; added context messages", slog.Int("count", llmer.NumMessages()))
 
 	// and we also want the event message
-	llmer.AddMessage(llm.RoleUser, event.Message.Content)
+	llmer.AddMessage(llm.RoleUser, formatMsg(event.Message.Content, event.Message.Author.Username))
 
 	// now we generate the LLM response
 	response, err := llmer.RequestCompletion(llm.ModelGpt4oMini)

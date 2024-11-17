@@ -47,6 +47,7 @@ func NewLlmer() *Llmer {
 
 func newClient() *openai.Client {
 	config := openai.DefaultAzureConfig(githubToken, azureBaseURL)
+	config.APIType = openai.APITypeOpenAI
 	return openai.NewClientWithConfig(config)
 }
 
