@@ -1,0 +1,5 @@
+.cache/
+run.bat
+x3whitelist.json
+x3dmcache.json
+*.exe
