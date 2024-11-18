@@ -1,5 +1,4 @@
 .cache/
 run.bat
-x3whitelist.json
-x3dmcache.json
+x3*.json
 *.exe

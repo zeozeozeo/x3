@@ -61,6 +61,10 @@ func (l *Llmer) TruncateMessages(max int) {
 	}
 }
 
+func (l *Llmer) Lobotomize() {
+	l.Messages = []openai.ChatCompletionMessage{}
+}
+
 func (l *Llmer) AddMessage(role, content string) {
 	msg := openai.ChatCompletionMessage{
 		Role:    role,

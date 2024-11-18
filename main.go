@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"log/slog"
 	"os"
 	"os/signal"
@@ -101,14 +102,16 @@ var (
 	whitelistedUsers = []snowflake.ID{890686470556356619}
 
 	// since we can't read DMs from the bot, we will cache them
-	dmCache = map[snowflake.ID]*llm.Llmer{}
+	dmCache                 = map[snowflake.ID]*llm.Llmer{}
+	messageInteractionCache = map[snowflake.ID]string{}
 )
 
 const (
 	// LLM interaction context surrounding messages
-	maxContextMessages = 50
-	whitelistFile      = "x3whitelist.json"
-	dmCacheFile        = "x3dmcache.json"
+	maxContextMessages          = 50
+	whitelistFile               = "x3whitelist.json"
+	dmCacheFile                 = "x3dmcache.json"
+	messageInteractionCacheFile = "x3messageinteractioncache.json"
 )
 
 func loadWhitelist() {
@@ -206,14 +209,49 @@ func loadDmCache() {
 	}
 }
 
+func saveMessageInteractionCache() {
+	f, err := os.Create(messageInteractionCacheFile)
+	if err != nil {
+		panic(err)
+	}
+	defer f.Close()
+
+	if err = json.NewEncoder(f).Encode(messageInteractionCache); err != nil {
+		panic(err)
+	}
+}
+
+func loadMessageInteractionCache() {
+	// if not exists, create
+	if _, err := os.Stat(messageInteractionCacheFile); os.IsNotExist(err) {
+		f, err := os.Create(messageInteractionCacheFile)
+		if err != nil {
+			panic(err)
+		}
+		f.Close()
+	}
+
+	f, err := os.Open(messageInteractionCacheFile)
+	if err != nil {
+		panic(err)
+	}
+	defer f.Close()
+
+	if err = json.NewDecoder(f).Decode(&messageInteractionCache); err != nil {
+		saveMessageInteractionCache()
+	}
+}
+
 func init() {
 	loadWhitelist()
 	loadDmCache()
+	loadMessageInteractionCache()
 }
 
 func main() {
 	defer saveWhitelist()
 	defer saveDmCache()
+	defer saveMessageInteractionCache()
 
 	slog.SetLogLoggerLevel(slog.LevelDebug)
 	slog.Info("x3zeo booting up...")
@@ -316,10 +354,11 @@ func formatMsg(msg, username string) string {
 	return msg
 }
 
-func addContextMessagesIfPossible(client bot.Client, llmer *llm.Llmer, channelID, messageID snowflake.ID) {
+// returns whether a lobotomy was performed
+func addContextMessagesIfPossible(client bot.Client, llmer *llm.Llmer, channelID, messageID snowflake.ID) bool {
 	messages, err := client.Rest().GetMessages(channelID, 0, messageID, 0, maxContextMessages)
 	if err != nil {
-		return
+		return false
 	}
 
 	// discord returns surrounding message history from newest to oldest, but we want oldest to newest
@@ -328,9 +367,22 @@ func addContextMessagesIfPossible(client bot.Client, llmer *llm.Llmer, channelID
 		role := llm.RoleUser
 		if msg.Author.ID == client.ID() {
 			role = llm.RoleAssistant
+		} else if interaction, ok := messageInteractionCache[msg.ID]; ok {
+			// the prompt used for this response is in the interaction cache
+			llmer.AddMessage(llm.RoleUser, interaction)
 		}
+
+		if msg.Interaction != nil {
+			if msg.Interaction.Type == discord.InteractionTypeApplicationCommand && msg.Interaction.Name == "lobotomy" {
+				slog.Debug("found lobotomy interaction", slog.String("channel", channelID.String()), slog.String("message", msg.ID.String()))
+				llmer.Lobotomize()
+				return true
+			}
+		}
+
 		llmer.AddMessage(role, formatMsg(msg.Content, msg.Author.Username))
 	}
+	return false
 }
 
 func handleLlm(event *handler.CommandEvent, model string) error {
@@ -378,7 +430,11 @@ func handleLlm(event *handler.CommandEvent, model string) error {
 
 	response, err := llmer.RequestCompletion(model)
 	if err != nil {
-		return err
+		event.DeleteInteractionResponse()
+		return event.CreateMessage(discord.MessageCreate{
+			Content: fmt.Sprintf("Failed to generate response: %v", err),
+			Flags:   discord.MessageFlagEphemeral,
+		})
 	}
 
 	var flags discord.MessageFlags
@@ -386,10 +442,16 @@ func handleLlm(event *handler.CommandEvent, model string) error {
 		flags = discord.MessageFlagEphemeral
 	}
 
-	event.UpdateInteractionResponse(discord.MessageUpdate{
+	botMessage, err := event.UpdateInteractionResponse(discord.MessageUpdate{
 		Content: &response,
 		Flags:   &flags,
 	})
+
+	// only clients can query options passed to commands, so we cache the action interaction
+	if err == nil {
+		messageInteractionCache[botMessage.ID] = prompt
+		saveMessageInteractionCache()
+	}
 
 	if isDm {
 		saveDmCache()
@@ -480,7 +542,13 @@ func handleLobotomy(event *handler.CommandEvent) error {
 	if _, ok := dmCache[event.Channel().ID()]; ok {
 		delete(dmCache, event.Channel().ID())
 		saveDmCache()
-		return event.CreateMessage(discord.MessageCreate{Content: "Lobotomized for this channel"})
+		return event.CreateMessage(discord.MessageCreate{
+			Content: "Lobotomized for this channel",
+		})
 	}
-	return nil
+
+	// not in dm cache, still create message for surround contexter to find it
+	return event.CreateMessage(discord.MessageCreate{
+		Content: fmt.Sprintf("Lobotomized in this channel for the next %d messages", maxContextMessages),
+	})
 }
