@@ -351,7 +351,6 @@ func handleLlm(event *handler.CommandEvent, model string) error {
 			llmer = llm.NewLlmer()
 			dmCache[event.Channel().ID()] = llmer
 		}
-		llmer.TruncateMessages(maxContextMessages)
 		isDm = true
 	} else {
 		// we are not in a DM, so we can read surrounding messages
