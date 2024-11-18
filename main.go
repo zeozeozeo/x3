@@ -375,8 +375,8 @@ func addContextMessagesIfPossible(client bot.Client, llmer *llm.Llmer, channelID
 		if msg.Interaction != nil {
 			if msg.Interaction.Type == discord.InteractionTypeApplicationCommand && msg.Interaction.Name == "lobotomy" {
 				slog.Debug("found lobotomy interaction", slog.String("channel", channelID.String()), slog.String("message", msg.ID.String()))
-				llmer.Lobotomize()
-				return true
+				//llmer.Lobotomize()
+				// but we keep adding new messages from this point
 			}
 		}
 
