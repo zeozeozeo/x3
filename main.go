@@ -83,6 +83,19 @@ var (
 				},
 			},
 		},
+		discord.SlashCommandCreate{
+			Name:        "lobotomy",
+			Description: "Forget local context",
+			IntegrationTypes: []discord.ApplicationIntegrationType{
+				discord.ApplicationIntegrationTypeGuildInstall,
+				discord.ApplicationIntegrationTypeUserInstall,
+			},
+			Contexts: []discord.InteractionContextType{
+				discord.InteractionContextTypeGuild,
+				discord.InteractionContextTypeBotDM,
+				discord.InteractionContextTypePrivateChannel,
+			},
+		},
 	}
 
 	whitelistedUsers = []snowflake.ID{890686470556356619}
@@ -258,6 +271,7 @@ func main() {
 	// whitelist
 	r.Group(func(r handler.Router) {
 		r.Command("/whitelist", handleWhitelist)
+		r.Command("/lobotomy", handleLobotomy)
 	})
 
 	r.NotFound(handleNotFound)
@@ -461,4 +475,13 @@ func handleWhitelist(event *handler.CommandEvent) error {
 		addToWhitelist(user)
 		return event.CreateMessage(discord.MessageCreate{Content: "Added user to whitelist", Flags: discord.MessageFlagEphemeral})
 	}
+}
+
+func handleLobotomy(event *handler.CommandEvent) error {
+	if _, ok := dmCache[event.Channel().ID()]; ok {
+		delete(dmCache, event.Channel().ID())
+		saveDmCache()
+		return event.CreateMessage(discord.MessageCreate{Content: "Lobotomized for this channel"})
+	}
+	return nil
 }
