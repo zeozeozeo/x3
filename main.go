@@ -88,11 +88,9 @@ var (
 			Name:        "lobotomy",
 			Description: "Forget local context",
 			IntegrationTypes: []discord.ApplicationIntegrationType{
-				discord.ApplicationIntegrationTypeGuildInstall,
 				discord.ApplicationIntegrationTypeUserInstall,
 			},
 			Contexts: []discord.InteractionContextType{
-				discord.InteractionContextTypeGuild,
 				discord.InteractionContextTypeBotDM,
 				discord.InteractionContextTypePrivateChannel,
 			},
@@ -546,9 +544,9 @@ func handleLobotomy(event *handler.CommandEvent) error {
 			Content: "Lobotomized for this channel",
 		})
 	}
-
-	// not in dm cache, still create message for surround contexter to find it
-	return event.CreateMessage(discord.MessageCreate{
-		Content: fmt.Sprintf("Lobotomized in this channel for the next %d messages", maxContextMessages),
-	})
+	return nil
+	//// not in dm cache, still create message for surround contexter to find it
+	//return event.CreateMessage(discord.MessageCreate{
+	//	Content: fmt.Sprintf("Lobotomized in this channel for the next %d messages", maxContextMessages),
+	//})
 }
