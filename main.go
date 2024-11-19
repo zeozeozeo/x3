@@ -17,6 +17,7 @@ import (
 	"github.com/disgoorg/disgo/handler"
 	"github.com/disgoorg/disgo/handler/middleware"
 	"github.com/disgoorg/snowflake/v2"
+	"github.com/zeozeozeo/x3/imager"
 	"github.com/zeozeozeo/x3/llm"
 )
 
@@ -93,6 +94,26 @@ var (
 			Contexts: []discord.InteractionContextType{
 				discord.InteractionContextTypeBotDM,
 				discord.InteractionContextTypePrivateChannel,
+			},
+		},
+		discord.SlashCommandCreate{
+			Name:        "boykisser",
+			Description: "Send boykisser image",
+			IntegrationTypes: []discord.ApplicationIntegrationType{
+				discord.ApplicationIntegrationTypeGuildInstall,
+				discord.ApplicationIntegrationTypeUserInstall,
+			},
+			Contexts: []discord.InteractionContextType{
+				discord.InteractionContextTypeGuild,
+				discord.InteractionContextTypeBotDM,
+				discord.InteractionContextTypePrivateChannel,
+			},
+			Options: []discord.ApplicationCommandOption{
+				discord.ApplicationCommandOptionBool{
+					Name:        "ephemeral",
+					Description: "If the response should only be visible to you",
+					Required:    false,
+				},
 			},
 		},
 	}
@@ -304,10 +325,15 @@ func main() {
 		})
 	})
 
-	// whitelist
+	// utils
 	r.Group(func(r handler.Router) {
 		r.Command("/whitelist", handleWhitelist)
 		r.Command("/lobotomy", handleLobotomy)
+	})
+
+	// image
+	r.Group(func(r handler.Router) {
+		r.Command("/boykisser", handleBoykisser)
 	})
 
 	r.NotFound(handleNotFound)
@@ -346,6 +372,13 @@ func main() {
 
 func handleNotFound(event *handler.InteractionEvent) error {
 	return event.CreateMessage(discord.MessageCreate{Content: "Command not found", Flags: discord.MessageFlagEphemeral})
+}
+
+func handleFollowupError(event *handler.CommandEvent, err error) error {
+	return event.CreateMessage(discord.MessageCreate{
+		Content: fmt.Sprintf("Error: %v", err),
+		Flags:   discord.MessageFlagEphemeral,
+	})
 }
 
 func formatMsg(msg, username string) string {
@@ -549,4 +582,30 @@ func handleLobotomy(event *handler.CommandEvent) error {
 	//return event.CreateMessage(discord.MessageCreate{
 	//	Content: fmt.Sprintf("Lobotomized in this channel for the next %d messages", maxContextMessages),
 	//})
+}
+
+func handleBoykisser(event *handler.CommandEvent) error {
+	data := event.SlashCommandInteractionData()
+	ephemeral := data.Bool("ephemeral")
+
+	url, err := imager.GetRandomImageFromSubreddits("boykisser")
+	if err != nil {
+		handleFollowupError(event, err)
+		return err
+	}
+
+	var flags discord.MessageFlags
+	if ephemeral {
+		flags = discord.MessageFlagEphemeral
+	}
+
+	return event.CreateMessage(discord.MessageCreate{
+		Embeds: []discord.Embed{
+			{
+				Type: discord.EmbedTypeImage,
+				URL:  url,
+			},
+		},
+		Flags: flags,
+	})
 }
