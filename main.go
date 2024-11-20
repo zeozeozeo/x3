@@ -17,7 +17,6 @@ import (
 	"github.com/disgoorg/disgo/handler"
 	"github.com/disgoorg/disgo/handler/middleware"
 	"github.com/disgoorg/snowflake/v2"
-	"github.com/zeozeozeo/x3/imager"
 	"github.com/zeozeozeo/x3/llm"
 )
 
@@ -422,8 +421,13 @@ func handleLlm(event *handler.CommandEvent, model string) error {
 	ephemeral := data.Bool("ephemeral")
 
 	var llmer *llm.Llmer
-	var isDm bool
-	if event.Channel().Type() == discord.ChannelTypeDM || event.Channel().Type() == discord.ChannelTypeGroupDM {
+
+	// check if we have perms to read messages in this channel
+	useCache := event.Channel().Permissions.Has(discord.PermissionReadMessageHistory) &&
+		event.Channel().Type() != discord.ChannelTypeDM &&
+		event.Channel().Type() != discord.ChannelTypeGroupDM
+
+	if useCache {
 		// we are in a DM, so we cannot read surrounding messages. Instead, we use a cache
 		slog.Debug("in a DM; looking up DM cache", slog.String("channel", event.Channel().ID().String()))
 		var ok bool
@@ -434,7 +438,6 @@ func handleLlm(event *handler.CommandEvent, model string) error {
 			llmer = llm.NewLlmer()
 			dmCache[event.Channel().ID()] = llmer
 		}
-		isDm = true
 	} else {
 		// we are not in a DM, so we can read surrounding messages
 		llmer = llm.NewLlmer()
@@ -442,7 +445,7 @@ func handleLlm(event *handler.CommandEvent, model string) error {
 
 	// add context if possible
 	lastMessage := event.Channel().MessageChannel.LastMessageID()
-	if !isDm && lastMessage != nil {
+	if !useCache && lastMessage != nil {
 		addContextMessagesIfPossible(event.Client(), llmer, event.Channel().ID(), *lastMessage)
 
 		// and we also want the last message in the channel
@@ -484,7 +487,7 @@ func handleLlm(event *handler.CommandEvent, model string) error {
 		saveMessageInteractionCache()
 	}
 
-	if isDm {
+	if useCache {
 		saveDmCache()
 	}
 
@@ -585,27 +588,30 @@ func handleLobotomy(event *handler.CommandEvent) error {
 }
 
 func handleBoykisser(event *handler.CommandEvent) error {
-	data := event.SlashCommandInteractionData()
-	ephemeral := data.Bool("ephemeral")
+	/*
+		data := event.SlashCommandInteractionData()
+		ephemeral := data.Bool("ephemeral")
 
-	url, err := imager.GetRandomImageFromSubreddits("boykisser")
-	if err != nil {
-		handleFollowupError(event, err)
-		return err
-	}
+		url, err := imager.GetRandomImageFromSubreddits("boykisser")
+		if err != nil {
+			handleFollowupError(event, err)
+			return err
+		}
 
-	var flags discord.MessageFlags
-	if ephemeral {
-		flags = discord.MessageFlagEphemeral
-	}
+		var flags discord.MessageFlags
+		if ephemeral {
+			flags = discord.MessageFlagEphemeral
+		}
 
-	return event.CreateMessage(discord.MessageCreate{
-		Embeds: []discord.Embed{
-			{
-				Type: discord.EmbedTypeImage,
-				URL:  url,
+		return event.CreateMessage(discord.MessageCreate{
+			Embeds: []discord.Embed{
+				{
+					Type: discord.EmbedTypeImage,
+					URL:  url,
+				},
 			},
-		},
-		Flags: flags,
-	})
+			Flags: flags,
+		})
+	*/
+	return nil
 }

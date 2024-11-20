@@ -9,10 +9,9 @@ import (
 	"os"
 	"path"
 	"time"
-
-	"github.com/vartanbeno/go-reddit/v2/reddit"
 )
 
+/*
 var (
 	redditUsername         = os.Getenv("X3ZEO_REDDIT_USERNAME")
 	redditID               = os.Getenv("X3ZEO_REDDIT_ID")
@@ -62,6 +61,10 @@ func isImage(url string) bool {
 	return false
 }
 
+func getSubreddit(name string) {
+
+}
+
 func GetRandomImageFromSubreddits(subreddits ...string) (string, error) {
 	client := newClient()
 	ctx, cancel := context.WithDeadline(context.Background(), time.Now().Add(time.Second*10))
@@ -89,3 +92,4 @@ func GetRandomImageFromSubreddits(subreddits ...string) (string, error) {
 
 	return url, nil
 }
+*/
