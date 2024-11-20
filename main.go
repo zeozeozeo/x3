@@ -521,10 +521,20 @@ func onMessageCreate(event *events.MessageCreate) {
 		return
 	}
 
+	if event.Message.GuildID == nil {
+		// DM
+		if err := handleLlmInteraction(event); err != nil {
+			slog.Error("failed to handle DM interaction", slog.Any("err", err))
+		}
+		return
+	}
+
 	for _, user := range event.Message.Mentions {
 		if user.ID == event.Client().ID() {
 			slog.Debug("handling @mention interaction")
-			handleLlmInteraction(event)
+			if err := handleLlmInteraction(event); err != nil {
+				slog.Error("failed to handle DM interaction", slog.Any("err", err))
+			}
 			return
 		}
 	}
@@ -534,7 +544,9 @@ func onMessageCreate(event *events.MessageCreate) {
 		if event.Message.ReferencedMessage.Author.ID == event.Client().ID() {
 			// ...that was created by us
 			slog.Debug("handling reply interaction")
-			handleLlmInteraction(event)
+			if err := handleLlmInteraction(event); err != nil {
+				slog.Error("failed to handle DM interaction", slog.Any("err", err))
+			}
 			return
 		}
 	}
