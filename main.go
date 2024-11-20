@@ -139,6 +139,7 @@ var (
 const (
 	// LLM interaction context surrounding messages
 	maxContextMessages = 50
+	maxRedditAttempts  = 3
 )
 
 func addToWhitelist(id snowflake.ID) {
@@ -246,7 +247,7 @@ func init() {
 func main() {
 	defer db.Close()
 
-	slog.SetLogLoggerLevel(slog.LevelInfo)
+	slog.SetLogLoggerLevel(slog.LevelDebug)
 	slog.Info("x3zeo booting up...")
 	slog.Info("disgo version", slog.String("version", disgo.Version))
 
@@ -576,9 +577,18 @@ func handleLobotomy(event *handler.CommandEvent) error {
 	})
 }
 
-func fetchBoykisser() (*http.Response, reddit.Post, error) {
+func fetchBoykisser(attempts int) (*http.Response, reddit.Post, error) {
+	slog.Debug("fetchBoykisser", slog.Int("attempts", attempts))
+	//if attempts > 1 {
+	//	// perhaps reddit ratelimits us
+	//	time.Sleep(500 * time.Millisecond)
+	//}
+
 	post, err := reddit.GetRandomImageFromSubreddits("boykisser", "boykisser2", "boykissermemes", "wholesomeboykissers")
 	if err != nil {
+		if attempts < maxRedditAttempts {
+			return fetchBoykisser(attempts + 1)
+		}
 		return nil, post, err
 	}
 
@@ -587,12 +597,18 @@ func fetchBoykisser() (*http.Response, reddit.Post, error) {
 	client := &http.Client{}
 	req, err := http.NewRequest("GET", post.Data.URL, nil)
 	if err != nil {
+		if attempts < maxRedditAttempts {
+			return fetchBoykisser(attempts + 1)
+		}
 		return nil, post, err
 	}
 	req.Header.Set("User-Agent", reddit.UserAgent)
 
 	resp, err := client.Do(req)
 	if err != nil {
+		if attempts < maxRedditAttempts {
+			return fetchBoykisser(attempts + 1)
+		}
 		return nil, post, err
 	}
 
@@ -603,7 +619,7 @@ func handleBoykisser(event *handler.CommandEvent) error {
 	data := event.SlashCommandInteractionData()
 	ephemeral := data.Bool("ephemeral")
 
-	resp, post, err := fetchBoykisser()
+	resp, post, err := fetchBoykisser(1)
 	if err != nil {
 		return handleFollowupError(event, err)
 	}
@@ -644,7 +660,7 @@ func handleBoykisser(event *handler.CommandEvent) error {
 }
 
 func handleBoykisserRefresh(data discord.ButtonInteractionData, event *handler.ComponentEvent) error {
-	resp, post, err := fetchBoykisser()
+	resp, post, err := fetchBoykisser(1)
 	if err != nil {
 		return err
 	}
