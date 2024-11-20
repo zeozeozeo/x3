@@ -247,7 +247,7 @@ func init() {
 func main() {
 	defer db.Close()
 
-	slog.SetLogLoggerLevel(slog.LevelInfo)
+	slog.SetLogLoggerLevel(slog.LevelDebug)
 	slog.Info("x3zeo booting up...")
 	slog.Info("disgo version", slog.String("version", disgo.Version))
 
@@ -648,7 +648,6 @@ func handleBoykisser(event *handler.CommandEvent) error {
 	}
 
 	url := post.Data.GetRandomImage()
-	fmt.Println("post url", url)
 
 	_, err = event.UpdateInteractionResponse(discord.MessageUpdate{
 		Files: []*discord.File{

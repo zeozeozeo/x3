@@ -15,6 +15,7 @@ import (
 
 var (
 	githubToken = os.Getenv("X3ZEO_GITHUB_TOKEN")
+	zjToken     = os.Getenv("X3ZEO_ZJ_TOKEN")
 )
 
 const (
