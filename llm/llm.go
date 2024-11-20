@@ -2,6 +2,7 @@ package llm
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"io"
 	"log/slog"
@@ -43,6 +44,12 @@ type Llmer struct {
 
 func NewLlmer() *Llmer {
 	return &Llmer{}
+}
+
+func UnmarshalLlmer(data []byte) (*Llmer, error) {
+	var llmer Llmer
+	err := json.Unmarshal(data, &llmer)
+	return &llmer, err
 }
 
 func newClient() *openai.Client {

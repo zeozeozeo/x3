@@ -3,10 +3,13 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
+	"net/http"
 	"os"
 	"os/signal"
+	"path"
 	"syscall"
 
 	"github.com/disgoorg/disgo"
@@ -18,6 +21,11 @@ import (
 	"github.com/disgoorg/disgo/handler/middleware"
 	"github.com/disgoorg/snowflake/v2"
 	"github.com/zeozeozeo/x3/llm"
+	"github.com/zeozeozeo/x3/reddit"
+
+	"database/sql"
+
+	_ "github.com/mattn/go-sqlite3"
 )
 
 func makeGptCommand(name, desc string) discord.SlashCommandCreate {
@@ -91,8 +99,16 @@ var (
 				discord.ApplicationIntegrationTypeUserInstall,
 			},
 			Contexts: []discord.InteractionContextType{
+				discord.InteractionContextTypeGuild,
 				discord.InteractionContextTypeBotDM,
 				discord.InteractionContextTypePrivateChannel,
+			},
+			Options: []discord.ApplicationCommandOption{
+				discord.ApplicationCommandOptionBool{
+					Name:        "ephemeral",
+					Description: "If the response should only be visible to you",
+					Required:    false,
+				},
 			},
 		},
 		discord.SlashCommandCreate{
@@ -117,159 +133,118 @@ var (
 		},
 	}
 
-	whitelistedUsers = []snowflake.ID{890686470556356619}
-
-	// since we can't read DMs from the bot, we will cache them
-	dmCache                 = map[snowflake.ID]*llm.Llmer{}
-	messageInteractionCache = map[snowflake.ID]string{}
+	db *sql.DB
 )
 
 const (
 	// LLM interaction context surrounding messages
-	maxContextMessages          = 50
-	whitelistFile               = "x3whitelist.json"
-	dmCacheFile                 = "x3dmcache.json"
-	messageInteractionCacheFile = "x3messageinteractioncache.json"
+	maxContextMessages = 50
 )
 
-func loadWhitelist() {
-	// if not exists, create
-	if _, err := os.Stat(whitelistFile); os.IsNotExist(err) {
-		f, err := os.Create(whitelistFile)
-		if err != nil {
-			panic(err)
-		}
-		f.Close()
-	}
-
-	f, err := os.Open(whitelistFile)
-	if err != nil {
-		panic(err)
-	}
-	defer f.Close()
-
-	if err = json.NewDecoder(f).Decode(&whitelistedUsers); err != nil {
-		saveWhitelist()
-	}
-}
-
-func saveWhitelist() {
-	f, err := os.Create(whitelistFile)
-	if err != nil {
-		panic(err)
-	}
-	defer f.Close()
-
-	if err = json.NewEncoder(f).Encode(whitelistedUsers); err != nil {
-		panic(err)
-	}
-}
-
 func addToWhitelist(id snowflake.ID) {
-	for _, v := range whitelistedUsers {
-		if v == id {
-			return
-		}
+	_, err := db.Exec("INSERT OR IGNORE INTO whitelist (user_id) VALUES (?)", id.String())
+	if err != nil {
+		slog.Error("failed to add user to whitelist", slog.Any("err", err))
 	}
-	whitelistedUsers = append(whitelistedUsers, id)
-	saveWhitelist()
 }
 
 func removeFromWhitelist(id snowflake.ID) {
-	for i, v := range whitelistedUsers {
-		if v == id {
-			whitelistedUsers = append(whitelistedUsers[:i], whitelistedUsers[i+1:]...)
-			saveWhitelist()
-			return
-		}
+	_, err := db.Exec("DELETE FROM whitelist WHERE user_id = ?", id.String())
+	if err != nil {
+		slog.Error("failed to remove user from whitelist", slog.Any("err", err))
 	}
 }
 
 func isInWhitelist(id snowflake.ID) bool {
-	for _, v := range whitelistedUsers {
-		if v == id {
-			return true
-		}
+	var count int
+	err := db.QueryRow("SELECT COUNT(*) FROM whitelist WHERE user_id = ?", id.String()).Scan(&count)
+	if err != nil {
+		slog.Error("failed to check if user is in whitelist", slog.Any("err", err))
 	}
-	return false
+	return count > 0
 }
 
-func saveDmCache() {
-	f, err := os.Create(dmCacheFile)
+func getMessageInteractionPrompt(id snowflake.ID) (string, error) {
+	var prompt string
+	err := db.QueryRow("SELECT prompt FROM message_interaction_cache WHERE message_id = ?", id.String()).Scan(&prompt)
 	if err != nil {
-		panic(err)
+		slog.Warn("failed to get message interaction prompt", slog.Any("err", err))
 	}
-	defer f.Close()
-
-	if err = json.NewEncoder(f).Encode(dmCache); err != nil {
-		panic(err)
-	}
+	return prompt, err
 }
 
-func loadDmCache() {
-	// if not exists, create
-	if _, err := os.Stat(dmCacheFile); os.IsNotExist(err) {
-		f, err := os.Create(dmCacheFile)
-		if err != nil {
-			panic(err)
-		}
-		f.Close()
-	}
-
-	f, err := os.Open(dmCacheFile)
+func getLlmerFromCache(id snowflake.ID) (*llm.Llmer, error) {
+	var data []byte
+	err := db.QueryRow("SELECT llm_state FROM dm_cache WHERE channel_id = ?", id.String()).Scan(&data)
 	if err != nil {
-		panic(err)
+		slog.Warn("failed to get llm state from cache", slog.Any("err", err))
+		return nil, err
 	}
-	defer f.Close()
-
-	if err = json.NewDecoder(f).Decode(&dmCache); err != nil {
-		saveDmCache()
-	}
+	// decode json
+	return llm.UnmarshalLlmer(data)
 }
 
-func saveMessageInteractionCache() {
-	f, err := os.Create(messageInteractionCacheFile)
+func writeLlmerToCache(id snowflake.ID, llmer *llm.Llmer) error {
+	data, err := json.Marshal(llmer)
 	if err != nil {
-		panic(err)
+		return err
 	}
-	defer f.Close()
-
-	if err = json.NewEncoder(f).Encode(messageInteractionCache); err != nil {
-		panic(err)
-	}
+	_, err = db.Exec("INSERT OR REPLACE INTO dm_cache (channel_id, llm_state) VALUES (?, ?)", id.String(), data)
+	return err
 }
 
-func loadMessageInteractionCache() {
-	// if not exists, create
-	if _, err := os.Stat(messageInteractionCacheFile); os.IsNotExist(err) {
-		f, err := os.Create(messageInteractionCacheFile)
-		if err != nil {
-			panic(err)
-		}
-		f.Close()
-	}
+func eraseLlmerFromCache(id snowflake.ID) error {
+	_, err := db.Exec("DELETE FROM dm_cache WHERE channel_id = ?", id.String())
+	return err
+}
 
-	f, err := os.Open(messageInteractionCacheFile)
-	if err != nil {
-		panic(err)
-	}
-	defer f.Close()
-
-	if err = json.NewDecoder(f).Decode(&messageInteractionCache); err != nil {
-		saveMessageInteractionCache()
-	}
+func writeMessageInteractionPrompt(id snowflake.ID, prompt string) error {
+	_, err := db.Exec("INSERT OR REPLACE INTO message_interaction_cache (message_id, prompt) VALUES (?, ?)", id.String(), prompt)
+	return err
 }
 
 func init() {
-	loadWhitelist()
-	loadDmCache()
-	loadMessageInteractionCache()
+	var err error
+	db, err = sql.Open("sqlite3", "x3.db")
+	if err != nil {
+		panic(err)
+	}
+
+	// whitelist
+	_, err = db.Exec(`
+			CREATE TABLE IF NOT EXISTS whitelist (
+				user_id TEXT PRIMARY KEY
+			)
+        `)
+	if err != nil {
+		panic(err)
+	}
+
+	// dm (private channel) cache
+	_, err = db.Exec(`
+			CREATE TABLE IF NOT EXISTS dm_cache (
+				channel_id TEXT PRIMARY KEY,
+				llm_state BLOB
+			)
+        `)
+	if err != nil {
+		panic(err)
+	}
+
+	// message interaction cache
+	_, err = db.Exec(`
+			CREATE TABLE IF NOT EXISTS message_interaction_cache (
+				message_id TEXT PRIMARY KEY,
+				prompt TEXT
+			)
+		`)
+	if err != nil {
+		panic(err)
+	}
 }
 
 func main() {
-	defer saveWhitelist()
-	defer saveDmCache()
-	defer saveMessageInteractionCache()
+	defer db.Close()
 
 	slog.SetLogLoggerLevel(slog.LevelDebug)
 	slog.Info("x3zeo booting up...")
@@ -397,7 +372,7 @@ func addContextMessagesIfPossible(client bot.Client, llmer *llm.Llmer, channelID
 		role := llm.RoleUser
 		if msg.Author.ID == client.ID() {
 			role = llm.RoleAssistant
-		} else if interaction, ok := messageInteractionCache[msg.ID]; ok {
+		} else if interaction, err := getMessageInteractionPrompt(msg.ID); err == nil {
 			// the prompt used for this response is in the interaction cache
 			llmer.AddMessage(llm.RoleUser, interaction)
 		}
@@ -430,13 +405,20 @@ func handleLlm(event *handler.CommandEvent, model string) error {
 	if useCache {
 		// we are in a DM, so we cannot read surrounding messages. Instead, we use a cache
 		slog.Debug("in a DM; looking up DM cache", slog.String("channel", event.Channel().ID().String()))
-		var ok bool
-		llmer, ok = dmCache[event.Channel().ID()]
-		if !ok {
+		var err error
+		llmer, err = getLlmerFromCache(event.Channel().ID())
+		if err != nil && !errors.Is(err, sql.ErrNoRows) {
+			return handleFollowupError(event, err)
+		}
+
+		if llmer == nil {
 			// not in cache, so create
 			slog.Debug("not in dmCache; creating", slog.String("channel", event.Channel().ID().String()))
 			llmer = llm.NewLlmer()
-			dmCache[event.Channel().ID()] = llmer
+			if err := writeLlmerToCache(event.Channel().ID(), llmer); err != nil {
+				// is fine, don't sweat
+				slog.Error("failed to save llm state to cache", slog.Any("err", err))
+			}
 		}
 	} else {
 		// we are not in a DM, so we can read surrounding messages
@@ -483,12 +465,14 @@ func handleLlm(event *handler.CommandEvent, model string) error {
 
 	// only clients can query options passed to commands, so we cache the action interaction
 	if err == nil {
-		messageInteractionCache[botMessage.ID] = prompt
-		saveMessageInteractionCache()
+		writeMessageInteractionPrompt(botMessage.ID, prompt)
 	}
 
 	if useCache {
-		saveDmCache()
+		if err := writeLlmerToCache(event.Channel().ID(), llmer); err != nil {
+			// is fine, don't sweat
+			slog.Error("failed to save llm state to cache (2)", slog.Any("err", err))
+		}
 	}
 
 	return nil
@@ -573,45 +557,73 @@ func handleWhitelist(event *handler.CommandEvent) error {
 }
 
 func handleLobotomy(event *handler.CommandEvent) error {
-	if _, ok := dmCache[event.Channel().ID()]; ok {
-		delete(dmCache, event.Channel().ID())
-		saveDmCache()
-		return event.CreateMessage(discord.MessageCreate{
-			Content: "Lobotomized for this channel",
-		})
+	ephemeral := event.SlashCommandInteractionData().Bool("ephemeral")
+
+	if err := eraseLlmerFromCache(event.Channel().ID()); err != nil {
+		return handleFollowupError(event, err)
 	}
-	return nil
-	//// not in dm cache, still create message for surround contexter to find it
-	//return event.CreateMessage(discord.MessageCreate{
-	//	Content: fmt.Sprintf("Lobotomized in this channel for the next %d messages", maxContextMessages),
-	//})
+
+	var flags discord.MessageFlags
+	if ephemeral {
+		flags = discord.MessageFlagEphemeral
+	}
+
+	return event.CreateMessage(discord.MessageCreate{
+		Content: "Lobotomized for this channel",
+		Flags:   flags,
+	})
 }
 
 func handleBoykisser(event *handler.CommandEvent) error {
-	/*
-		data := event.SlashCommandInteractionData()
-		ephemeral := data.Bool("ephemeral")
+	data := event.SlashCommandInteractionData()
+	ephemeral := data.Bool("ephemeral")
 
-		url, err := imager.GetRandomImageFromSubreddits("boykisser")
-		if err != nil {
-			handleFollowupError(event, err)
-			return err
-		}
+	//event.DeferCreateMessage(ephemeral)
 
-		var flags discord.MessageFlags
-		if ephemeral {
-			flags = discord.MessageFlagEphemeral
-		}
+	post, err := reddit.GetRandomImageFromSubreddits("boykisser", "boykisser2", "boykissermemes", "wholesomeboykissers")
+	if err != nil {
+		//event.DeleteInteractionResponse()
+		handleFollowupError(event, err)
+		return err
+	}
 
-		return event.CreateMessage(discord.MessageCreate{
-			Embeds: []discord.Embed{
-				{
-					Type: discord.EmbedTypeImage,
-					URL:  url,
+	var flags discord.MessageFlags
+	if ephemeral {
+		flags = discord.MessageFlagEphemeral
+	}
+
+	// silly discord thing: we can't make image attachments using the URL;
+	// we actually have to fetch the file and upload it as an octet stream
+	client := &http.Client{}
+	req, err := http.NewRequest("GET", post.Data.URL, nil)
+	if err != nil {
+		return handleFollowupError(event, err)
+	}
+	req.Header.Set("User-Agent", reddit.UserAgent)
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return handleFollowupError(event, err)
+	}
+
+	return event.CreateMessage(discord.MessageCreate{
+		Files: []*discord.File{
+			{
+				Name:   path.Base(post.Data.URL),
+				Reader: resp.Body,
+			},
+		},
+		Components: []discord.ContainerComponent{
+			discord.ActionRowComponent{
+				discord.ButtonComponent{
+					Style: discord.ButtonStyleLink,
+					Emoji: &discord.ComponentEmoji{
+						Name: "💦",
+					},
+					URL: post.Data.GetPostLink(),
 				},
 			},
-			Flags: flags,
-		})
-	*/
-	return nil
+		},
+		Flags: flags,
+	})
 }
