@@ -246,7 +246,7 @@ func init() {
 func main() {
 	defer db.Close()
 
-	slog.SetLogLoggerLevel(slog.LevelDebug)
+	slog.SetLogLoggerLevel(slog.LevelInfo)
 	slog.Info("x3zeo booting up...")
 	slog.Info("disgo version", slog.String("version", disgo.Version))
 
@@ -309,6 +309,8 @@ func main() {
 	r.Group(func(r handler.Router) {
 		r.Command("/boykisser", handleBoykisser)
 	})
+
+	r.ButtonComponent("/refresh_boykisser", handleBoykisserRefresh)
 
 	r.NotFound(handleNotFound)
 
@@ -574,22 +576,10 @@ func handleLobotomy(event *handler.CommandEvent) error {
 	})
 }
 
-func handleBoykisser(event *handler.CommandEvent) error {
-	data := event.SlashCommandInteractionData()
-	ephemeral := data.Bool("ephemeral")
-
-	//event.DeferCreateMessage(ephemeral)
-
+func fetchBoykisser() (*http.Response, reddit.Post, error) {
 	post, err := reddit.GetRandomImageFromSubreddits("boykisser", "boykisser2", "boykissermemes", "wholesomeboykissers")
 	if err != nil {
-		//event.DeleteInteractionResponse()
-		handleFollowupError(event, err)
-		return err
-	}
-
-	var flags discord.MessageFlags
-	if ephemeral {
-		flags = discord.MessageFlagEphemeral
+		return nil, post, err
 	}
 
 	// silly discord thing: we can't make image attachments using the URL;
@@ -597,13 +587,31 @@ func handleBoykisser(event *handler.CommandEvent) error {
 	client := &http.Client{}
 	req, err := http.NewRequest("GET", post.Data.URL, nil)
 	if err != nil {
-		return handleFollowupError(event, err)
+		return nil, post, err
 	}
 	req.Header.Set("User-Agent", reddit.UserAgent)
 
 	resp, err := client.Do(req)
 	if err != nil {
+		return nil, post, err
+	}
+
+	return resp, post, nil
+}
+
+func handleBoykisser(event *handler.CommandEvent) error {
+	data := event.SlashCommandInteractionData()
+	ephemeral := data.Bool("ephemeral")
+
+	resp, post, err := fetchBoykisser()
+	if err != nil {
 		return handleFollowupError(event, err)
+	}
+	defer resp.Body.Close()
+
+	var flags discord.MessageFlags
+	if ephemeral {
+		flags = discord.MessageFlagEphemeral
 	}
 
 	return event.CreateMessage(discord.MessageCreate{
@@ -622,8 +630,50 @@ func handleBoykisser(event *handler.CommandEvent) error {
 					},
 					URL: post.Data.GetPostLink(),
 				},
+				discord.ButtonComponent{
+					Style: discord.ButtonStyleSecondary,
+					Emoji: &discord.ComponentEmoji{
+						Name: "🔄",
+					},
+					CustomID: "refresh_boykisser",
+				},
 			},
 		},
 		Flags: flags,
+	})
+}
+
+func handleBoykisserRefresh(data discord.ButtonInteractionData, event *handler.ComponentEvent) error {
+	resp, post, err := fetchBoykisser()
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	return event.UpdateMessage(discord.MessageUpdate{
+		Files: []*discord.File{
+			{
+				Name:   path.Base(post.Data.URL),
+				Reader: resp.Body,
+			},
+		},
+		Components: &[]discord.ContainerComponent{
+			discord.ActionRowComponent{
+				discord.ButtonComponent{
+					Style: discord.ButtonStyleLink,
+					Emoji: &discord.ComponentEmoji{
+						Name: "💦",
+					},
+					URL: post.Data.GetPostLink(),
+				},
+				discord.ButtonComponent{
+					Style: discord.ButtonStyleSecondary,
+					Emoji: &discord.ComponentEmoji{
+						Name: "🔄",
+					},
+					CustomID: "refresh_boykisser",
+				},
+			},
+		},
 	})
 }
