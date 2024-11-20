@@ -247,7 +247,7 @@ func init() {
 func main() {
 	defer db.Close()
 
-	slog.SetLogLoggerLevel(slog.LevelDebug)
+	slog.SetLogLoggerLevel(slog.LevelInfo)
 	slog.Info("x3zeo booting up...")
 	slog.Info("disgo version", slog.String("version", disgo.Version))
 
@@ -363,7 +363,7 @@ func formatMsg(msg, username string) string {
 }
 
 // returns whether a lobotomy was performed
-func addContextMessagesIfPossible(client bot.Client, llmer *llm.Llmer, channelID, messageID snowflake.ID, isDm bool) bool {
+func addContextMessagesIfPossible(client bot.Client, llmer *llm.Llmer, channelID, messageID snowflake.ID) bool {
 	messages, err := client.Rest().GetMessages(channelID, 0, messageID, 0, maxContextMessages)
 	if err != nil {
 		return false
@@ -375,11 +375,9 @@ func addContextMessagesIfPossible(client bot.Client, llmer *llm.Llmer, channelID
 		role := llm.RoleUser
 		if msg.Author.ID == client.ID() {
 			role = llm.RoleAssistant
-		} else if !isDm {
+		} else if interaction, err := getMessageInteractionPrompt(msg.ID); err == nil {
 			// the prompt used for this response is in the interaction cache
-			if interaction, err := getMessageInteractionPrompt(msg.ID); err == nil {
-				llmer.AddMessage(llm.RoleUser, interaction)
-			}
+			llmer.AddMessage(llm.RoleUser, interaction)
 		}
 
 		if msg.Interaction != nil {
@@ -403,7 +401,9 @@ func handleLlm(event *handler.CommandEvent, model string) error {
 	var llmer *llm.Llmer
 
 	// check if we have perms to read messages in this channel
-	useCache := !event.Channel().Permissions.Has(discord.PermissionReadMessageHistory)
+	useCache := event.Channel().Permissions.Has(discord.PermissionReadMessageHistory) &&
+		event.Channel().Type() != discord.ChannelTypeDM &&
+		event.Channel().Type() != discord.ChannelTypeGroupDM
 
 	if useCache {
 		// we are in a DM, so we cannot read surrounding messages. Instead, we use a cache
@@ -431,7 +431,7 @@ func handleLlm(event *handler.CommandEvent, model string) error {
 	// add context if possible
 	lastMessage := event.Channel().MessageChannel.LastMessageID()
 	if !useCache && lastMessage != nil {
-		addContextMessagesIfPossible(event.Client(), llmer, event.Channel().ID(), *lastMessage, false)
+		addContextMessagesIfPossible(event.Client(), llmer, event.Channel().ID(), *lastMessage)
 
 		// and we also want the last message in the channel
 		msg, err := event.Client().Rest().GetMessage(event.Channel().ID(), *lastMessage)
@@ -481,14 +481,14 @@ func handleLlm(event *handler.CommandEvent, model string) error {
 	return nil
 }
 
-func handleLlmInteraction(event *events.MessageCreate, isDm bool) error {
+func handleLlmInteraction(event *events.MessageCreate) error {
 	if err := event.Client().Rest().SendTyping(event.ChannelID); err != nil {
 		slog.Error("failed to SendTyping", slog.Any("err", err))
 	}
 
 	// the interaction happened in a server, so we can get the surrounding messages
 	llmer := llm.NewLlmer()
-	addContextMessagesIfPossible(event.Client(), llmer, event.ChannelID, event.MessageID, isDm)
+	addContextMessagesIfPossible(event.Client(), llmer, event.ChannelID, event.MessageID)
 	slog.Debug("interaction; added context messages", slog.Int("count", llmer.NumMessages()))
 
 	// and we also want the event message
@@ -523,7 +523,7 @@ func onMessageCreate(event *events.MessageCreate) {
 
 	if event.Message.GuildID == nil {
 		// DM
-		if err := handleLlmInteraction(event, true); err != nil {
+		if err := handleLlmInteraction(event); err != nil {
 			slog.Error("failed to handle DM interaction", slog.Any("err", err))
 		}
 		return
@@ -532,7 +532,7 @@ func onMessageCreate(event *events.MessageCreate) {
 	for _, user := range event.Message.Mentions {
 		if user.ID == event.Client().ID() {
 			slog.Debug("handling @mention interaction")
-			if err := handleLlmInteraction(event, false); err != nil {
+			if err := handleLlmInteraction(event); err != nil {
 				slog.Error("failed to handle DM interaction", slog.Any("err", err))
 			}
 			return
@@ -544,7 +544,7 @@ func onMessageCreate(event *events.MessageCreate) {
 		if event.Message.ReferencedMessage.Author.ID == event.Client().ID() {
 			// ...that was created by us
 			slog.Debug("handling reply interaction")
-			if err := handleLlmInteraction(event, false); err != nil {
+			if err := handleLlmInteraction(event); err != nil {
 				slog.Error("failed to handle DM interaction", slog.Any("err", err))
 			}
 			return
