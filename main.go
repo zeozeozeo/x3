@@ -247,7 +247,7 @@ func init() {
 func main() {
 	defer db.Close()
 
-	slog.SetLogLoggerLevel(slog.LevelDebug)
+	slog.SetLogLoggerLevel(slog.LevelInfo)
 	slog.Info("x3zeo booting up...")
 	slog.Info("disgo version", slog.String("version", disgo.Version))
 
@@ -578,7 +578,7 @@ func handleLobotomy(event *handler.CommandEvent) error {
 }
 
 func fetchBoykisser(attempts int) (*http.Response, reddit.Post, error) {
-	slog.Debug("fetchBoykisser", slog.Int("attempts", attempts))
+	slog.Info("fetchBoykisser", slog.Int("attempts", attempts))
 	//if attempts > 1 {
 	//	// perhaps reddit ratelimits us
 	//	time.Sleep(500 * time.Millisecond)
@@ -619,8 +619,11 @@ func handleBoykisser(event *handler.CommandEvent) error {
 	data := event.SlashCommandInteractionData()
 	ephemeral := data.Bool("ephemeral")
 
+	event.DeferCreateMessage(ephemeral)
+
 	resp, post, err := fetchBoykisser(1)
 	if err != nil {
+		event.DeleteInteractionResponse()
 		return handleFollowupError(event, err)
 	}
 	defer resp.Body.Close()
@@ -630,14 +633,14 @@ func handleBoykisser(event *handler.CommandEvent) error {
 		flags = discord.MessageFlagEphemeral
 	}
 
-	return event.CreateMessage(discord.MessageCreate{
+	_, err = event.UpdateInteractionResponse(discord.MessageUpdate{
 		Files: []*discord.File{
 			{
 				Name:   path.Base(post.Data.URL),
 				Reader: resp.Body,
 			},
 		},
-		Components: []discord.ContainerComponent{
+		Components: &[]discord.ContainerComponent{
 			discord.ActionRowComponent{
 				discord.ButtonComponent{
 					Style: discord.ButtonStyleLink,
@@ -655,18 +658,20 @@ func handleBoykisser(event *handler.CommandEvent) error {
 				},
 			},
 		},
-		Flags: flags,
+		Flags: &flags,
 	})
+	return err
 }
 
 func handleBoykisserRefresh(data discord.ButtonInteractionData, event *handler.ComponentEvent) error {
+	event.DeferUpdateMessage()
 	resp, post, err := fetchBoykisser(1)
 	if err != nil {
 		return err
 	}
 	defer resp.Body.Close()
 
-	return event.UpdateMessage(discord.MessageUpdate{
+	_, err = event.UpdateInteractionResponse(discord.MessageUpdate{
 		Files: []*discord.File{
 			{
 				Name:   path.Base(post.Data.URL),
@@ -692,4 +697,5 @@ func handleBoykisserRefresh(data discord.ButtonInteractionData, event *handler.C
 			},
 		},
 	})
+	return err
 }
