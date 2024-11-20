@@ -592,10 +592,12 @@ func fetchBoykisser(attempts int) (*http.Response, reddit.Post, error) {
 		return nil, post, err
 	}
 
+	url := post.Data.GetRandomImage()
+
 	// silly discord thing: we can't make image attachments using the URL;
 	// we actually have to fetch the file and upload it as an octet stream
 	client := &http.Client{}
-	req, err := http.NewRequest("GET", post.Data.URL, nil)
+	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
 		if attempts < maxRedditAttempts {
 			return fetchBoykisser(attempts + 1)
@@ -633,10 +635,13 @@ func handleBoykisser(event *handler.CommandEvent) error {
 		flags = discord.MessageFlagEphemeral
 	}
 
+	url := post.Data.GetRandomImage()
+	fmt.Println("post url", url)
+
 	_, err = event.UpdateInteractionResponse(discord.MessageUpdate{
 		Files: []*discord.File{
 			{
-				Name:   path.Base(post.Data.URL),
+				Name:   path.Base(url),
 				Reader: resp.Body,
 			},
 		},
@@ -671,10 +676,12 @@ func handleBoykisserRefresh(data discord.ButtonInteractionData, event *handler.C
 	}
 	defer resp.Body.Close()
 
+	url := post.Data.GetRandomImage()
+
 	_, err = event.UpdateInteractionResponse(discord.MessageUpdate{
 		Files: []*discord.File{
 			{
-				Name:   path.Base(post.Data.URL),
+				Name:   path.Base(url),
 				Reader: resp.Body,
 			},
 		},
