@@ -347,6 +347,9 @@ func (l *Llmer) AddImage(imageURL string) {
 		return
 	}
 	msg := &l.Messages[len(l.Messages)-1]
+	if msg.Role != RoleUser {
+		return
+	}
 	if len(msg.Content) != 0 {
 		msg.MultiContent = append(msg.MultiContent, openai.ChatMessagePart{
 			Type: openai.ChatMessagePartTypeText,
@@ -421,5 +424,14 @@ func (l *Llmer) RequestCompletion(model Model) (res string, err error) {
 		}
 		slog.Warn("(provider tests) failed to request completion", slog.String("provider", provider), slog.Any("err", err))
 	}
+
+	// If we're here, we're probably censored
+	// Not good, especially for a bot that deals with random conversations, which is what we are
+	// so remove the latest message
+	if len(l.Messages) > 0 {
+		slog.Warn("removing last message due to censorship")
+		l.Messages = l.Messages[:len(l.Messages)-1]
+	}
+
 	return
 }

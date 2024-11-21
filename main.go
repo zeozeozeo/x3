@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/signal"
 	"path"
+	"regexp"
 	"strings"
 	"syscall"
 
@@ -151,7 +152,7 @@ var (
 
 const (
 	// LLM interaction context surrounding messages
-	maxContextMessages = 30
+	maxContextMessages = 20
 	maxRedditAttempts  = 3
 )
 
@@ -583,7 +584,9 @@ func handleLlm(event *handler.CommandEvent, model llm.Model) error {
 	return nil
 }
 
-func handleLlmInteraction(event *events.MessageCreate) error {
+var containsX3Regex = regexp.MustCompile(`\b[Xx]3\b`)
+
+func handleLlmInteraction(event *events.MessageCreate, eraseX3 bool) error {
 	if err := event.Client().Rest().SendTyping(event.ChannelID); err != nil {
 		slog.Error("failed to SendTyping", slog.Any("err", err))
 	}
@@ -594,7 +597,14 @@ func handleLlmInteraction(event *events.MessageCreate) error {
 	slog.Debug("interaction; added context messages", slog.Int("count", llmer.NumMessages()))
 
 	// and we also want the event message
-	llmer.AddMessage(llm.RoleUser, formatMsg(event.Message.Content, event.Message.Author.Username))
+	var content string
+	if eraseX3 {
+		content = containsX3Regex.ReplaceAllString(event.Message.Content, "")
+		content = strings.TrimSpace(content)
+	} else {
+		content = event.Message.Content
+	}
+	llmer.AddMessage(llm.RoleUser, formatMsg(content, event.Message.Author.Username))
 	addImageAttachments(llmer, event.Message)
 
 	// now we generate the LLM response
@@ -617,7 +627,7 @@ func onMessageCreate(event *events.MessageCreate) {
 
 	if event.Message.GuildID == nil {
 		// DM
-		if err := handleLlmInteraction(event); err != nil {
+		if err := handleLlmInteraction(event, false); err != nil {
 			slog.Error("failed to handle DM interaction", slog.Any("err", err))
 		}
 		return
@@ -626,7 +636,7 @@ func onMessageCreate(event *events.MessageCreate) {
 	for _, user := range event.Message.Mentions {
 		if user.ID == event.Client().ID() {
 			slog.Debug("handling @mention interaction")
-			if err := handleLlmInteraction(event); err != nil {
+			if err := handleLlmInteraction(event, false); err != nil {
 				slog.Error("failed to handle DM interaction", slog.Any("err", err))
 			}
 			return
@@ -638,11 +648,20 @@ func onMessageCreate(event *events.MessageCreate) {
 		if event.Message.ReferencedMessage.Author.ID == event.Client().ID() {
 			// ...that was created by us
 			slog.Debug("handling reply interaction")
-			if err := handleLlmInteraction(event); err != nil {
+			if err := handleLlmInteraction(event, false); err != nil {
 				slog.Error("failed to handle DM interaction", slog.Any("err", err))
 			}
 			return
 		}
+	}
+
+	// check if "x3" is mentioned
+	if containsX3Regex.MatchString(event.Message.Content) {
+		slog.Debug("handling x3 interaction")
+		if err := handleLlmInteraction(event, true); err != nil {
+			slog.Error("failed to handle DM interaction", slog.Any("err", err))
+		}
+		return
 	}
 }
 
