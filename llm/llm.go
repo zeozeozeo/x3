@@ -459,11 +459,13 @@ func (l *Llmer) RequestCompletion(model Model) (res string, err error) {
 		if _, ok := model.Providers[provider]; !ok {
 			continue
 		}
+		slog.Debug("requesting completion", slog.String("provider", provider))
 
 		res, err = l.requestCompletionInternal(model, provider)
 		if err == nil {
 			return
 		}
+		slog.Warn("(provider tests) failed to request completion", slog.String("provider", provider), slog.Any("err", err))
 	}
 	return
 }
