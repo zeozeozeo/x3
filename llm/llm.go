@@ -228,7 +228,7 @@ var (
 		Providers: map[string]ModelProvider{
 			ProviderZukijourney: {
 				API:      zjBaseURL,
-				Codename: "yandex-gpt-4-pro",
+				Codename: "YandexGPT-4-Pro",
 			},
 		},
 	}

@@ -442,11 +442,18 @@ func sendMessageSplits(client bot.Client, messageID snowflake.ID, event *handler
 		var err error
 		if i == 0 {
 			if messageID != 0 {
-				message, err = client.Rest().CreateMessage(channelID,
-					discord.NewMessageCreateBuilder().
-						SetMessageReferenceByID(messageID).
-						SetContent(segment).
-						Build(),
+				message, err = client.Rest().CreateMessage(
+					channelID,
+					discord.MessageCreate{
+						Content: segment,
+						Flags:   flags,
+						MessageReference: &discord.MessageReference{
+							MessageID: &messageID,
+						},
+						AllowedMentions: &discord.AllowedMentions{
+							RepliedUser: false,
+						},
+					},
 				)
 			} else if event != nil {
 				message, err = event.UpdateInteractionResponse(discord.MessageUpdate{
@@ -477,7 +484,7 @@ func handleLlm(event *handler.CommandEvent, model llm.Model) error {
 	var llmer *llm.Llmer
 
 	// check if we have perms to read messages in this channel
-	useCache := !event.Channel().Permissions.Has(discord.PermissionReadMessageHistory)
+	useCache := event.AppPermissions() != nil && !event.AppPermissions().Has(discord.PermissionReadMessageHistory)
 
 	if useCache {
 		// we are in a DM, so we cannot read surrounding messages. Instead, we use a cache
@@ -534,9 +541,10 @@ func handleLlm(event *handler.CommandEvent, model llm.Model) error {
 	}
 
 	var botMessage *discord.Message
+	responseRunes := []rune(response)
 	if !useCache && !ephemeral {
-		botMessage, err = sendMessageSplits(event.Client(), 0, event, flags, event.Channel().ID(), []rune(response))
-	} else {
+		botMessage, err = sendMessageSplits(event.Client(), 0, event, flags, event.Channel().ID(), responseRunes)
+	} else if len(responseRunes) > 2000 {
 		// send as file
 		botMessage, err = event.UpdateInteractionResponse(discord.MessageUpdate{
 			Files: []*discord.File{
@@ -545,6 +553,12 @@ func handleLlm(event *handler.CommandEvent, model llm.Model) error {
 					Reader: strings.NewReader(response),
 				},
 			},
+		})
+	} else {
+		// less or equal to 2000, no need to split/txt
+		botMessage, err = event.UpdateInteractionResponse(discord.MessageUpdate{
+			Content: &response,
+			Flags:   &flags,
 		})
 	}
 
