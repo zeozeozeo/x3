@@ -16,11 +16,13 @@ import (
 var (
 	githubToken = os.Getenv("X3ZEO_GITHUB_TOKEN")
 	zjToken     = os.Getenv("X3ZEO_ZJ_TOKEN")
+	hmToken     = os.Getenv("X3ZEO_HM_TOKEN")
 )
 
 const (
 	azureBaseURL = "https://models.inference.ai.azure.com"
 	zjBaseURL    = "https://api.zukijourney.com/v1"
+	hmBaseUrl    = "https://helixmind.online/v1"
 )
 
 const (
@@ -31,6 +33,7 @@ const (
 const (
 	ProviderGithub      = "github"
 	ProviderZukijourney = "zukijourney"
+	ProviderHelixmind   = "helixmind"
 )
 
 type ModelProvider struct {
@@ -61,6 +64,10 @@ var (
 				API:      zjBaseURL,
 				Codename: "gpt-4o-mini",
 			},
+			ProviderHelixmind: {
+				API:      hmBaseUrl,
+				Codename: "gpt-4o-mini",
+			},
 		},
 	}
 
@@ -78,6 +85,10 @@ var (
 				API:      zjBaseURL,
 				Codename: "gpt-4o",
 			},
+			ProviderHelixmind: {
+				API:      hmBaseUrl,
+				Codename: "gpt-4o",
+			},
 		},
 	}
 
@@ -91,6 +102,10 @@ var (
 				API:      zjBaseURL,
 				Codename: "gemini-1.5-pro-latest",
 			},
+			ProviderHelixmind: {
+				API:      hmBaseUrl,
+				Codename: "gemini-1.5-pro-002",
+			},
 		},
 	}
 
@@ -102,6 +117,23 @@ var (
 			ProviderZukijourney: {
 				API:      zjBaseURL,
 				Codename: "gemini-exp-1114",
+			},
+			ProviderHelixmind: {
+				API:      hmBaseUrl,
+				Codename: "gemini-exp-1114",
+			},
+		},
+	}
+
+	ModelClaudeSonnet = Model{
+		Name:           "Anthropic Claude 3.5 Sonnet",
+		Command:        "sonnet",
+		NeedsWhitelist: true,
+		Vision:         true,
+		Providers: map[string]ModelProvider{
+			ProviderHelixmind: {
+				API:      hmBaseUrl,
+				Codename: "claude-3-5-sonnet-20241022",
 			},
 		},
 	}
@@ -116,6 +148,10 @@ var (
 				API:      zjBaseURL,
 				Codename: "claude-3-haiku",
 			},
+			ProviderHelixmind: {
+				API:      hmBaseUrl,
+				Codename: "claude-3-5-haiku-20241022",
+			},
 		},
 	}
 
@@ -128,6 +164,10 @@ var (
 			ProviderZukijourney: {
 				API:      zjBaseURL,
 				Codename: "gemini-1.5-flash-latest",
+			},
+			ProviderHelixmind: {
+				API:      hmBaseUrl,
+				Codename: "gemini-1.5-flash-002",
 			},
 		},
 	}
@@ -165,6 +205,10 @@ var (
 				API:      azureBaseURL,
 				Codename: "Mistral-large-2407",
 			},
+			ProviderHelixmind: {
+				API:      hmBaseUrl,
+				Codename: "mistral-large-2407",
+			},
 		},
 	}
 
@@ -193,6 +237,10 @@ var (
 				API:      zjBaseURL,
 				Codename: "llama-3.1-405b-instruct",
 			},
+			ProviderHelixmind: {
+				API:      hmBaseUrl,
+				Codename: "llama-3.1-405b-instruct",
+			},
 			// github doesn't work for some reason
 		},
 	}
@@ -207,6 +255,10 @@ var (
 				API:      zjBaseURL,
 				Codename: "llama-3.2-90b-instruct",
 			},
+			ProviderHelixmind: {
+				API:      hmBaseUrl,
+				Codename: "llama-3.2-90b-vision-instruct",
+			},
 		},
 	}
 
@@ -217,6 +269,10 @@ var (
 			ProviderZukijourney: {
 				API:      zjBaseURL,
 				Codename: "llama-3.1-70b-instruct",
+			},
+			ProviderHelixmind: {
+				API:      hmBaseUrl,
+				Codename: "llama-3.1-nemotron-70b", // nemotron, but fine
 			},
 		},
 	}
@@ -250,6 +306,7 @@ var (
 		ModelGpt4o,
 		ModelGeminiPro,
 		ModelGeminiExp1114,
+		ModelClaudeSonnet,
 		ModelClaude3Haiku,
 		ModelGeminiFlash,
 		ModelCommandRplus,
@@ -262,6 +319,8 @@ var (
 		ModelYandexGPT4Pro,
 		ModelGigaChatPro,
 	}
+
+	allProviders = []string{ProviderGithub, ProviderZukijourney, ProviderHelixmind}
 )
 
 func (m Model) Client(provider string) (*openai.Client, string) {
@@ -271,9 +330,14 @@ func (m Model) Client(provider string) (*openai.Client, string) {
 		config := openai.DefaultAzureConfig(githubToken, m.Providers[provider].API)
 		config.APIType = openai.APITypeOpenAI
 		return openai.NewClientWithConfig(config), m.Providers[provider].Codename
-	} else {
+	} else if provider == ProviderZukijourney {
 		// zukijourney
 		config := openai.DefaultConfig(zjToken)
+		config.BaseURL = m.Providers[provider].API
+		return openai.NewClientWithConfig(config), m.Providers[provider].Codename
+	} else {
+		// helixmind
+		config := openai.DefaultConfig(hmToken)
 		config.BaseURL = m.Providers[provider].API
 		return openai.NewClientWithConfig(config), m.Providers[provider].Codename
 	}
@@ -391,21 +455,15 @@ func (l *Llmer) requestCompletionInternal(model Model, provider string) (string,
 }
 
 func (l *Llmer) RequestCompletion(model Model) (res string, err error) {
-	// check if has github first
-	if _, ok := model.Providers[ProviderGithub]; ok {
-		res, err = l.requestCompletionInternal(model, ProviderGithub)
-		if err == nil {
-			return
+	for _, provider := range allProviders {
+		if _, ok := model.Providers[provider]; !ok {
+			continue
 		}
-		// if we're here, we have an error. continue on to try zukijourney
-	}
 
-	if _, ok := model.Providers[ProviderZukijourney]; ok {
-		res, err = l.requestCompletionInternal(model, ProviderZukijourney)
+		res, err = l.requestCompletionInternal(model, provider)
 		if err == nil {
 			return
 		}
 	}
-
 	return
 }

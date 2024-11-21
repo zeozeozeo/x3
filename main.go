@@ -98,6 +98,10 @@ var (
 					Name:        "remove",
 					Description: "If the user should be removed from the whitelist",
 				},
+				discord.ApplicationCommandOptionBool{
+					Name:        "check",
+					Description: "Check if the user is in the whitelist",
+				},
 			},
 		},
 		discord.SlashCommandCreate{
@@ -649,6 +653,15 @@ func handleWhitelist(event *handler.CommandEvent) error {
 	data := event.SlashCommandInteractionData()
 	user := data.Snowflake("user")
 	remove := data.Bool("remove")
+	check := data.Bool("check")
+
+	if check {
+		msg := "User is not in whitelist"
+		if isInWhitelist(user) {
+			msg = "User is in whitelist"
+		}
+		return event.CreateMessage(discord.MessageCreate{Content: msg, Flags: discord.MessageFlagEphemeral})
+	}
 
 	if remove {
 		slog.Debug("removing user from whitelist", slog.String("user", user.String()))
