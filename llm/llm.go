@@ -360,7 +360,10 @@ func (l *Llmer) requestCompletionInternal(model Model, provider string) (string,
 
 	completionStart := time.Now()
 
-	stream, err := client.CreateChatCompletionStream(context.Background(), req)
+	ctx, cancel := context.WithDeadline(context.Background(), completionStart.Add(20*time.Second))
+	defer cancel()
+
+	stream, err := client.CreateChatCompletionStream(ctx, req)
 	if err != nil {
 		return "", err
 	}

@@ -340,14 +340,19 @@ func handleNotFound(event *handler.InteractionEvent) error {
 	return event.CreateMessage(discord.MessageCreate{Content: "Command not found", Flags: discord.MessageFlagEphemeral})
 }
 
-func handleFollowupError(event *handler.CommandEvent, err error) error {
-	content := fmt.Sprintf("Error: %v", err)
-	flags := discord.MessageFlagEphemeral
-	_, err = event.UpdateInteractionResponse(discord.MessageUpdate{
-		Content: &content,
-		Flags:   &flags,
-	})
-	return err
+func handleFollowupError(event *handler.CommandEvent, err error, ephemeral bool) error {
+	slog.Error("handleFollowupError", slog.Any("err", err))
+	if ephemeral {
+		content := fmt.Sprintf("Error: %v", err)
+		flags := discord.MessageFlagEphemeral
+		_, err = event.UpdateInteractionResponse(discord.MessageUpdate{
+			Content: &content,
+			Flags:   &flags,
+		})
+		return err
+	} else {
+		return event.DeleteInteractionResponse()
+	}
 }
 
 func formatMsg(msg, username string) string {
@@ -389,21 +394,22 @@ outer:
 	// discord returns surrounding message history from newest to oldest, but we want oldest to newest
 	for i := len(messages) - 1; i >= 0; i-- {
 		msg := messages[i]
+		if msg.Interaction != nil &&
+			msg.Interaction.Type == discord.InteractionTypeApplicationCommand &&
+			msg.Interaction.Name == "lobotomy" {
+			//slog.Debug("found lobotomy interaction", slog.String("channel", channelID.String()), slog.String("message", msg.ID.String()))
+			//llmer.Lobotomize()
+			// but we keep adding new messages from this point
+			// TODO
+			continue
+		}
+
 		role := llm.RoleUser
 		if msg.Author.ID == client.ID() {
 			role = llm.RoleAssistant
 		} else if interaction, err := getMessageInteractionPrompt(msg.ID); err == nil {
 			// the prompt used for this response is in the interaction cache
 			llmer.AddMessage(llm.RoleUser, interaction)
-		}
-
-		if msg.Interaction != nil {
-			if msg.Interaction.Type == discord.InteractionTypeApplicationCommand && msg.Interaction.Name == "lobotomy" {
-				slog.Debug("found lobotomy interaction", slog.String("channel", channelID.String()), slog.String("message", msg.ID.String()))
-				llmer.Lobotomize()
-				// but we keep adding new messages from this point
-				continue
-			}
 		}
 
 		llmer.AddMessage(role, formatMsg(msg.Content, msg.Author.Username))
@@ -479,7 +485,7 @@ func handleLlm(event *handler.CommandEvent, model llm.Model) error {
 		var err error
 		llmer, err = getLlmerFromCache(event.Channel().ID())
 		if err != nil && !errors.Is(err, sql.ErrNoRows) {
-			return handleFollowupError(event, err)
+			return handleFollowupError(event, err, ephemeral)
 		}
 
 		if llmer == nil {
@@ -519,7 +525,7 @@ func handleLlm(event *handler.CommandEvent, model llm.Model) error {
 	response, err := llmer.RequestCompletion(model)
 	if err != nil {
 		slog.Error("failed to generate response", slog.Any("err", err))
-		return handleFollowupError(event, err)
+		return handleFollowupError(event, err, ephemeral)
 	}
 
 	var flags discord.MessageFlags
@@ -543,7 +549,7 @@ func handleLlm(event *handler.CommandEvent, model llm.Model) error {
 	}
 
 	if err != nil {
-		return handleFollowupError(event, err)
+		return handleFollowupError(event, err, ephemeral)
 	}
 
 	// only clients can query options passed to commands, so we cache the action interaction
@@ -645,7 +651,7 @@ func handleLobotomy(event *handler.CommandEvent) error {
 	ephemeral := event.SlashCommandInteractionData().Bool("ephemeral")
 
 	if err := eraseLlmerFromCache(event.Channel().ID()); err != nil {
-		return handleFollowupError(event, err)
+		return handleFollowupError(event, err, ephemeral)
 	}
 
 	var flags discord.MessageFlags
@@ -707,7 +713,7 @@ func handleBoykisser(event *handler.CommandEvent) error {
 
 	resp, post, err := fetchBoykisser(1)
 	if err != nil {
-		return handleFollowupError(event, err)
+		return handleFollowupError(event, err, ephemeral)
 	}
 	defer resp.Body.Close()
 
