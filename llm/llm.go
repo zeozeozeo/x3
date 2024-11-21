@@ -102,10 +102,6 @@ var (
 				API:      zjBaseURL,
 				Codename: "gemini-1.5-pro-latest",
 			},
-			ProviderHelixmind: {
-				API:      hmBaseUrl,
-				Codename: "gemini-1.5-pro-002",
-			},
 		},
 	}
 
@@ -117,23 +113,6 @@ var (
 			ProviderZukijourney: {
 				API:      zjBaseURL,
 				Codename: "gemini-exp-1114",
-			},
-			ProviderHelixmind: {
-				API:      hmBaseUrl,
-				Codename: "gemini-exp-1114",
-			},
-		},
-	}
-
-	ModelClaudeSonnet = Model{
-		Name:           "Anthropic Claude 3.5 Sonnet",
-		Command:        "sonnet",
-		NeedsWhitelist: true,
-		Vision:         true,
-		Providers: map[string]ModelProvider{
-			ProviderHelixmind: {
-				API:      hmBaseUrl,
-				Codename: "claude-3-5-sonnet-20241022",
 			},
 		},
 	}
@@ -148,10 +127,6 @@ var (
 				API:      zjBaseURL,
 				Codename: "claude-3-haiku",
 			},
-			ProviderHelixmind: {
-				API:      hmBaseUrl,
-				Codename: "claude-3-5-haiku-20241022",
-			},
 		},
 	}
 
@@ -164,10 +139,6 @@ var (
 			ProviderZukijourney: {
 				API:      zjBaseURL,
 				Codename: "gemini-1.5-flash-latest",
-			},
-			ProviderHelixmind: {
-				API:      hmBaseUrl,
-				Codename: "gemini-1.5-flash-002",
 			},
 		},
 	}
@@ -205,10 +176,6 @@ var (
 				API:      azureBaseURL,
 				Codename: "Mistral-large-2407",
 			},
-			ProviderHelixmind: {
-				API:      hmBaseUrl,
-				Codename: "mistral-large-2407",
-			},
 		},
 	}
 
@@ -237,10 +204,6 @@ var (
 				API:      zjBaseURL,
 				Codename: "llama-3.1-405b-instruct",
 			},
-			ProviderHelixmind: {
-				API:      hmBaseUrl,
-				Codename: "llama-3.1-405b-instruct",
-			},
 			// github doesn't work for some reason
 		},
 	}
@@ -255,10 +218,6 @@ var (
 				API:      zjBaseURL,
 				Codename: "llama-3.2-90b-instruct",
 			},
-			ProviderHelixmind: {
-				API:      hmBaseUrl,
-				Codename: "llama-3.2-90b-vision-instruct",
-			},
 		},
 	}
 
@@ -269,10 +228,6 @@ var (
 			ProviderZukijourney: {
 				API:      zjBaseURL,
 				Codename: "llama-3.1-70b-instruct",
-			},
-			ProviderHelixmind: {
-				API:      hmBaseUrl,
-				Codename: "llama-3.1-nemotron-70b", // nemotron, but fine
 			},
 		},
 	}
@@ -306,7 +261,6 @@ var (
 		ModelGpt4o,
 		ModelGeminiPro,
 		ModelGeminiExp1114,
-		ModelClaudeSonnet,
 		ModelClaude3Haiku,
 		ModelGeminiFlash,
 		ModelCommandRplus,
