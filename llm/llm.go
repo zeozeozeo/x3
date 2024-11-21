@@ -20,12 +20,20 @@ var (
 
 const (
 	azureBaseURL = "https://models.inference.ai.azure.com"
+	zjBaseURL    = "https://api.zukijourney.com/v1"
 )
 
 const (
 	RoleUser      = openai.ChatMessageRoleUser
 	RoleAssistant = openai.ChatMessageRoleAssistant
 )
+
+type Model struct {
+	// Model name
+	Name string
+	// API base
+	API string
+}
 
 const (
 	ModelGpt4o                    = "gpt-4o"
@@ -79,6 +87,28 @@ func (l *Llmer) AddMessage(role, content string) {
 		Content: content,
 	}
 	l.Messages = append(l.Messages, msg)
+}
+
+// Add an image by URL to the latest message.
+func (l *Llmer) AddImage(imageURL string) {
+	if len(l.Messages) == 0 {
+		return
+	}
+	msg := &l.Messages[len(l.Messages)-1]
+	if len(msg.Content) != 0 {
+		msg.MultiContent = append(msg.MultiContent, openai.ChatMessagePart{
+			Type: openai.ChatMessagePartTypeText,
+			Text: msg.Content,
+		})
+		msg.Content = ""
+	}
+	slog.Debug("adding image to message", slog.String("url", imageURL))
+	msg.MultiContent = append(msg.MultiContent, openai.ChatMessagePart{
+		Type: openai.ChatMessagePartTypeImageURL,
+		ImageURL: &openai.ChatMessageImageURL{
+			URL: imageURL,
+		},
+	})
 }
 
 func (l *Llmer) RequestCompletion(model string) (string, error) {

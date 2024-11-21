@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/signal"
 	"path"
+	"strings"
 	"syscall"
 
 	"github.com/disgoorg/disgo"
@@ -138,7 +139,7 @@ var (
 
 const (
 	// LLM interaction context surrounding messages
-	maxContextMessages = 50
+	maxContextMessages = 30
 	maxRedditAttempts  = 3
 )
 
@@ -362,11 +363,36 @@ func formatMsg(msg, username string) string {
 	return msg
 }
 
+func isImageAttachment(attachment discord.Attachment) bool {
+	return attachment.ContentType != nil && strings.HasPrefix(*attachment.ContentType, "image/")
+}
+
+func addImageAttachments(llmer *llm.Llmer, msg discord.Message) {
+	for _, attachment := range msg.Attachments {
+		if isImageAttachment(attachment) {
+			llmer.AddImage(attachment.URL)
+		}
+	}
+}
+
 // returns whether a lobotomy was performed
 func addContextMessagesIfPossible(client bot.Client, llmer *llm.Llmer, channelID, messageID snowflake.ID) bool {
 	messages, err := client.Rest().GetMessages(channelID, 0, messageID, 0, maxContextMessages)
 	if err != nil {
 		return false
+	}
+
+	latestImageAttachmentIdx := -1
+
+	// newest to oldest!
+outer:
+	for i, msg := range messages {
+		for _, attachment := range msg.Attachments {
+			if isImageAttachment(attachment) {
+				latestImageAttachmentIdx = i
+				break outer
+			}
+		}
 	}
 
 	// discord returns surrounding message history from newest to oldest, but we want oldest to newest
@@ -383,12 +409,18 @@ func addContextMessagesIfPossible(client bot.Client, llmer *llm.Llmer, channelID
 		if msg.Interaction != nil {
 			if msg.Interaction.Type == discord.InteractionTypeApplicationCommand && msg.Interaction.Name == "lobotomy" {
 				slog.Debug("found lobotomy interaction", slog.String("channel", channelID.String()), slog.String("message", msg.ID.String()))
-				//llmer.Lobotomize()
+				llmer.Lobotomize()
 				// but we keep adding new messages from this point
+				continue
 			}
 		}
 
 		llmer.AddMessage(role, formatMsg(msg.Content, msg.Author.Username))
+
+		// if this is the last message with an image we add, check for images
+		if i == latestImageAttachmentIdx {
+			addImageAttachments(llmer, msg)
+		}
 	}
 	return false
 }
@@ -493,6 +525,7 @@ func handleLlmInteraction(event *events.MessageCreate) error {
 
 	// and we also want the event message
 	llmer.AddMessage(llm.RoleUser, formatMsg(event.Message.Content, event.Message.Author.Username))
+	addImageAttachments(llmer, event.Message)
 
 	// now we generate the LLM response
 	response, err := llmer.RequestCompletion(llm.ModelGpt4oMini)
