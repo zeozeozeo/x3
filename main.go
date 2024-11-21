@@ -57,18 +57,25 @@ func makeGptCommand(name, desc string) discord.SlashCommandCreate {
 	}
 }
 
+func makeGptCommands() []discord.SlashCommandCreate {
+	var commands []discord.SlashCommandCreate
+	for _, model := range llm.AllModels {
+		var sb strings.Builder
+		sb.WriteString(model.Name)
+		if model.NeedsWhitelist {
+			sb.WriteString(" (Whitelist)")
+		}
+		if model.Vision {
+			sb.WriteString(" (Vision)")
+		}
+		commands = append(commands, makeGptCommand(model.Command, sb.String()))
+	}
+	return commands
+}
+
 var (
 	token    = os.Getenv("X3ZEO_DISCORD_TOKEN")
 	commands = []discord.ApplicationCommandCreate{
-		makeGptCommand("gpt4o", "OpenAI GPT-4o mini"),
-		makeGptCommand("mistral_nemo", "Mistral NeMo 12B"),
-		makeGptCommand("commandr", "Cohere Command R 08-2024 32B"),
-		makeGptCommand("llama11b", "Llama 3.2 11B Vision Instruct"),
-		makeGptCommand("gpt4", "OpenAI GPT-4o (needs whitelist)"),
-		makeGptCommand("llama405b", "Meta Llama 3.1 405B Instruct (needs whitelist)"),
-		makeGptCommand("mistral_large", "Mistral Large 123B (needs whitelist)"),
-		makeGptCommand("commandr_plus", "Cohere Command R+ 08-2024 104B (needs whitelist)"),
-		makeGptCommand("llama90b", "Llama 3.2 90B Vision Instruct (needs whitelist)"),
 		discord.SlashCommandCreate{
 			Name:        "whitelist",
 			Description: "Add or remove yourself from the whitelist",
@@ -132,6 +139,7 @@ var (
 				},
 			},
 		},
+		// gpt commands are added in init()
 	}
 
 	db *sql.DB
@@ -243,6 +251,14 @@ func init() {
 	if err != nil {
 		panic(err)
 	}
+
+	// default db state
+	addToWhitelist(890686470556356619)
+
+	// gpt commands
+	for _, command := range makeGptCommands() {
+		commands = append(commands, command)
+	}
 }
 
 func main() {
@@ -256,49 +272,21 @@ func main() {
 	r.Use(middleware.Logger)
 
 	// LLM commands
-	llmWhitelistError := func(event *handler.CommandEvent) error {
-		return event.CreateMessage(discord.MessageCreate{Content: "You are not in the whitelist for this command. Perhaps another whitelisted user may invite you. Try /gpt4o", Flags: discord.MessageFlagEphemeral})
+	registerLlm := func(r handler.Router, command string, model llm.Model) {
+		r.Command(command, func(event *handler.CommandEvent) error {
+			if model.NeedsWhitelist && !isInWhitelist(event.User().ID) {
+				return event.CreateMessage(discord.MessageCreate{
+					Content: "You are not in the whitelist, therefore you cannot use this command. Try `/gpt4o`.",
+					Flags:   discord.MessageFlagEphemeral,
+				})
+			}
+			return handleLlm(event, model)
+		})
 	}
 	r.Group(func(r handler.Router) {
-		r.Command("/gpt4o", func(event *handler.CommandEvent) error {
-			return handleLlm(event, llm.ModelGpt4oMini)
-		})
-		r.Command("/mistral_nemo", func(event *handler.CommandEvent) error {
-			return handleLlm(event, llm.ModelMistralNemo)
-		})
-		r.Command("/commandr", func(event *handler.CommandEvent) error {
-			return handleLlm(event, llm.ModelCohereCommandR082024)
-		})
-		r.Command("/llama11b", func(event *handler.CommandEvent) error {
-			return handleLlm(event, llm.ModelLlama11bVision)
-		})
-		r.Command("/gpt4", func(event *handler.CommandEvent) error {
-			if isInWhitelist(event.User().ID) {
-				return handleLlm(event, llm.ModelGpt4o)
-			}
-			return llmWhitelistError(event)
-		})
-		r.Command("/llama405b", func(event *handler.CommandEvent) error {
-			if isInWhitelist(event.User().ID) {
-				return handleLlm(event, llm.ModelLlama405b)
-			}
-			return llmWhitelistError(event)
-		})
-		r.Command("/mistral_large", func(event *handler.CommandEvent) error {
-			if isInWhitelist(event.User().ID) {
-				return handleLlm(event, llm.ModelMistralLarge)
-			}
-			return llmWhitelistError(event)
-		})
-		r.Command("/commandr_plus", func(event *handler.CommandEvent) error {
-			if isInWhitelist(event.User().ID) {
-				return handleLlm(event, llm.ModelCohereCommandRPlus082024)
-			}
-			return llmWhitelistError(event)
-		})
-		r.Command("/llama90b", func(event *handler.CommandEvent) error {
-			return handleLlm(event, llm.ModelLlama90bVision)
-		})
+		for _, model := range llm.AllModels {
+			registerLlm(r, "/"+model.Command, model)
+		}
 	})
 
 	// utils
@@ -353,10 +341,13 @@ func handleNotFound(event *handler.InteractionEvent) error {
 }
 
 func handleFollowupError(event *handler.CommandEvent, err error) error {
-	return event.CreateMessage(discord.MessageCreate{
-		Content: fmt.Sprintf("Error: %v", err),
-		Flags:   discord.MessageFlagEphemeral,
+	content := fmt.Sprintf("Error: %v", err)
+	flags := discord.MessageFlagEphemeral
+	_, err = event.UpdateInteractionResponse(discord.MessageUpdate{
+		Content: &content,
+		Flags:   &flags,
 	})
+	return err
 }
 
 func formatMsg(msg, username string) string {
@@ -425,7 +416,54 @@ outer:
 	return false
 }
 
-func handleLlm(event *handler.CommandEvent, model string) error {
+func sendMessageSplits(client bot.Client, messageID snowflake.ID, event *handler.CommandEvent, flags discord.MessageFlags, channelID snowflake.ID, runes []rune) (*discord.Message, error) {
+	// if messageID != 0, first respond to the message with the first 2000 characters, then
+	// send the remaining 2000character-splits as regular messages.
+	// if messageID == 0, send the 2000character-splits as separate messages.
+	messageLen := len(runes)
+	numMessages := (messageLen + 2000 - 1) / 2000
+	var botMessage *discord.Message
+
+	for i := 0; i < numMessages; i++ {
+		start := i * 2000
+		end := start + 2000
+		if end > messageLen {
+			end = messageLen
+		}
+		segment := string(runes[start:end])
+
+		var message *discord.Message
+		var err error
+		if i == 0 {
+			if messageID != 0 {
+				message, err = client.Rest().CreateMessage(channelID,
+					discord.NewMessageCreateBuilder().
+						SetMessageReferenceByID(messageID).
+						SetContent(segment).
+						Build(),
+				)
+			} else if event != nil {
+				message, err = event.UpdateInteractionResponse(discord.MessageUpdate{
+					Content: &segment,
+					Flags:   &flags,
+				})
+			}
+		} else {
+			message, err = client.Rest().CreateMessage(channelID, discord.MessageCreate{Content: segment})
+		}
+
+		if err != nil {
+			return nil, err
+		}
+		if botMessage == nil {
+			botMessage = message
+		}
+	}
+
+	return botMessage, nil
+}
+
+func handleLlm(event *handler.CommandEvent, model llm.Model) error {
 	data := event.SlashCommandInteractionData()
 	prompt := data.String("prompt")
 	ephemeral := data.Bool("ephemeral")
@@ -433,9 +471,7 @@ func handleLlm(event *handler.CommandEvent, model string) error {
 	var llmer *llm.Llmer
 
 	// check if we have perms to read messages in this channel
-	useCache := event.Channel().Permissions.Has(discord.PermissionReadMessageHistory) &&
-		event.Channel().Type() != discord.ChannelTypeDM &&
-		event.Channel().Type() != discord.ChannelTypeGroupDM
+	useCache := !event.Channel().Permissions.Has(discord.PermissionReadMessageHistory)
 
 	if useCache {
 		// we are in a DM, so we cannot read surrounding messages. Instead, we use a cache
@@ -477,15 +513,13 @@ func handleLlm(event *handler.CommandEvent, model string) error {
 	// and we also want the actual slash command prompt
 	llmer.AddMessage(llm.RoleUser, formatMsg(prompt, event.User().Username))
 
+	// discord only gives us 3s to respond unless we do this (x3 is thinking...)
 	event.DeferCreateMessage(ephemeral)
 
 	response, err := llmer.RequestCompletion(model)
 	if err != nil {
-		event.DeleteInteractionResponse()
-		return event.CreateMessage(discord.MessageCreate{
-			Content: fmt.Sprintf("Failed to generate response: %v", err),
-			Flags:   discord.MessageFlagEphemeral,
-		})
+		slog.Error("failed to generate response", slog.Any("err", err))
+		return handleFollowupError(event, err)
 	}
 
 	var flags discord.MessageFlags
@@ -493,15 +527,27 @@ func handleLlm(event *handler.CommandEvent, model string) error {
 		flags = discord.MessageFlagEphemeral
 	}
 
-	botMessage, err := event.UpdateInteractionResponse(discord.MessageUpdate{
-		Content: &response,
-		Flags:   &flags,
-	})
+	var botMessage *discord.Message
+	if !useCache && !ephemeral {
+		botMessage, err = sendMessageSplits(event.Client(), 0, event, flags, event.Channel().ID(), []rune(response))
+	} else {
+		// send as file
+		botMessage, err = event.UpdateInteractionResponse(discord.MessageUpdate{
+			Files: []*discord.File{
+				{
+					Name:   fmt.Sprintf("response-%v.txt", event.ID()),
+					Reader: strings.NewReader(response),
+				},
+			},
+		})
+	}
+
+	if err != nil {
+		return handleFollowupError(event, err)
+	}
 
 	// only clients can query options passed to commands, so we cache the action interaction
-	if err == nil {
-		writeMessageInteractionPrompt(botMessage.ID, prompt)
-	}
+	writeMessageInteractionPrompt(botMessage.ID, prompt)
 
 	if useCache {
 		if err := writeLlmerToCache(event.Channel().ID(), llmer); err != nil {
@@ -530,21 +576,12 @@ func handleLlmInteraction(event *events.MessageCreate) error {
 	// now we generate the LLM response
 	response, err := llmer.RequestCompletion(llm.ModelGpt4oMini)
 	if err != nil {
+		slog.Error("failed to generate response", slog.Any("err", err))
 		return err
 	}
 
-	// and reply to the trigger message with it
-	event.Client().Rest().CreateMessage(event.ChannelID, discord.MessageCreate{
-		Content: response,
-		MessageReference: &discord.MessageReference{
-			MessageID: &event.Message.ID,
-			ChannelID: &event.ChannelID,
-			GuildID:   event.GuildID,
-		},
-		AllowedMentions: &discord.AllowedMentions{
-			RepliedUser: false, // don't ping trigger message author
-		},
-	})
+	// and send the response
+	sendMessageSplits(event.Client(), event.MessageID, nil, 0, event.ChannelID, []rune(response))
 
 	return nil
 }
@@ -670,7 +707,6 @@ func handleBoykisser(event *handler.CommandEvent) error {
 
 	resp, post, err := fetchBoykisser(1)
 	if err != nil {
-		event.DeleteInteractionResponse()
 		return handleFollowupError(event, err)
 	}
 	defer resp.Body.Close()

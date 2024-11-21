@@ -28,24 +28,256 @@ const (
 	RoleAssistant = openai.ChatMessageRoleAssistant
 )
 
-type Model struct {
-	// Model name
-	Name string
-	// API base
-	API string
+const (
+	ProviderGithub      = "github"
+	ProviderZukijourney = "zukijourney"
+)
+
+type ModelProvider struct {
+	API      string
+	Codename string
 }
 
-const (
-	ModelGpt4o                    = "gpt-4o"
-	ModelMistralNemo              = "Mistral-Nemo"
-	ModelCohereCommandR082024     = "Cohere-command-r-08-2024"
-	ModelLlama11bVision           = "Llama-3.2-11B-Vision-Instruct"
-	ModelGpt4oMini                = "gpt-4o-mini"
-	ModelLlama405b                = "Meta-Llama-3.1-405B-Instruct"
-	ModelMistralLarge             = "Mistral-large-2407"
-	ModelCohereCommandRPlus082024 = "Cohere-command-r-plus-08-2024"
-	ModelLlama90bVision           = "Llama-3.2-90B-Vision-Instruct"
+type Model struct {
+	Name           string
+	Command        string
+	NeedsWhitelist bool
+	Vision         bool
+	Providers      map[string]ModelProvider
+}
+
+var (
+	ModelGpt4oMini = Model{
+		Name:           "OpenAI GPT-4o mini",
+		Command:        "gpt4o",
+		NeedsWhitelist: false,
+		Vision:         true,
+		Providers: map[string]ModelProvider{
+			ProviderGithub: {
+				API:      azureBaseURL,
+				Codename: "gpt-4o-mini",
+			},
+			ProviderZukijourney: {
+				API:      zjBaseURL,
+				Codename: "gpt-4o-mini",
+			},
+		},
+	}
+
+	ModelGpt4o = Model{
+		Name:           "OpenAI GPT-4o",
+		Command:        "gpt4",
+		NeedsWhitelist: true,
+		Vision:         true,
+		Providers: map[string]ModelProvider{
+			ProviderGithub: {
+				API:      azureBaseURL,
+				Codename: "gpt-4o",
+			},
+			ProviderZukijourney: {
+				API:      zjBaseURL,
+				Codename: "gpt-4o",
+			},
+		},
+	}
+
+	ModelGeminiPro = Model{
+		Name:           "Google Gemini 1.5 Pro",
+		Command:        "geminipro",
+		NeedsWhitelist: true,
+		Vision:         true,
+		Providers: map[string]ModelProvider{
+			ProviderZukijourney: {
+				API:      zjBaseURL,
+				Codename: "gemini-1.5-pro-latest",
+			},
+		},
+	}
+
+	ModelGeminiExp1114 = Model{
+		Name:           "Google gemini-exp-1114",
+		Command:        "geminiexp",
+		NeedsWhitelist: true,
+		Providers: map[string]ModelProvider{
+			ProviderZukijourney: {
+				API:      zjBaseURL,
+				Codename: "gemini-exp-1114",
+			},
+		},
+	}
+
+	ModelClaude3Haiku = Model{
+		Name:           "Anthropic Claude 3 Haiku",
+		Command:        "haiku",
+		NeedsWhitelist: false,
+		Vision:         true,
+		Providers: map[string]ModelProvider{
+			ProviderZukijourney: {
+				API:      zjBaseURL,
+				Codename: "claude-3-haiku",
+			},
+		},
+	}
+
+	ModelGeminiFlash = Model{
+		Name:           "Google Gemini 1.5 Flash",
+		Command:        "gemini",
+		NeedsWhitelist: false,
+		Vision:         true,
+		Providers: map[string]ModelProvider{
+			ProviderZukijourney: {
+				API:      zjBaseURL,
+				Codename: "gemini-1.5-flash-latest",
+			},
+		},
+	}
+
+	ModelCommandRplus = Model{
+		Name:           "Cohere Command R+",
+		Command:        "commandrplus",
+		NeedsWhitelist: false,
+		Providers: map[string]ModelProvider{
+			ProviderZukijourney: {
+				API:      zjBaseURL,
+				Codename: "command-r-plus",
+			},
+		},
+	}
+
+	ModelMixtral8x7b = Model{
+		Name:           "Mistral Mixtral 8x7B Instruct",
+		Command:        "mixtral",
+		NeedsWhitelist: false,
+		Providers: map[string]ModelProvider{
+			ProviderZukijourney: {
+				API:      zjBaseURL,
+				Codename: "mixtral-8x7b-instruct",
+			},
+		},
+	}
+
+	ModelMistralLarge = Model{
+		Name:           "Mistral Large (2407) 123B",
+		Command:        "mistral_large",
+		NeedsWhitelist: true,
+		Providers: map[string]ModelProvider{
+			ProviderGithub: {
+				API:      azureBaseURL,
+				Codename: "Mistral-large-2407",
+			},
+		},
+	}
+
+	ModelMistralNemo = Model{
+		Name:           "Mistral Nemo",
+		Command:        "nemo",
+		NeedsWhitelist: false,
+		Providers: map[string]ModelProvider{
+			ProviderGithub: {
+				API:      azureBaseURL,
+				Codename: "Mistral-Nemo",
+			},
+			ProviderZukijourney: {
+				API:      zjBaseURL,
+				Codename: "mistral-nemo",
+			},
+		},
+	}
+
+	ModelLlama405b = Model{
+		Name:           "Meta Llama 3.1 405B Instruct",
+		Command:        "llama405b",
+		NeedsWhitelist: false,
+		Providers: map[string]ModelProvider{
+			ProviderZukijourney: {
+				API:      zjBaseURL,
+				Codename: "llama-3.1-405b-instruct",
+			},
+			// github doesn't work for some reason
+		},
+	}
+
+	ModelLlama90b = Model{
+		Name:           "Meta Llama 3.2 90B Instruct",
+		Command:        "llama90b",
+		NeedsWhitelist: false,
+		Vision:         true,
+		Providers: map[string]ModelProvider{
+			ProviderZukijourney: {
+				API:      zjBaseURL,
+				Codename: "llama-3.2-90b-instruct",
+			},
+		},
+	}
+
+	ModelLlama70b = Model{
+		Name:    "Meta Llama 3.1 70B Instruct",
+		Command: "llama70b",
+		Providers: map[string]ModelProvider{
+			ProviderZukijourney: {
+				API:      zjBaseURL,
+				Codename: "llama-3.1-70b-instruct",
+			},
+		},
+	}
+
+	ModelYandexGPT4Pro = Model{
+		Name:           "Yandex GPT-4 Pro",
+		Command:        "yagpt4pro",
+		NeedsWhitelist: false,
+		Providers: map[string]ModelProvider{
+			ProviderZukijourney: {
+				API:      zjBaseURL,
+				Codename: "yandex-gpt-4-pro",
+			},
+		},
+	}
+
+	ModelGigaChatPro = Model{
+		Name:           "Sberbank GigaChat Pro",
+		Command:        "gigachatpro",
+		NeedsWhitelist: false,
+		Providers: map[string]ModelProvider{
+			ProviderZukijourney: {
+				API:      zjBaseURL,
+				Codename: "GigaChat-Pro",
+			},
+		},
+	}
+
+	AllModels = []Model{
+		ModelGpt4oMini,
+		ModelGpt4o,
+		ModelGeminiPro,
+		ModelGeminiExp1114,
+		ModelClaude3Haiku,
+		ModelGeminiFlash,
+		ModelCommandRplus,
+		ModelMixtral8x7b,
+		ModelMistralLarge,
+		ModelMistralNemo,
+		ModelLlama405b,
+		ModelLlama90b,
+		ModelLlama70b,
+		ModelYandexGPT4Pro,
+		ModelGigaChatPro,
+	}
 )
+
+func (m Model) Client(provider string) (*openai.Client, string) {
+	_, hasGithub := m.Providers[ProviderGithub]
+	if provider == ProviderGithub && hasGithub {
+		// github marketplace
+		config := openai.DefaultAzureConfig(githubToken, m.Providers[provider].API)
+		config.APIType = openai.APITypeOpenAI
+		return openai.NewClientWithConfig(config), m.Providers[provider].Codename
+	} else {
+		// zukijourney
+		config := openai.DefaultConfig(zjToken)
+		config.BaseURL = m.Providers[provider].API
+		return openai.NewClientWithConfig(config), m.Providers[provider].Codename
+	}
+}
 
 type Llmer struct {
 	Messages []openai.ChatCompletionMessage `json:"messages"`
@@ -59,12 +291,6 @@ func UnmarshalLlmer(data []byte) (*Llmer, error) {
 	var llmer Llmer
 	err := json.Unmarshal(data, &llmer)
 	return &llmer, err
-}
-
-func newClient() *openai.Client {
-	config := openai.DefaultAzureConfig(githubToken, azureBaseURL)
-	config.APIType = openai.APITypeOpenAI
-	return openai.NewClientWithConfig(config)
 }
 
 func (l *Llmer) NumMessages() int {
@@ -82,6 +308,14 @@ func (l *Llmer) Lobotomize() {
 }
 
 func (l *Llmer) AddMessage(role, content string) {
+	if len(l.Messages) > 0 && role == RoleAssistant && l.Messages[len(l.Messages)-1].Role == RoleAssistant {
+		// previous message is also an assistant message, merge this
+		// (this is required when x3 splits the message up into multiple parts to bypass
+		// discord's 2000 character message limit)
+		l.Messages[len(l.Messages)-1].Content += content
+		return
+	}
+
 	msg := openai.ChatCompletionMessage{
 		Role:    role,
 		Content: content,
@@ -111,22 +345,20 @@ func (l *Llmer) AddImage(imageURL string) {
 	})
 }
 
-func (l *Llmer) RequestCompletion(model string) (string, error) {
-	//return "BOT TESTING", nil
-
-	slog.Debug("request completion.. message history follows..", slog.String("model", model))
+func (l *Llmer) requestCompletionInternal(model Model, provider string) (string, error) {
+	slog.Debug("request completion.. message history follows..", slog.String("model", model.Name))
 	for _, msg := range l.Messages {
 		slog.Debug("    message", slog.String("role", msg.Role), slog.String("content", msg.Content))
 	}
 
+	client, codename := model.Client(provider)
 	req := openai.ChatCompletionRequest{
-		Model:    model,
+		Model:    codename,
 		Messages: l.Messages,
 		Stream:   true,
 	}
 
 	completionStart := time.Now()
-	client := newClient()
 
 	stream, err := client.CreateChatCompletionStream(context.Background(), req)
 	if err != nil {
@@ -153,4 +385,24 @@ func (l *Llmer) RequestCompletion(model string) (string, error) {
 		Content: text.String(),
 	})
 	return text.String(), nil
+}
+
+func (l *Llmer) RequestCompletion(model Model) (res string, err error) {
+	// check if has github first
+	if _, ok := model.Providers[ProviderGithub]; ok {
+		res, err = l.requestCompletionInternal(model, ProviderGithub)
+		if err == nil {
+			return
+		}
+		// if we're here, we have an error. continue on to try zukijourney
+	}
+
+	if _, ok := model.Providers[ProviderZukijourney]; ok {
+		res, err = l.requestCompletionInternal(model, ProviderZukijourney)
+		if err == nil {
+			return
+		}
+	}
+
+	return
 }
