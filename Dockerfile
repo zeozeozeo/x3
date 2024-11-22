@@ -1,4 +1,4 @@
-FROM golang:1.23.3-alpine3.20
+FROM docker.io/library/golang:1.23.3-alpine3.20
 
 WORKDIR /bot
 
