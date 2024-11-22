@@ -14,6 +14,9 @@ import (
 	"strings"
 	"syscall"
 
+	// load .env before importing our modules
+	_ "github.com/joho/godotenv/autoload"
+
 	"github.com/disgoorg/disgo"
 	"github.com/disgoorg/disgo/bot"
 	"github.com/disgoorg/disgo/discord"
@@ -75,7 +78,7 @@ func makeGptCommands() []discord.SlashCommandCreate {
 }
 
 var (
-	token    = os.Getenv("X3ZEO_DISCORD_TOKEN")
+	token    = os.Getenv("X3_DISCORD_TOKEN")
 	commands = []discord.ApplicationCommandCreate{
 		discord.SlashCommandCreate{
 			Name:        "whitelist",
@@ -152,7 +155,7 @@ var (
 
 const (
 	// LLM interaction context surrounding messages
-	maxContextMessages = 20
+	maxContextMessages = 30
 	maxRedditAttempts  = 3
 )
 
@@ -270,7 +273,7 @@ func main() {
 	defer db.Close()
 
 	slog.SetLogLoggerLevel(slog.LevelDebug)
-	slog.Info("x3zeo booting up...")
+	slog.Info("x3 booting up...")
 	slog.Info("disgo version", slog.String("version", disgo.Version))
 
 	r := handler.New()
@@ -335,7 +338,7 @@ func main() {
 		return
 	}
 
-	slog.Info("x3zeo running. ctrl+c to stop")
+	slog.Info("x3 is running. ctrl+c to stop")
 	s := make(chan os.Signal, 1)
 	signal.Notify(s, syscall.SIGINT, syscall.SIGTERM, os.Interrupt)
 	<-s
