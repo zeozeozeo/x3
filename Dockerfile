@@ -8,6 +8,6 @@ RUN go mod download
 RUN go mod verify
 
 COPY . .
-RUN GOOS=linux go build -o /x3
+RUN CGO_ENABLED=1 GOOS=linux go build -o /x3
 
 CMD ["/x3"]
