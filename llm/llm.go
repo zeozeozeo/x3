@@ -11,28 +11,33 @@ import (
 	"time"
 
 	openai "github.com/sashabaranov/go-openai"
+	"github.com/zeozeozeo/x3/persona"
 )
 
 var (
 	githubToken = os.Getenv("X3_GITHUB_TOKEN")
 	zjToken     = os.Getenv("X3_ZJ_TOKEN")
 	hmToken     = os.Getenv("X3_HM_TOKEN")
+	fresedToken = os.Getenv("X3_FRESED_TOKEN")
 )
 
 const (
-	azureBaseURL = "https://models.inference.ai.azure.com"
-	zjBaseURL    = "https://api.zukijourney.com/v1"
-	hmBaseUrl    = "https://helixmind.online/v1"
+	azureBaseURL  = "https://models.inference.ai.azure.com"
+	zjBaseURL     = "https://api.zukijourney.com/v1"
+	hmBaseUrl     = "https://helixmind.online/v1"
+	fresedBaseUrl = "https://fresedgpt.space/v1"
 )
 
 const (
 	RoleUser      = openai.ChatMessageRoleUser
 	RoleAssistant = openai.ChatMessageRoleAssistant
+	RoleSystem    = openai.ChatMessageRoleSystem
 )
 
 const (
 	ProviderGithub      = "github"
 	ProviderZukijourney = "zukijourney"
+	ProviderFresed      = "fresed"
 	ProviderHelixmind   = "helixmind"
 )
 
@@ -63,6 +68,10 @@ var (
 				API:      zjBaseURL,
 				Codename: "gpt-4o-mini",
 			},
+			ProviderFresed: {
+				API:      fresedBaseUrl,
+				Codename: "gpt-4o-mini",
+			},
 			ProviderHelixmind: {
 				API:      hmBaseUrl,
 				Codename: "gpt-4o-mini",
@@ -84,6 +93,10 @@ var (
 				API:      zjBaseURL,
 				Codename: "gpt-4o",
 			},
+			ProviderFresed: {
+				API:      fresedBaseUrl,
+				Codename: "gpt-4o",
+			},
 			ProviderHelixmind: {
 				API:      hmBaseUrl,
 				Codename: "gpt-4o",
@@ -92,25 +105,32 @@ var (
 	}
 
 	ModelGeminiPro = Model{
-		Name:           "Google Gemini 1.5 Pro",
-		Command:        "geminipro",
-		NeedsWhitelist: true,
-		Vision:         true,
+		Name:    "Google Gemini 1.5 Pro",
+		Command: "geminipro",
+		Vision:  true,
 		Providers: map[string]ModelProvider{
 			ProviderZukijourney: {
 				API:      zjBaseURL,
+				Codename: "gemini-1.5-pro-latest",
+			},
+			ProviderFresed: {
+				API:      fresedBaseUrl,
 				Codename: "gemini-1.5-pro-latest",
 			},
 		},
 	}
 
 	ModelGeminiExp1114 = Model{
-		Name:           "Google gemini-exp-1114",
+		Name:           "Google Gemini-Exp-1114",
 		Command:        "geminiexp",
 		NeedsWhitelist: true,
 		Providers: map[string]ModelProvider{
 			ProviderZukijourney: {
 				API:      zjBaseURL,
+				Codename: "gemini-exp-1114",
+			},
+			ProviderFresed: {
+				API:      fresedBaseUrl,
 				Codename: "gemini-exp-1114",
 			},
 		},
@@ -124,6 +144,40 @@ var (
 			ProviderZukijourney: {
 				API:      zjBaseURL,
 				Codename: "claude-3-haiku",
+			},
+			ProviderFresed: {
+				API:      fresedBaseUrl,
+				Codename: "claude-3-haiku-20240307",
+			},
+		},
+	}
+
+	ModelClaude35Sonnet = Model{
+		Name:           "Anthropic Claude 3.5 Sonnet",
+		Command:        "sonnet",
+		Vision:         true,
+		NeedsWhitelist: true,
+		Providers: map[string]ModelProvider{
+			ProviderFresed: {
+				API:      fresedBaseUrl,
+				Codename: "claude-3-5-sonnet-20241022",
+			},
+			ProviderZukijourney: {
+				API:      zjBaseURL,
+				Codename: "claude-3.5-sonnet",
+			},
+		},
+	}
+
+	ModelClaude3Opus = Model{
+		Name:           "Anthropic Claude 3 Opus",
+		Command:        "opus",
+		Vision:         true,
+		NeedsWhitelist: true,
+		Providers: map[string]ModelProvider{
+			ProviderFresed: {
+				API:      fresedBaseUrl,
+				Codename: "claude-3-opus-20240229",
 			},
 		},
 	}
@@ -146,6 +200,10 @@ var (
 		Providers: map[string]ModelProvider{
 			ProviderZukijourney: {
 				API:      zjBaseURL,
+				Codename: "command-r-plus",
+			},
+			ProviderFresed: {
+				API:      fresedBaseUrl,
 				Codename: "command-r-plus",
 			},
 		},
@@ -197,11 +255,15 @@ var (
 				API:      zjBaseURL,
 				Codename: "mistral-large-2407",
 			},
+			ProviderFresed: {
+				API:      fresedBaseUrl,
+				Codename: "mistral-large-2",
+			},
 		},
 	}
 
 	ModelMistralNemo = Model{
-		Name:    "Mistral Nemo",
+		Name:    "Mistral Nemo 12B",
 		Command: "nemo",
 		Providers: map[string]ModelProvider{
 			ProviderGithub: {
@@ -211,6 +273,10 @@ var (
 			ProviderZukijourney: {
 				API:      zjBaseURL,
 				Codename: "mistral-nemo",
+			},
+			ProviderFresed: {
+				API:      fresedBaseUrl,
+				Codename: "mistral-nemo-12b",
 			},
 		},
 	}
@@ -222,6 +288,10 @@ var (
 			ProviderZukijourney: {
 				API:      zjBaseURL,
 				Codename: "llama-3.1-405b-instruct",
+			},
+			ProviderFresed: {
+				API:      fresedBaseUrl,
+				Codename: "llama-3.1-405b",
 			},
 			// github doesn't work for some reason
 		},
@@ -236,6 +306,10 @@ var (
 				API:      zjBaseURL,
 				Codename: "llama-3.2-90b-instruct",
 			},
+			ProviderFresed: {
+				API:      fresedBaseUrl,
+				Codename: "llama-3.2-90b",
+			},
 		},
 	}
 
@@ -246,6 +320,10 @@ var (
 			ProviderZukijourney: {
 				API:      zjBaseURL,
 				Codename: "llama-3.2-11b-instruct",
+			},
+			ProviderFresed: {
+				API:      fresedBaseUrl,
+				Codename: "llama-3.2-11b",
 			},
 		},
 	}
@@ -258,6 +336,10 @@ var (
 				API:      zjBaseURL,
 				Codename: "llama-3.1-70b-instruct",
 			},
+			ProviderFresed: {
+				API:      fresedBaseUrl,
+				Codename: "llama-3.1-70b",
+			},
 		},
 	}
 
@@ -268,6 +350,10 @@ var (
 			ProviderZukijourney: {
 				API:      zjBaseURL,
 				Codename: "llama-3.1-8b-instruct",
+			},
+			ProviderFresed: {
+				API:      fresedBaseUrl,
+				Codename: "llama-3.1-8b",
 			},
 		},
 	}
@@ -302,6 +388,10 @@ var (
 				API:      azureBaseURL,
 				Codename: "Phi-3.5-MoE-instruct",
 			},
+			ProviderFresed: {
+				API:      fresedBaseUrl,
+				Codename: "phi-3.5-moe",
+			},
 		},
 	}
 
@@ -325,17 +415,24 @@ var (
 				API:      azureBaseURL,
 				Codename: "Phi-3.5-mini-instruct",
 			},
+			ProviderFresed: {
+				API:      fresedBaseUrl,
+				Codename: "phi-3.5-mini",
+			},
 		},
 	}
 
 	ModelJambaLarge = Model{
-		Name:           "AI21 Jamba 1.5 Large 94B active/398B total",
-		Command:        "jambalarge",
-		NeedsWhitelist: true,
+		Name:    "AI21 Jamba 1.5 Large 94B active/398B total",
+		Command: "jambalarge",
 		Providers: map[string]ModelProvider{
 			ProviderGithub: {
 				API:      azureBaseURL,
 				Codename: "AI21-Jamba-1.5-Large",
+			},
+			ProviderFresed: {
+				API:      fresedBaseUrl,
+				Codename: "jamba-1.5-large",
 			},
 		},
 	}
@@ -347,6 +444,10 @@ var (
 			ProviderGithub: {
 				API:      azureBaseURL,
 				Codename: "AI21-Jamba-1.5-Mini",
+			},
+			ProviderFresed: {
+				API:      fresedBaseUrl,
+				Codename: "jamba-1.5-mini",
 			},
 		},
 	}
@@ -413,6 +514,8 @@ var (
 		ModelGeminiPro,
 		ModelGeminiExp1114,
 		ModelClaude3Haiku,
+		ModelClaude35Sonnet,
+		ModelClaude3Opus,
 		ModelGeminiFlash,
 		ModelCommandRplus,
 		ModelMixtral8x7b,
@@ -439,7 +542,7 @@ var (
 		ModelYiLightning,
 	}
 
-	allProviders = []string{ProviderGithub, ProviderZukijourney, ProviderHelixmind}
+	allProviders = []string{ProviderGithub, ProviderZukijourney, ProviderFresed, ProviderHelixmind}
 )
 
 func (m Model) Client(provider string) (*openai.Client, string) {
@@ -452,6 +555,11 @@ func (m Model) Client(provider string) (*openai.Client, string) {
 	} else if provider == ProviderZukijourney {
 		// zukijourney
 		config := openai.DefaultConfig(zjToken)
+		config.BaseURL = m.Providers[provider].API
+		return openai.NewClientWithConfig(config), m.Providers[provider].Codename
+	} else if provider == ProviderFresed {
+		// fresed
+		config := openai.DefaultConfig(fresedToken)
 		config.BaseURL = m.Providers[provider].API
 		return openai.NewClientWithConfig(config), m.Providers[provider].Codename
 	} else {
@@ -504,6 +612,19 @@ func (l *Llmer) AddMessage(role, content string) {
 		Content: content,
 	}
 	l.Messages = append(l.Messages, msg)
+}
+
+func (l *Llmer) SetPersona(persona persona.Persona) {
+	// remove system prompt if there is one
+	if len(l.Messages) > 0 && l.Messages[0].Role == RoleSystem {
+		l.Messages = l.Messages[1:]
+	}
+
+	// add new system prompt as the first message
+	l.Messages = append([]openai.ChatCompletionMessage{{
+		Role:    RoleSystem,
+		Content: persona.System,
+	}}, l.Messages...)
 }
 
 // Add an image by URL to the latest message.
