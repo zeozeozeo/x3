@@ -640,7 +640,7 @@ func onMessageCreate(event *events.MessageCreate) {
 		if user.ID == event.Client().ID() {
 			slog.Debug("handling @mention interaction")
 			if err := handleLlmInteraction(event, false); err != nil {
-				slog.Error("failed to handle DM interaction", slog.Any("err", err))
+				slog.Error("failed to handle mention interaction", slog.Any("err", err))
 			}
 			return
 		}
@@ -652,7 +652,7 @@ func onMessageCreate(event *events.MessageCreate) {
 			// ...that was created by us
 			slog.Debug("handling reply interaction")
 			if err := handleLlmInteraction(event, false); err != nil {
-				slog.Error("failed to handle DM interaction", slog.Any("err", err))
+				slog.Error("failed to handle reply interaction", slog.Any("err", err))
 			}
 			return
 		}
@@ -662,7 +662,7 @@ func onMessageCreate(event *events.MessageCreate) {
 	if containsX3Regex.MatchString(event.Message.Content) {
 		slog.Debug("handling x3 interaction")
 		if err := handleLlmInteraction(event, true); err != nil {
-			slog.Error("failed to handle DM interaction", slog.Any("err", err))
+			slog.Error("failed to handle x3 interaction", slog.Any("err", err))
 		}
 		return
 	}

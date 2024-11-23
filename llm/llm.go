@@ -51,10 +51,9 @@ type Model struct {
 
 var (
 	ModelGpt4oMini = Model{
-		Name:           "OpenAI GPT-4o mini",
-		Command:        "gpt4o",
-		NeedsWhitelist: false,
-		Vision:         true,
+		Name:    "OpenAI GPT-4o mini",
+		Command: "gpt4o",
+		Vision:  true,
 		Providers: map[string]ModelProvider{
 			ProviderGithub: {
 				API:      azureBaseURL,
@@ -118,10 +117,9 @@ var (
 	}
 
 	ModelClaude3Haiku = Model{
-		Name:           "Anthropic Claude 3 Haiku",
-		Command:        "haiku",
-		NeedsWhitelist: false,
-		Vision:         true,
+		Name:    "Anthropic Claude 3 Haiku",
+		Command: "haiku",
+		Vision:  true,
 		Providers: map[string]ModelProvider{
 			ProviderZukijourney: {
 				API:      zjBaseURL,
@@ -131,10 +129,9 @@ var (
 	}
 
 	ModelGeminiFlash = Model{
-		Name:           "Google Gemini 1.5 Flash",
-		Command:        "gemini",
-		NeedsWhitelist: false,
-		Vision:         true,
+		Name:    "Google Gemini 1.5 Flash",
+		Command: "gemini",
+		Vision:  true,
 		Providers: map[string]ModelProvider{
 			ProviderZukijourney: {
 				API:      zjBaseURL,
@@ -144,9 +141,8 @@ var (
 	}
 
 	ModelCommandRplus = Model{
-		Name:           "Cohere Command R+",
-		Command:        "commandrplus",
-		NeedsWhitelist: false,
+		Name:    "Cohere Command R+",
+		Command: "commandrplus",
 		Providers: map[string]ModelProvider{
 			ProviderZukijourney: {
 				API:      zjBaseURL,
@@ -156,13 +152,34 @@ var (
 	}
 
 	ModelMixtral8x7b = Model{
-		Name:           "Mistral Mixtral 8x7B Instruct",
-		Command:        "mixtral",
-		NeedsWhitelist: false,
+		Name:    "Mistral Mixtral 8x7B Instruct",
+		Command: "mixtral7b",
 		Providers: map[string]ModelProvider{
 			ProviderZukijourney: {
 				API:      zjBaseURL,
 				Codename: "mixtral-8x7b-instruct",
+			},
+		},
+	}
+
+	ModelMixtral8x22b = Model{
+		Name:    "Mistral Mixtral 8x22B Instruct",
+		Command: "mixtral22b",
+		Providers: map[string]ModelProvider{
+			ProviderZukijourney: {
+				API:      zjBaseURL,
+				Codename: "caramelldansen-1",
+			},
+		},
+	}
+
+	ModelMinistral3b = Model{
+		Name:    "Mistral Ministral 3B",
+		Command: "ministral",
+		Providers: map[string]ModelProvider{
+			ProviderGithub: {
+				API:      azureBaseURL,
+				Codename: "Ministral-3B",
 			},
 		},
 	}
@@ -176,13 +193,16 @@ var (
 				API:      azureBaseURL,
 				Codename: "Mistral-large-2407",
 			},
+			ProviderZukijourney: {
+				API:      zjBaseURL,
+				Codename: "mistral-large-2407",
+			},
 		},
 	}
 
 	ModelMistralNemo = Model{
-		Name:           "Mistral Nemo",
-		Command:        "nemo",
-		NeedsWhitelist: false,
+		Name:    "Mistral Nemo",
+		Command: "nemo",
 		Providers: map[string]ModelProvider{
 			ProviderGithub: {
 				API:      azureBaseURL,
@@ -196,9 +216,8 @@ var (
 	}
 
 	ModelLlama405b = Model{
-		Name:           "Meta Llama 3.1 405B Instruct",
-		Command:        "llama405b",
-		NeedsWhitelist: false,
+		Name:    "Meta Llama 3.1 405B Instruct",
+		Command: "llama405b",
 		Providers: map[string]ModelProvider{
 			ProviderZukijourney: {
 				API:      zjBaseURL,
@@ -209,14 +228,24 @@ var (
 	}
 
 	ModelLlama90b = Model{
-		Name:           "Meta Llama 3.2 90B Instruct",
-		Command:        "llama90b",
-		NeedsWhitelist: false,
-		Vision:         true,
+		Name:    "Meta Llama 3.2 90B Instruct",
+		Command: "llama90b",
+		Vision:  true,
 		Providers: map[string]ModelProvider{
 			ProviderZukijourney: {
 				API:      zjBaseURL,
 				Codename: "llama-3.2-90b-instruct",
+			},
+		},
+	}
+
+	ModelLlama11b = Model{
+		Name:    "Meta Llama 3.2 11B Instruct",
+		Command: "llama11b",
+		Providers: map[string]ModelProvider{
+			ProviderZukijourney: {
+				API:      zjBaseURL,
+				Codename: "llama-3.2-11b-instruct",
 			},
 		},
 	}
@@ -232,10 +261,20 @@ var (
 		},
 	}
 
+	ModelLlama8b = Model{
+		Name:    "Meta Llama 3.1 8B Instruct",
+		Command: "llama8b",
+		Providers: map[string]ModelProvider{
+			ProviderZukijourney: {
+				API:      zjBaseURL,
+				Codename: "llama-3.1-8b-instruct",
+			},
+		},
+	}
+
 	ModelYandexGPT4Pro = Model{
-		Name:           "Yandex GPT-4 Pro",
-		Command:        "yagpt4pro",
-		NeedsWhitelist: false,
+		Name:    "Yandex GPT-4 Pro (Russian)",
+		Command: "yagpt4pro",
 		Providers: map[string]ModelProvider{
 			ProviderZukijourney: {
 				API:      zjBaseURL,
@@ -245,13 +284,125 @@ var (
 	}
 
 	ModelGigaChatPro = Model{
-		Name:           "Sberbank GigaChat Pro",
-		Command:        "gigachatpro",
-		NeedsWhitelist: false,
+		Name:    "Sberbank GigaChat Pro (Russian)",
+		Command: "gigachatpro",
 		Providers: map[string]ModelProvider{
 			ProviderZukijourney: {
 				API:      zjBaseURL,
 				Codename: "GigaChat-Pro",
+			},
+		},
+	}
+
+	ModelPhi35MoE = Model{
+		Name:    "Microsoft Phi-3.5-MoE Instruct 6.6B",
+		Command: "phi35moe",
+		Providers: map[string]ModelProvider{
+			ProviderGithub: {
+				API:      azureBaseURL,
+				Codename: "Phi-3.5-MoE-instruct",
+			},
+		},
+	}
+
+	ModelPhi35Vision = Model{
+		Name:    "Microsoft Phi-3.5-Vision 4.2B",
+		Command: "phi35vision",
+		Vision:  true,
+		Providers: map[string]ModelProvider{
+			ProviderGithub: {
+				API:      azureBaseURL,
+				Codename: "Phi-3.5-vision-instruct",
+			},
+		},
+	}
+
+	ModelPhi35Mini = Model{
+		Name:    "Microsoft Phi-3.5-Mini 3.8B",
+		Command: "phi35mini",
+		Providers: map[string]ModelProvider{
+			ProviderGithub: {
+				API:      azureBaseURL,
+				Codename: "Phi-3.5-mini-instruct",
+			},
+		},
+	}
+
+	ModelJambaLarge = Model{
+		Name:           "AI21 Jamba 1.5 Large 94B active/398B total",
+		Command:        "jambalarge",
+		NeedsWhitelist: true,
+		Providers: map[string]ModelProvider{
+			ProviderGithub: {
+				API:      azureBaseURL,
+				Codename: "AI21-Jamba-1.5-Large",
+			},
+		},
+	}
+
+	ModelJambaMini = Model{
+		Name:    "AI21 Jamba 1.5 Mini 12B active/52B total",
+		Command: "jamba",
+		Providers: map[string]ModelProvider{
+			ProviderGithub: {
+				API:      azureBaseURL,
+				Codename: "AI21-Jamba-1.5-Mini",
+			},
+		},
+	}
+
+	ModelJais30b = Model{
+		Name:    "JAIS 30b Chat (Arabic)",
+		Command: "jais",
+		Providers: map[string]ModelProvider{
+			ProviderGithub: {
+				API:      azureBaseURL,
+				Codename: "jais-30b-chat",
+			},
+		},
+	}
+
+	ModelGemma9b = Model{
+		Name:    "Google Gemma 2 9B",
+		Command: "gemma9b",
+		Providers: map[string]ModelProvider{
+			ProviderZukijourney: {
+				API:      zjBaseURL,
+				Codename: "gemma-2-9b",
+			},
+		},
+	}
+
+	ModelGemma27b = Model{
+		Name:    "Google Gemma 2 27B",
+		Command: "gemma",
+		Providers: map[string]ModelProvider{
+			ProviderZukijourney: {
+				API:      zjBaseURL,
+				Codename: "gemma-2-27b",
+			},
+		},
+	}
+
+	ModelLiquid40b = Model{
+		Name:    "Liquid LFM 40B",
+		Command: "liquid",
+		Providers: map[string]ModelProvider{
+			ProviderZukijourney: {
+				API:      zjBaseURL,
+				Codename: "liquid-40b",
+			},
+		},
+	}
+
+	ModelYiLightning = Model{
+		Name:           "01.ai Yi Lightning",
+		Command:        "yi",
+		NeedsWhitelist: true,
+		Providers: map[string]ModelProvider{
+			ProviderZukijourney: {
+				API:      zjBaseURL,
+				Codename: "yi-lightning",
 			},
 		},
 	}
@@ -265,13 +416,27 @@ var (
 		ModelGeminiFlash,
 		ModelCommandRplus,
 		ModelMixtral8x7b,
+		ModelMixtral8x22b,
+		ModelMinistral3b,
 		ModelMistralLarge,
 		ModelMistralNemo,
 		ModelLlama405b,
 		ModelLlama90b,
 		ModelLlama70b,
+		ModelLlama11b,
+		ModelLlama8b,
 		ModelYandexGPT4Pro,
 		ModelGigaChatPro,
+		ModelPhi35MoE,
+		ModelPhi35Vision,
+		ModelPhi35Mini,
+		ModelJambaLarge,
+		ModelJambaMini,
+		ModelJais30b,
+		ModelGemma9b,
+		ModelGemma27b,
+		ModelLiquid40b,
+		ModelYiLightning,
 	}
 
 	allProviders = []string{ProviderGithub, ProviderZukijourney, ProviderHelixmind}
