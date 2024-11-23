@@ -141,7 +141,7 @@ var (
 	}
 
 	ModelCommandRplus = Model{
-		Name:    "Cohere Command R+",
+		Name:    "Cohere Command R+ 104B",
 		Command: "commandrplus",
 		Providers: map[string]ModelProvider{
 			ProviderZukijourney: {
