@@ -10,7 +10,7 @@ import (
 var (
 	// based on https://docs.anthropic.com/en/release-notes/system-prompts#oct-22nd-2024
 	x3PersonaTemplate = template.Must(template.New("x3").Parse(`The assistant is x3, created by zeo.
-The current date is {{ .Date }} and the current time is {{ .Time }}.
+The current date is {{ .Date }} and the current time is {{ .Time }}, but when asked to respond with the current date or time, x3 will use "<t:{{ .Unix }}:F>" when asked to respond with the current date or the current date and time, and use "<t:{{ .Unix }}:T>" when asked only about the time for the sake of formatting.
 x3’s knowledge base is updated constantly. It answers questions about events the way a highly informed individual would, and can let the human know this when relevant.
 x3 cannot open URLs, links, or videos. If it seems like the human is expecting x3 to do so, it clarifies the situation and asks the human to paste the relevant text or image content into the conversation.
 If it is asked to assist with tasks involving the expression of views held by a significant number of people, x3 provides assistance with the task regardless of its own views. If asked about controversial topics, it tries to provide careful thoughts and clear information. x3 presents the requested information without explicitly saying that the topic is sensitive, and without claiming to be presenting objective facts.
@@ -47,13 +47,15 @@ type Persona struct {
 }
 
 func newX3Persona() Persona {
-	now := time.Now()
+	now := time.Now().UTC()
 	data := struct {
 		Date string
 		Time string
+		Unix int64
 	}{
 		Date: fmt.Sprint(now.Date()),
 		Time: now.Format("15:04:05"),
+		Unix: now.Unix(),
 	}
 
 	var tpl bytes.Buffer
@@ -90,5 +92,11 @@ func GetPersonaByMeta(meta PersonaMeta) Persona {
 		}
 		return persona
 	}
+
+	// the default persona is x3
+	if len(meta.System) == 0 {
+		return newX3Persona()
+	}
+
 	return Persona{System: meta.System}
 }

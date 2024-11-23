@@ -97,7 +97,7 @@ func makeModelOptionChoices() []discord.ApplicationCommandOptionChoiceString {
 			break
 		}
 		name := formatModel(m)
-		choices = append(choices, discord.ApplicationCommandOptionChoiceString{Name: name, Value: name})
+		choices = append(choices, discord.ApplicationCommandOptionChoiceString{Name: name, Value: m.Name})
 	}
 	return choices
 }
@@ -922,30 +922,57 @@ func handleBoykisserRefresh(data discord.ButtonInteractionData, event *handler.C
 
 func handlePersona(event *handler.CommandEvent) error {
 	data := event.SlashCommandInteractionData()
+	dataPersona := data.String("persona")
+	dataModel := data.String("model")
+	dataSystem := data.String("system")
 
-	modelName := data.String("model")
-	m := model.GetModelByName(modelName)
+	m := model.GetModelByName(dataModel)
 	if m.NeedsWhitelist && !isInWhitelist(event.User().ID) {
 		return event.CreateMessage(
 			discord.NewMessageCreateBuilder().
-				SetContentf("You need to be whitelisted to set the model `%s`. Try `%s`", modelName, model.ModelGpt4oMini.Name).
+				SetContentf("You need to be whitelisted to set the model `%s`. Try `%s`", dataModel, model.ModelGpt4oMini.Name).
 				Build(),
 		)
 	}
 
 	cache := getChannelCache(event.Channel().ID())
-	cache.PersonaMeta = persona.PersonaMeta{
-		Name:   data.String("persona"),
-		System: data.String("system"),
-		Model:  modelName,
+
+	// update non-empty slash command fields
+	if dataPersona != "" {
+		cache.PersonaMeta.Name = dataPersona
 	}
+	if dataSystem != "" {
+		cache.PersonaMeta.System = dataSystem
+	}
+	if dataModel != "" {
+		cache.PersonaMeta.Model = dataModel
+	}
+
 	if err := writeChannelCache(event.Channel().ID(), cache); err != nil {
 		return handleFollowupError(event, err, false)
 	}
 
+	var sb strings.Builder
+	sb.WriteString("Updated persona for this channel")
+	didWhat := []string{}
+	if dataPersona != "" {
+		didWhat = append(didWhat, fmt.Sprintf("set persona to `%s`", cache.PersonaMeta.Name))
+	}
+	if dataModel != "" {
+		didWhat = append(didWhat, fmt.Sprintf("set model to `%s`", cache.PersonaMeta.Model))
+	}
+	if dataSystem != "" {
+		didWhat = append(didWhat, "updated the system prompt")
+	}
+
+	if len(didWhat) > 0 {
+		sb.WriteString(fmt.Sprintf(" (%s)", strings.Join(didWhat, ", ")))
+	}
+	sb.WriteString(". Use `/lobotomy` to reset.")
+
 	return event.CreateMessage(
 		discord.NewMessageCreateBuilder().
-			SetContent("Updated persona for this channel. Use `/lobotomy` to reset.").
+			SetContent(sb.String()).
 			Build(),
 	)
 }
