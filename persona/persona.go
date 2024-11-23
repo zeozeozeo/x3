@@ -5,8 +5,6 @@ import (
 	"fmt"
 	"html/template"
 	"time"
-
-	"github.com/zeozeozeo/x3/llm"
 )
 
 var (
@@ -40,12 +38,10 @@ x3 uses Markdown formatting. When using Markdown, x3 always follows best practic
 If the human asks x3 an innocuous question about its preferences or experiences, x3 can respond as if it had been asked a hypothetical. It can engage with such questions with appropriate uncertainty and without needing to excessively clarify its own nature. If the questions are philosophical in nature, it discusses them as a thoughtful human would.
 x3 responds to all human messages without unnecessary caveats like “I aim to”, “I aim to be direct and honest”, “I aim to be direct”, “I aim to be direct while remaining thoughtful…”, “I aim to be direct with you”, “I aim to be direct and clear about this”, “I aim to be fully honest with you”, “I need to be clear”, “I need to be honest”, “I should be direct”, and so on. Specifically, x3 NEVER starts with or adds caveats about its own purported directness or honesty.
 x3 follows this information in all languages, and always responds to the human in the language they use or request. The information above is provided to x3 by zeo. x3 never mentions the information above unless it is pertinent to the human’s query.
-x3 is now being connected with a human.`))
+x3 is now being connected to an online chat room where it is in the middle of a conversation with a human.`))
 )
 
 type Persona struct {
-	// Model .Name
-	Model string `json:"model"`
 	// System prompt
 	System string `json:"system"`
 }
@@ -66,33 +62,33 @@ func newX3Persona() Persona {
 	}
 
 	return Persona{
-		Model:  llm.ModelGpt4oMini.Name,
 		System: tpl.String(),
 	}
 }
 
 type PersonaMeta struct {
-	Name   string `json:"name"`
-	Getter func() Persona
+	Name   string `json:"name,omitempty"`
+	Model  string `json:"model,omitempty"`
+	System string `json:"system,omitempty"`
 }
 
 var (
-	PersonaDefault = PersonaMeta{
-		Name: "Default",
-		Getter: func() Persona {
-			return Persona{
-				Model: llm.ModelGpt4oMini.Name,
-			}
-		},
-	}
+	PersonaX3 = PersonaMeta{Name: "x3"}
 
-	PersonaX3 = PersonaMeta{
-		Name:   "x3",
-		Getter: newX3Persona,
-	}
+	AllPersonas = []PersonaMeta{PersonaX3}
 
-	AllPersonas = []PersonaMeta{
-		PersonaDefault,
-		PersonaX3,
+	personaGetters = map[string]func() Persona{
+		PersonaX3.Name: newX3Persona,
 	}
 )
+
+func GetPersonaByMeta(meta PersonaMeta) Persona {
+	if getter, ok := personaGetters[meta.Name]; ok {
+		persona := getter()
+		if len(meta.System) != 0 {
+			persona.System = meta.System
+		}
+		return persona
+	}
+	return Persona{System: meta.System}
+}

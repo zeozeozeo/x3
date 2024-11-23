@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -26,6 +25,8 @@ import (
 	"github.com/disgoorg/disgo/handler/middleware"
 	"github.com/disgoorg/snowflake/v2"
 	"github.com/zeozeozeo/x3/llm"
+	"github.com/zeozeozeo/x3/model"
+	"github.com/zeozeozeo/x3/persona"
 	"github.com/zeozeozeo/x3/reddit"
 
 	"database/sql"
@@ -61,20 +62,44 @@ func makeGptCommand(name, desc string) discord.SlashCommandCreate {
 	}
 }
 
+func formatModel(model model.Model) string {
+	var sb strings.Builder
+	sb.WriteString(model.Name)
+	if model.NeedsWhitelist {
+		sb.WriteString(" (Whitelist)")
+	}
+	if model.Vision {
+		sb.WriteString(" (Vision)")
+	}
+	return sb.String()
+}
+
 func makeGptCommands() []discord.SlashCommandCreate {
 	var commands []discord.SlashCommandCreate
-	for _, model := range llm.AllModels {
-		var sb strings.Builder
-		sb.WriteString(model.Name)
-		if model.NeedsWhitelist {
-			sb.WriteString(" (Whitelist)")
-		}
-		if model.Vision {
-			sb.WriteString(" (Vision)")
-		}
-		commands = append(commands, makeGptCommand(model.Command, sb.String()))
+	for _, model := range model.AllModels {
+		commands = append(commands, makeGptCommand(model.Command, formatModel(model)))
 	}
 	return commands
+}
+
+func makePersonaOptionChoices() []discord.ApplicationCommandOptionChoiceString {
+	var choices []discord.ApplicationCommandOptionChoiceString
+	for _, p := range persona.AllPersonas {
+		choices = append(choices, discord.ApplicationCommandOptionChoiceString{Name: p.Name, Value: p.Name})
+	}
+	return choices
+}
+
+func makeModelOptionChoices() []discord.ApplicationCommandOptionChoiceString {
+	var choices []discord.ApplicationCommandOptionChoiceString
+	for _, m := range model.AllModels {
+		if len(choices) >= 25 {
+			break
+		}
+		name := formatModel(m)
+		choices = append(choices, discord.ApplicationCommandOptionChoiceString{Name: name, Value: name})
+	}
+	return choices
 }
 
 var (
@@ -147,6 +172,38 @@ var (
 				},
 			},
 		},
+		discord.SlashCommandCreate{
+			Name:        "persona",
+			Description: "Set persona, model or system prompt for this channel",
+			IntegrationTypes: []discord.ApplicationIntegrationType{
+				discord.ApplicationIntegrationTypeGuildInstall,
+				discord.ApplicationIntegrationTypeUserInstall,
+			},
+			Contexts: []discord.InteractionContextType{
+				discord.InteractionContextTypeGuild,
+				discord.InteractionContextTypeBotDM,
+				discord.InteractionContextTypePrivateChannel,
+			},
+			Options: []discord.ApplicationCommandOption{
+				discord.ApplicationCommandOptionString{
+					Name:        "persona",
+					Description: "Choose a pre-made persona for this chat",
+					Choices:     makePersonaOptionChoices(),
+					Required:    false,
+				},
+				discord.ApplicationCommandOptionString{
+					Name:        "system",
+					Description: "Set a custom system prompt for this chat",
+					Required:    false,
+				},
+				discord.ApplicationCommandOptionString{
+					Name:        "model",
+					Description: "Set a model to use for this chat",
+					Choices:     makeModelOptionChoices(),
+					Required:    false,
+				},
+			},
+		},
 		// gpt commands are added in init()
 	}
 
@@ -158,6 +215,22 @@ const (
 	maxContextMessages = 30
 	maxRedditAttempts  = 3
 )
+
+type ChannelCache struct {
+	// in channels where the bot cannot read messages this is set for caching messages
+	Llmer       *llm.Llmer          `json:"llmer"`
+	PersonaMeta persona.PersonaMeta `json:"persona_meta"`
+}
+
+func newChannelCache() *ChannelCache {
+	return &ChannelCache{PersonaMeta: persona.PersonaX3}
+}
+
+func unmarshalChannelCache(data []byte) (*ChannelCache, error) {
+	var cache ChannelCache
+	err := json.Unmarshal(data, &cache)
+	return &cache, err
+}
 
 func addToWhitelist(id snowflake.ID) {
 	_, err := db.Exec("INSERT OR IGNORE INTO whitelist (user_id) VALUES (?)", id.String())
@@ -191,28 +264,31 @@ func getMessageInteractionPrompt(id snowflake.ID) (string, error) {
 	return prompt, err
 }
 
-func getLlmerFromCache(id snowflake.ID) (*llm.Llmer, error) {
+// never returns nil
+func getChannelCache(id snowflake.ID) *ChannelCache {
 	var data []byte
-	err := db.QueryRow("SELECT llm_state FROM dm_cache WHERE channel_id = ?", id.String()).Scan(&data)
+	err := db.QueryRow("SELECT cache FROM channel_cache WHERE channel_id = ?", id.String()).Scan(&data)
 	if err != nil {
-		slog.Warn("failed to get llm state from cache", slog.Any("err", err))
-		return nil, err
+		slog.Warn("failed to get channel cache", slog.Any("err", err))
+		return newChannelCache()
 	}
 	// decode json
-	return llm.UnmarshalLlmer(data)
+	cache, err := unmarshalChannelCache(data)
+	if err != nil {
+		slog.Warn("failed to unmarshal channel cache", slog.Any("err", err))
+		cache = newChannelCache()
+		writeChannelCache(id, cache)
+	}
+	return cache
 }
 
-func writeLlmerToCache(id snowflake.ID, llmer *llm.Llmer) error {
-	data, err := json.Marshal(llmer)
+func writeChannelCache(id snowflake.ID, cache *ChannelCache) error {
+	data, err := json.Marshal(cache)
 	if err != nil {
 		return err
 	}
-	_, err = db.Exec("INSERT OR REPLACE INTO dm_cache (channel_id, llm_state) VALUES (?, ?)", id.String(), data)
-	return err
-}
-
-func eraseLlmerFromCache(id snowflake.ID) error {
-	_, err := db.Exec("DELETE FROM dm_cache WHERE channel_id = ?", id.String())
+	// write json
+	_, err = db.Exec("INSERT OR REPLACE INTO channel_cache (channel_id, cache) VALUES (?, ?)", id.String(), data)
 	return err
 }
 
@@ -240,9 +316,9 @@ func init() {
 
 	// dm (private channel) cache
 	_, err = db.Exec(`
-			CREATE TABLE IF NOT EXISTS dm_cache (
+			CREATE TABLE IF NOT EXISTS channel_cache (
 				channel_id TEXT PRIMARY KEY,
-				llm_state BLOB
+				cache BLOB
 			)
         `)
 	if err != nil {
@@ -280,7 +356,7 @@ func main() {
 	r.Use(middleware.Logger)
 
 	// LLM commands
-	registerLlm := func(r handler.Router, command string, model llm.Model) {
+	registerLlm := func(r handler.Router, command string, model model.Model) {
 		r.Command(command, func(event *handler.CommandEvent) error {
 			if model.NeedsWhitelist && !isInWhitelist(event.User().ID) {
 				return event.CreateMessage(discord.MessageCreate{
@@ -292,7 +368,7 @@ func main() {
 		})
 	}
 	r.Group(func(r handler.Router) {
-		for _, model := range llm.AllModels {
+		for _, model := range model.AllModels {
 			registerLlm(r, "/"+model.Command, model)
 		}
 	})
@@ -301,6 +377,7 @@ func main() {
 	r.Group(func(r handler.Router) {
 		r.Command("/whitelist", handleWhitelist)
 		r.Command("/lobotomy", handleLobotomy)
+		r.Command("/persona", handlePersona)
 	})
 
 	// image
@@ -484,12 +561,13 @@ func sendMessageSplits(client bot.Client, messageID snowflake.ID, event *handler
 	return botMessage, nil
 }
 
-func handleLlm(event *handler.CommandEvent, model llm.Model) error {
+func handleLlm(event *handler.CommandEvent, model model.Model) error {
 	data := event.SlashCommandInteractionData()
 	prompt := data.String("prompt")
 	ephemeral := data.Bool("ephemeral")
 
 	var llmer *llm.Llmer
+	cache := getChannelCache(event.Channel().ID())
 
 	// check if we have perms to read messages in this channel
 	useCache := event.AppPermissions() != nil && !event.AppPermissions().Has(discord.PermissionReadMessageHistory)
@@ -497,25 +575,20 @@ func handleLlm(event *handler.CommandEvent, model llm.Model) error {
 	if useCache {
 		// we are in a DM, so we cannot read surrounding messages. Instead, we use a cache
 		slog.Debug("in a DM; looking up DM cache", slog.String("channel", event.Channel().ID().String()))
-		var err error
-		llmer, err = getLlmerFromCache(event.Channel().ID())
-		if err != nil && !errors.Is(err, sql.ErrNoRows) {
-			return handleFollowupError(event, err, ephemeral)
-		}
+		llmer = cache.Llmer
 
 		if llmer == nil {
-			// not in cache, so create
-			slog.Debug("not in dmCache; creating", slog.String("channel", event.Channel().ID().String()))
+			// not in cache, so create (but write it later)
+			slog.Debug("not in dmCache; creating new llmer", slog.String("channel", event.Channel().ID().String()))
 			llmer = llm.NewLlmer()
-			if err := writeLlmerToCache(event.Channel().ID(), llmer); err != nil {
-				// is fine, don't sweat
-				slog.Error("failed to save llm state to cache", slog.Any("err", err))
-			}
 		}
 	} else {
 		// we are not in a DM, so we can read surrounding messages
 		llmer = llm.NewLlmer()
 	}
+
+	// set persona
+	llmer.SetPersona(persona.GetPersonaByMeta(cache.PersonaMeta))
 
 	// add context if possible
 	lastMessage := event.Channel().MessageChannel.LastMessageID()
@@ -578,9 +651,10 @@ func handleLlm(event *handler.CommandEvent, model llm.Model) error {
 	writeMessageInteractionPrompt(botMessage.ID, prompt)
 
 	if useCache {
-		if err := writeLlmerToCache(event.Channel().ID(), llmer); err != nil {
+		cache.Llmer = llmer
+		if err := writeChannelCache(event.Channel().ID(), cache); err != nil {
 			// is fine, don't sweat
-			slog.Error("failed to save llm state to cache (2)", slog.Any("err", err))
+			slog.Error("failed to save channel cache", slog.Any("err", err))
 		}
 	}
 
@@ -610,8 +684,12 @@ func handleLlmInteraction(event *events.MessageCreate, eraseX3 bool) error {
 	llmer.AddMessage(llm.RoleUser, formatMsg(content, event.Message.Author.Username))
 	addImageAttachments(llmer, event.Message)
 
+	// get channel cache to get the channel persona
+	cache := getChannelCache(event.ChannelID)
+	llmer.SetPersona(persona.GetPersonaByMeta(cache.PersonaMeta))
+
 	// now we generate the LLM response
-	response, err := llmer.RequestCompletion(llm.ModelGpt4oMini)
+	response, err := llmer.RequestCompletion(model.GetModelByName(cache.PersonaMeta.Model))
 	if err != nil {
 		slog.Error("failed to generate response", slog.Any("err", err))
 		return err
@@ -699,7 +777,7 @@ func handleWhitelist(event *handler.CommandEvent) error {
 func handleLobotomy(event *handler.CommandEvent) error {
 	ephemeral := event.SlashCommandInteractionData().Bool("ephemeral")
 
-	if err := eraseLlmerFromCache(event.Channel().ID()); err != nil {
+	if err := writeChannelCache(event.Channel().ID(), newChannelCache()); err != nil {
 		return handleFollowupError(event, err, ephemeral)
 	}
 
@@ -840,4 +918,34 @@ func handleBoykisserRefresh(data discord.ButtonInteractionData, event *handler.C
 		},
 	})
 	return err
+}
+
+func handlePersona(event *handler.CommandEvent) error {
+	data := event.SlashCommandInteractionData()
+
+	modelName := data.String("model")
+	m := model.GetModelByName(modelName)
+	if m.NeedsWhitelist && !isInWhitelist(event.User().ID) {
+		return event.CreateMessage(
+			discord.NewMessageCreateBuilder().
+				SetContentf("You need to be whitelisted to set the model `%s`. Try `%s`", modelName, model.ModelGpt4oMini.Name).
+				Build(),
+		)
+	}
+
+	cache := getChannelCache(event.Channel().ID())
+	cache.PersonaMeta = persona.PersonaMeta{
+		Name:   data.String("persona"),
+		System: data.String("system"),
+		Model:  modelName,
+	}
+	if err := writeChannelCache(event.Channel().ID(), cache); err != nil {
+		return handleFollowupError(event, err, false)
+	}
+
+	return event.CreateMessage(
+		discord.NewMessageCreateBuilder().
+			SetContent("Updated persona for this channel. Use `/lobotomy` to reset.").
+			Build(),
+	)
 }
