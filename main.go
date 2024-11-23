@@ -481,7 +481,7 @@ outer:
 		msg := messages[i]
 		if msg.Interaction != nil &&
 			msg.Interaction.Type == discord.InteractionTypeApplicationCommand &&
-			msg.Interaction.Name == "lobotomy" {
+			(msg.Interaction.Name == "lobotomy" || msg.Interaction.Name == "persona") {
 			//slog.Debug("found lobotomy interaction", slog.String("channel", channelID.String()), slog.String("message", msg.ID.String()))
 			//llmer.Lobotomize()
 			// but we keep adding new messages from this point
