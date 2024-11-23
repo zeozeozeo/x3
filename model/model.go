@@ -12,15 +12,17 @@ var (
 	hmToken     = os.Getenv("X3_HM_TOKEN")
 	fresedToken = os.Getenv("X3_FRESED_TOKEN")
 	groqToken   = os.Getenv("X3_GROQ_TOKEN")
+	googleToken = os.Getenv("X3_GOOGLE_AISTUDIO_TOKEN")
 )
 
 const (
 	azureBaseURL  = "https://models.inference.ai.azure.com"
 	zjBaseURL     = "https://api.zukijourney.com/v1"
-	zjRPBaseUrl   = "https://api.zukijourney.com/unf/chat/completions"
+	zjRPBaseUrl   = "https://api.zukijourney.com/unf"
 	hmBaseUrl     = "https://helixmind.online/v1"
 	fresedBaseUrl = "https://fresedgpt.space/v1"
-	groqBaseUrl   = "https://api.groq.com/openai/v1/chat/completions"
+	groqBaseUrl   = "https://api.groq.com/openai/v1"
+	googleBaseUrl = "https://generativelanguage.googleapis.com/v1beta/openai"
 )
 
 const (
@@ -29,12 +31,13 @@ const (
 	ProviderFresed      = "fresed"
 	ProviderHelixmind   = "helixmind"
 	ProviderGroq        = "groq"
+	ProviderGoogle      = "google"
 )
 
 type ModelProvider struct {
-	API      string
-	RPApi    string // API for roleplay, if any
-	Codename string
+	API           string
+	RPApi         string // API for roleplay, if any
+	Codename      string
 }
 
 type Model struct {
@@ -102,6 +105,10 @@ var (
 		Command: "geminipro",
 		Vision:  true,
 		Providers: map[string]ModelProvider{
+			ProviderGoogle: {
+				API:           googleBaseUrl,
+				Codename:      "gemini-1.5-pro",
+			},
 			ProviderZukijourney: {
 				API:      zjBaseURL,
 				RPApi:    zjRPBaseUrl,
@@ -152,6 +159,10 @@ var (
 		Command: "gemini",
 		Vision:  true,
 		Providers: map[string]ModelProvider{
+			ProviderGoogle: {
+				API:           googleBaseUrl,
+				Codename:      "gemini-1.5-flash",
+			},
 			ProviderZukijourney: {
 				API:      zjBaseURL,
 				RPApi:    zjRPBaseUrl,
@@ -474,7 +485,7 @@ var (
 		ModelGpt4oMini,
 		ModelGpt4o,
 		ModelGeminiPro,
-		ModelGeminiExp1114,
+		//ModelGeminiExp1114,
 		ModelClaude3Haiku,
 		ModelGeminiFlash,
 		ModelCommandRplus,
@@ -503,6 +514,7 @@ var (
 	// In order of trial
 	AllProviders = []string{
 		ProviderGithub,
+		ProviderGoogle,
 		ProviderGroq,
 		ProviderZukijourney,
 		ProviderFresed,
@@ -541,6 +553,8 @@ func (m Model) Client(provider string, rp bool) (*openai.Client, string) {
 		token = hmToken
 	case ProviderGroq:
 		token = groqToken
+	case ProviderGoogle:
+		token = googleToken
 	default:
 		token = githubToken
 	}

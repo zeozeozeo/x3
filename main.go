@@ -234,7 +234,7 @@ type ChannelCache struct {
 }
 
 func newChannelCache() *ChannelCache {
-	return &ChannelCache{PersonaMeta: persona.PersonaX3}
+	return &ChannelCache{PersonaMeta: persona.PersonaDefault}
 }
 
 func unmarshalChannelCache(data []byte) (*ChannelCache, error) {
@@ -467,6 +467,11 @@ func addImageAttachments(llmer *llm.Llmer, msg discord.Message) {
 	}
 }
 
+func isLobotomyMessage(msg discord.Message) bool {
+	return msg.Interaction != nil &&
+		(msg.Interaction.Name == "lobotomy" || msg.Interaction.Name == "persona")
+}
+
 // returns whether a lobotomy was performed
 func addContextMessagesIfPossible(client bot.Client, llmer *llm.Llmer, channelID, messageID snowflake.ID) bool {
 	messages, err := client.Rest().GetMessages(channelID, 0, messageID, 0, maxContextMessages)
@@ -490,13 +495,8 @@ outer:
 	// discord returns surrounding message history from newest to oldest, but we want oldest to newest
 	for i := len(messages) - 1; i >= 0; i-- {
 		msg := messages[i]
-		if msg.Interaction != nil &&
-			msg.Interaction.Type == discord.InteractionTypeApplicationCommand &&
-			(msg.Interaction.Name == "lobotomy" || msg.Interaction.Name == "persona") {
-			//slog.Debug("found lobotomy interaction", slog.String("channel", channelID.String()), slog.String("message", msg.ID.String()))
-			//llmer.Lobotomize()
-			// but we keep adding new messages from this point
-			// TODO
+		if isLobotomyMessage(msg) {
+			llmer.Lobotomize()
 			continue
 		}
 
@@ -609,7 +609,11 @@ func handleLlm(event *handler.CommandEvent, model model.Model) error {
 		// and we also want the last message in the channel
 		msg, err := event.Client().Rest().GetMessage(event.Channel().ID(), *lastMessage)
 		if err == nil && msg != nil {
-			llmer.AddMessage(llm.RoleUser, formatMsg(msg.Content, msg.Author.Username))
+			if isLobotomyMessage(*msg) {
+				llmer.Lobotomize()
+			} else {
+				llmer.AddMessage(llm.RoleUser, formatMsg(msg.Content, msg.Author.Username))
+			}
 		}
 	}
 
@@ -625,6 +629,10 @@ func handleLlm(event *handler.CommandEvent, model model.Model) error {
 	if err != nil {
 		slog.Error("failed to generate response", slog.Any("err", err))
 		return handleFollowupError(event, err, ephemeral)
+	}
+
+	if len(strings.TrimSpace(response)) == 0 {
+		response = "<empty response>\n-# If this is unexpected, try changing the model and/or system prompt?"
 	}
 
 	var flags discord.MessageFlags
@@ -654,7 +662,7 @@ func handleLlm(event *handler.CommandEvent, model model.Model) error {
 		})
 	}
 
-	if err != nil {
+	if err != nil || botMessage == nil {
 		return handleFollowupError(event, err, ephemeral)
 	}
 

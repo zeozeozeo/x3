@@ -19,8 +19,14 @@ const (
 	RoleSystem    = openai.ChatMessageRoleSystem
 )
 
+type Message struct {
+	Role    string   `json:"role"`
+	Content string   `json:"content"`
+	Images  []string `json:"images"` // image URIs
+}
+
 type Llmer struct {
-	Messages []openai.ChatCompletionMessage `json:"messages"`
+	Messages []Message `json:"messages"`
 }
 
 func NewLlmer() *Llmer {
@@ -38,7 +44,11 @@ func (l *Llmer) TruncateMessages(max int) {
 }
 
 func (l *Llmer) Lobotomize() {
-	l.Messages = []openai.ChatCompletionMessage{}
+	if len(l.Messages) > 0 && l.Messages[0].Role == RoleSystem {
+		l.Messages = l.Messages[1:]
+	} else {
+		l.Messages = []Message{}
+	}
 }
 
 func (l *Llmer) AddMessage(role, content string) {
@@ -50,7 +60,7 @@ func (l *Llmer) AddMessage(role, content string) {
 		return
 	}
 
-	msg := openai.ChatCompletionMessage{
+	msg := Message{
 		Role:    role,
 		Content: content,
 	}
@@ -68,7 +78,7 @@ func (l *Llmer) SetPersona(persona persona.Persona) {
 	}
 
 	// add new system prompt as the first message
-	l.Messages = append([]openai.ChatCompletionMessage{{
+	l.Messages = append([]Message{{
 		Role:    RoleSystem,
 		Content: persona.System,
 	}}, l.Messages...)
@@ -81,34 +91,56 @@ func (l *Llmer) AddImage(imageURL string) {
 	}
 	msg := &l.Messages[len(l.Messages)-1]
 	if msg.Role != RoleUser {
-		return
+		return // some apis crash out when assistants have images
 	}
-	if len(msg.Content) != 0 {
-		msg.MultiContent = append(msg.MultiContent, openai.ChatMessagePart{
-			Type: openai.ChatMessagePartTypeText,
-			Text: msg.Content,
-		})
-		msg.Content = ""
-	}
-	slog.Debug("adding image to message", slog.String("url", imageURL))
-	msg.MultiContent = append(msg.MultiContent, openai.ChatMessagePart{
-		Type: openai.ChatMessagePartTypeImageURL,
-		ImageURL: &openai.ChatMessageImageURL{
-			URL: imageURL,
-		},
-	})
+	msg.Images = append(msg.Images, imageURL)
 }
 
-func (l *Llmer) requestCompletionInternal(model model.Model, provider string, rp bool) (string, error) {
-	slog.Debug("request completion.. message history follows..", slog.String("model", model.Name))
+func (l Llmer) convertMessages(hasVision bool) []openai.ChatCompletionMessage {
+	var messages []openai.ChatCompletionMessage
+	for _, msg := range l.Messages {
+		if len(msg.Images) == 0 || !hasVision {
+			messages = append(messages, openai.ChatCompletionMessage{
+				Role:    msg.Role,
+				Content: msg.Content,
+			})
+		} else {
+			// must structure as a multipart message if we have images
+			parts := []openai.ChatMessagePart{
+				{
+					Type: openai.ChatMessagePartTypeText,
+					Text: msg.Content,
+				},
+			}
+			for _, imageURL := range msg.Images {
+				parts = append(parts, openai.ChatMessagePart{
+					Type: openai.ChatMessagePartTypeImageURL,
+					ImageURL: &openai.ChatMessageImageURL{
+						URL: imageURL,
+					},
+				})
+			}
+
+			messages = append(messages, openai.ChatCompletionMessage{
+				Role:         msg.Role,
+				MultiContent: parts,
+			})
+		}
+	}
+	return messages
+}
+
+func (l *Llmer) requestCompletionInternal(m model.Model, provider string, rp bool) (string, error) {
+	slog.Debug("request completion.. message history follows..", slog.String("model", m.Name))
 	for _, msg := range l.Messages {
 		slog.Debug("    message", slog.String("role", msg.Role), slog.String("content", msg.Content))
 	}
 
-	client, codename := model.Client(provider, rp)
+	client, codename := m.Client(provider, rp)
 	req := openai.ChatCompletionRequest{
-		Model:    codename,
-		Messages: l.Messages,
+		Model: codename,
+		// google api doesn't support image URIs, WTF google?
+		Messages: l.convertMessages(m.Vision && provider != model.ProviderGoogle),
 		Stream:   true,
 	}
 
@@ -141,7 +173,7 @@ func (l *Llmer) requestCompletionInternal(model model.Model, provider string, rp
 
 	slog.Debug("response", slog.String("text", text.String()), slog.Duration("duration", time.Since(completionStart)))
 
-	l.Messages = append(l.Messages, openai.ChatCompletionMessage{
+	l.Messages = append(l.Messages, Message{
 		Role:    RoleAssistant,
 		Content: text.String(),
 	})
