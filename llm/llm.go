@@ -99,13 +99,13 @@ func (l *Llmer) AddImage(imageURL string) {
 	})
 }
 
-func (l *Llmer) requestCompletionInternal(model model.Model, provider string) (string, error) {
+func (l *Llmer) requestCompletionInternal(model model.Model, provider string, rp bool) (string, error) {
 	slog.Debug("request completion.. message history follows..", slog.String("model", model.Name))
 	for _, msg := range l.Messages {
 		slog.Debug("    message", slog.String("role", msg.Role), slog.String("content", msg.Content))
 	}
 
-	client, codename := model.Client(provider)
+	client, codename := model.Client(provider, rp)
 	req := openai.ChatCompletionRequest{
 		Model:    codename,
 		Messages: l.Messages,
@@ -132,6 +132,10 @@ func (l *Llmer) requestCompletionInternal(model model.Model, provider string) (s
 		if err != nil {
 			return text.String(), err
 		}
+		if len(response.Choices) == 0 {
+			slog.Warn("empty response", slog.Any("response", response))
+			continue
+		}
 		text.WriteString(response.Choices[0].Delta.Content)
 	}
 
@@ -144,14 +148,14 @@ func (l *Llmer) requestCompletionInternal(model model.Model, provider string) (s
 	return text.String(), nil
 }
 
-func (l *Llmer) RequestCompletion(m model.Model) (res string, err error) {
+func (l *Llmer) RequestCompletion(m model.Model, rp bool) (res string, err error) {
 	for _, provider := range model.AllProviders {
 		if _, ok := m.Providers[provider]; !ok {
 			continue
 		}
 		slog.Debug("requesting completion", slog.String("provider", provider))
 
-		res, err = l.requestCompletionInternal(m, provider)
+		res, err = l.requestCompletionInternal(m, provider, rp)
 		if err == nil {
 			return
 		}

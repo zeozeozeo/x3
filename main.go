@@ -85,7 +85,7 @@ func makeGptCommands() []discord.SlashCommandCreate {
 func makePersonaOptionChoices() []discord.ApplicationCommandOptionChoiceString {
 	var choices []discord.ApplicationCommandOptionChoiceString
 	for _, p := range persona.AllPersonas {
-		choices = append(choices, discord.ApplicationCommandOptionChoiceString{Name: p.Name, Value: p.Name})
+		choices = append(choices, discord.ApplicationCommandOptionChoiceString{Name: p.String(), Value: p.Name})
 	}
 	return choices
 }
@@ -94,6 +94,7 @@ func makeModelOptionChoices() []discord.ApplicationCommandOptionChoiceString {
 	var choices []discord.ApplicationCommandOptionChoiceString
 	for _, m := range model.AllModels {
 		if len(choices) >= 25 {
+			// TODO: discord limits us to 25 choices...
 			break
 		}
 		name := formatModel(m)
@@ -200,6 +201,16 @@ var (
 					Name:        "model",
 					Description: "Set a model to use for this chat",
 					Choices:     makeModelOptionChoices(),
+					Required:    false,
+				},
+				discord.ApplicationCommandOptionBool{
+					Name:        "roleplay",
+					Description: "Set roleplay mode for this chat",
+					Required:    false,
+				},
+				discord.ApplicationCommandOptionBool{
+					Name:        "ephemeral",
+					Description: "If the response should only be visible to you",
 					Required:    false,
 				},
 			},
@@ -610,7 +621,7 @@ func handleLlm(event *handler.CommandEvent, model model.Model) error {
 	// discord only gives us 3s to respond unless we do this (x3 is thinking...)
 	event.DeferCreateMessage(ephemeral)
 
-	response, err := llmer.RequestCompletion(model)
+	response, err := llmer.RequestCompletion(model, cache.PersonaMeta.Roleplay)
 	if err != nil {
 		slog.Error("failed to generate response", slog.Any("err", err))
 		return handleFollowupError(event, err, ephemeral)
@@ -689,7 +700,7 @@ func handleLlmInteraction(event *events.MessageCreate, eraseX3 bool) error {
 	llmer.SetPersona(persona.GetPersonaByMeta(cache.PersonaMeta))
 
 	// now we generate the LLM response
-	response, err := llmer.RequestCompletion(model.GetModelByName(cache.PersonaMeta.Model))
+	response, err := llmer.RequestCompletion(model.GetModelByName(cache.PersonaMeta.Model), cache.PersonaMeta.Roleplay)
 	if err != nil {
 		slog.Error("failed to generate response", slog.Any("err", err))
 		return err
@@ -925,12 +936,15 @@ func handlePersona(event *handler.CommandEvent) error {
 	dataPersona := data.String("persona")
 	dataModel := data.String("model")
 	dataSystem := data.String("system")
+	dataRoleplay := data.Bool("roleplay")
+	ephemeral := data.Bool("ephemeral")
 
 	m := model.GetModelByName(dataModel)
 	if m.NeedsWhitelist && !isInWhitelist(event.User().ID) {
 		return event.CreateMessage(
 			discord.NewMessageCreateBuilder().
 				SetContentf("You need to be whitelisted to set the model `%s`. Try `%s`", dataModel, model.ModelGpt4oMini.Name).
+				SetEphemeral(ephemeral).
 				Build(),
 		)
 	}
@@ -947,6 +961,8 @@ func handlePersona(event *handler.CommandEvent) error {
 	if dataModel != "" {
 		cache.PersonaMeta.Model = dataModel
 	}
+	prevRoleplay := cache.PersonaMeta.Roleplay
+	cache.PersonaMeta.Roleplay = dataRoleplay
 
 	if err := writeChannelCache(event.Channel().ID(), cache); err != nil {
 		return handleFollowupError(event, err, false)
@@ -964,6 +980,13 @@ func handlePersona(event *handler.CommandEvent) error {
 	if dataSystem != "" {
 		didWhat = append(didWhat, "updated the system prompt")
 	}
+	if dataRoleplay != prevRoleplay {
+		if dataRoleplay {
+			didWhat = append(didWhat, "enabled roleplay mode")
+		} else {
+			didWhat = append(didWhat, "disabled roleplay mode")
+		}
+	}
 
 	if len(didWhat) > 0 {
 		sb.WriteString(fmt.Sprintf(" (%s)", strings.Join(didWhat, ", ")))
@@ -973,6 +996,7 @@ func handlePersona(event *handler.CommandEvent) error {
 	return event.CreateMessage(
 		discord.NewMessageCreateBuilder().
 			SetContent(sb.String()).
+			SetEphemeral(ephemeral).
 			Build(),
 	)
 }

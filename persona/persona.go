@@ -69,18 +69,32 @@ func newX3Persona() Persona {
 }
 
 type PersonaMeta struct {
-	Name   string `json:"name,omitempty"`
-	Model  string `json:"model,omitempty"`
-	System string `json:"system,omitempty"`
+	Name     string `json:"name,omitempty"`
+	Desc     string `json:"-"`
+	Model    string `json:"model,omitempty"`
+	System   string `json:"system,omitempty"`
+	Roleplay bool   `json:"roleplay"`
+}
+
+func (meta PersonaMeta) String() string {
+	if meta.Desc == "" {
+		return meta.Name
+	}
+	return fmt.Sprintf("%s: %s", meta.Name, meta.Desc)
 }
 
 var (
-	PersonaX3 = PersonaMeta{Name: "x3"}
+	PersonaDefault = PersonaMeta{Name: "Default", Desc: "Use the default system prompt of a model"}
+	PersonaX3      = PersonaMeta{Name: "x3 Assistant", Desc: "Helpful, but boring. Not suitable for RP"}
 
-	AllPersonas = []PersonaMeta{PersonaX3}
+	AllPersonas = []PersonaMeta{
+		PersonaDefault,
+		PersonaX3,
+	}
 
 	personaGetters = map[string]func() Persona{
-		PersonaX3.Name: newX3Persona,
+		PersonaDefault.Name: func() Persona { return Persona{} },
+		PersonaX3.Name:      newX3Persona,
 	}
 )
 
@@ -91,11 +105,6 @@ func GetPersonaByMeta(meta PersonaMeta) Persona {
 			persona.System = meta.System
 		}
 		return persona
-	}
-
-	// the default persona is x3
-	if len(meta.System) == 0 {
-		return newX3Persona()
 	}
 
 	return Persona{System: meta.System}

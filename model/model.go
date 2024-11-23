@@ -11,13 +11,16 @@ var (
 	zjToken     = os.Getenv("X3_ZJ_TOKEN")
 	hmToken     = os.Getenv("X3_HM_TOKEN")
 	fresedToken = os.Getenv("X3_FRESED_TOKEN")
+	groqToken   = os.Getenv("X3_GROQ_TOKEN")
 )
 
 const (
 	azureBaseURL  = "https://models.inference.ai.azure.com"
 	zjBaseURL     = "https://api.zukijourney.com/v1"
+	zjRPBaseUrl   = "https://api.zukijourney.com/unf/chat/completions"
 	hmBaseUrl     = "https://helixmind.online/v1"
 	fresedBaseUrl = "https://fresedgpt.space/v1"
+	groqBaseUrl   = "https://api.groq.com/openai/v1/chat/completions"
 )
 
 const (
@@ -25,10 +28,12 @@ const (
 	ProviderZukijourney = "zukijourney"
 	ProviderFresed      = "fresed"
 	ProviderHelixmind   = "helixmind"
+	ProviderGroq        = "groq"
 )
 
 type ModelProvider struct {
 	API      string
+	RPApi    string // API for roleplay, if any
 	Codename string
 }
 
@@ -52,6 +57,7 @@ var (
 			},
 			ProviderZukijourney: {
 				API:      zjBaseURL,
+				RPApi:    zjRPBaseUrl,
 				Codename: "gpt-4o-mini",
 			},
 			ProviderFresed: {
@@ -77,6 +83,7 @@ var (
 			},
 			ProviderZukijourney: {
 				API:      zjBaseURL,
+				RPApi:    zjRPBaseUrl,
 				Codename: "gpt-4o",
 			},
 			ProviderFresed: {
@@ -97,6 +104,7 @@ var (
 		Providers: map[string]ModelProvider{
 			ProviderZukijourney: {
 				API:      zjBaseURL,
+				RPApi:    zjRPBaseUrl,
 				Codename: "gemini-1.5-pro-latest",
 			},
 			ProviderFresed: {
@@ -129,41 +137,12 @@ var (
 		Providers: map[string]ModelProvider{
 			ProviderZukijourney: {
 				API:      zjBaseURL,
+				RPApi:    zjRPBaseUrl,
 				Codename: "claude-3-haiku",
 			},
 			ProviderFresed: {
 				API:      fresedBaseUrl,
 				Codename: "claude-3-haiku-20240307",
-			},
-		},
-	}
-
-	ModelClaude35Sonnet = Model{
-		Name:           "Anthropic Claude 3.5 Sonnet",
-		Command:        "sonnet",
-		Vision:         true,
-		NeedsWhitelist: true,
-		Providers: map[string]ModelProvider{
-			ProviderFresed: {
-				API:      fresedBaseUrl,
-				Codename: "claude-3-5-sonnet-20241022",
-			},
-			ProviderZukijourney: {
-				API:      zjBaseURL,
-				Codename: "claude-3.5-sonnet",
-			},
-		},
-	}
-
-	ModelClaude3Opus = Model{
-		Name:           "Anthropic Claude 3 Opus",
-		Command:        "opus",
-		Vision:         true,
-		NeedsWhitelist: true,
-		Providers: map[string]ModelProvider{
-			ProviderFresed: {
-				API:      fresedBaseUrl,
-				Codename: "claude-3-opus-20240229",
 			},
 		},
 	}
@@ -175,6 +154,11 @@ var (
 		Providers: map[string]ModelProvider{
 			ProviderZukijourney: {
 				API:      zjBaseURL,
+				RPApi:    zjRPBaseUrl,
+				Codename: "gemini-1.5-flash-latest",
+			},
+			ProviderFresed: {
+				API:      fresedBaseUrl,
 				Codename: "gemini-1.5-flash-latest",
 			},
 		},
@@ -199,8 +183,13 @@ var (
 		Name:    "Mistral Mixtral 8x7B Instruct",
 		Command: "mixtral7b",
 		Providers: map[string]ModelProvider{
+			ProviderGroq: {
+				API:      groqBaseUrl,
+				Codename: "mixtral-8x7b-32768",
+			},
 			ProviderZukijourney: {
 				API:      zjBaseURL,
+				RPApi:    zjRPBaseUrl,
 				Codename: "mixtral-8x7b-instruct",
 			},
 		},
@@ -239,6 +228,7 @@ var (
 			},
 			ProviderZukijourney: {
 				API:      zjBaseURL,
+				RPApi:    zjRPBaseUrl,
 				Codename: "mistral-large-2407",
 			},
 			ProviderFresed: {
@@ -258,6 +248,7 @@ var (
 			},
 			ProviderZukijourney: {
 				API:      zjBaseURL,
+				RPApi:    zjRPBaseUrl,
 				Codename: "mistral-nemo",
 			},
 			ProviderFresed: {
@@ -273,6 +264,7 @@ var (
 		Providers: map[string]ModelProvider{
 			ProviderZukijourney: {
 				API:      zjBaseURL,
+				RPApi:    zjRPBaseUrl,
 				Codename: "llama-3.1-405b-instruct",
 			},
 			ProviderFresed: {
@@ -288,6 +280,10 @@ var (
 		Command: "llama90b",
 		Vision:  true,
 		Providers: map[string]ModelProvider{
+			ProviderGroq: {
+				API:      groqBaseUrl,
+				Codename: "llama-3.2-90b-vision-preview",
+			},
 			ProviderZukijourney: {
 				API:      zjBaseURL,
 				Codename: "llama-3.2-90b-instruct",
@@ -302,7 +298,12 @@ var (
 	ModelLlama11b = Model{
 		Name:    "Meta Llama 3.2 11B Instruct",
 		Command: "llama11b",
+		Vision:  true,
 		Providers: map[string]ModelProvider{
+			ProviderGroq: {
+				API:      groqBaseUrl,
+				Codename: "llama-3.2-11b-vision-preview",
+			},
 			ProviderZukijourney: {
 				API:      zjBaseURL,
 				Codename: "llama-3.2-11b-instruct",
@@ -318,8 +319,13 @@ var (
 		Name:    "Meta Llama 3.1 70B Instruct",
 		Command: "llama70b",
 		Providers: map[string]ModelProvider{
+			ProviderGroq: {
+				API:      groqBaseUrl,
+				Codename: "llama-3.1-70b-versatile",
+			},
 			ProviderZukijourney: {
 				API:      zjBaseURL,
+				RPApi:    zjRPBaseUrl,
 				Codename: "llama-3.1-70b-instruct",
 			},
 			ProviderFresed: {
@@ -333,24 +339,18 @@ var (
 		Name:    "Meta Llama 3.1 8B Instruct",
 		Command: "llama8b",
 		Providers: map[string]ModelProvider{
+			ProviderGroq: {
+				API:      groqBaseUrl,
+				Codename: "llama-3.1-8b-instant",
+			},
 			ProviderZukijourney: {
 				API:      zjBaseURL,
+				RPApi:    zjRPBaseUrl,
 				Codename: "llama-3.1-8b-instruct",
 			},
 			ProviderFresed: {
 				API:      fresedBaseUrl,
 				Codename: "llama-3.1-8b",
-			},
-		},
-	}
-
-	ModelYandexGPT4Pro = Model{
-		Name:    "Yandex GPT-4 Pro (Russian)",
-		Command: "yagpt4pro",
-		Providers: map[string]ModelProvider{
-			ProviderZukijourney: {
-				API:      zjBaseURL,
-				Codename: "YandexGPT-4-Pro",
 			},
 		},
 	}
@@ -420,6 +420,10 @@ var (
 				API:      fresedBaseUrl,
 				Codename: "jamba-1.5-large",
 			},
+			ProviderZukijourney: {
+				API:      zjBaseURL,
+				Codename: "jamba-1.5-large",
+			},
 		},
 	}
 
@@ -438,23 +442,17 @@ var (
 		},
 	}
 
-	ModelJais30b = Model{
-		Name:    "JAIS 30b Chat (Arabic)",
-		Command: "jais",
-		Providers: map[string]ModelProvider{
-			ProviderGithub: {
-				API:      azureBaseURL,
-				Codename: "jais-30b-chat",
-			},
-		},
-	}
-
 	ModelGemma9b = Model{
 		Name:    "Google Gemma 2 9B",
 		Command: "gemma9b",
 		Providers: map[string]ModelProvider{
+			ProviderGroq: {
+				API:      groqBaseUrl,
+				Codename: "gemma2-9b-it",
+			},
 			ProviderZukijourney: {
 				API:      zjBaseURL,
+				RPApi:    zjRPBaseUrl,
 				Codename: "gemma-2-9b",
 			},
 		},
@@ -466,30 +464,8 @@ var (
 		Providers: map[string]ModelProvider{
 			ProviderZukijourney: {
 				API:      zjBaseURL,
+				RPApi:    zjRPBaseUrl,
 				Codename: "gemma-2-27b",
-			},
-		},
-	}
-
-	ModelLiquid40b = Model{
-		Name:    "Liquid LFM 40B",
-		Command: "liquid",
-		Providers: map[string]ModelProvider{
-			ProviderZukijourney: {
-				API:      zjBaseURL,
-				Codename: "liquid-40b",
-			},
-		},
-	}
-
-	ModelYiLightning = Model{
-		Name:           "01.ai Yi Lightning",
-		Command:        "yi",
-		NeedsWhitelist: true,
-		Providers: map[string]ModelProvider{
-			ProviderZukijourney: {
-				API:      zjBaseURL,
-				Codename: "yi-lightning",
 			},
 		},
 	}
@@ -500,8 +476,6 @@ var (
 		ModelGeminiPro,
 		ModelGeminiExp1114,
 		ModelClaude3Haiku,
-		ModelClaude35Sonnet,
-		ModelClaude3Opus,
 		ModelGeminiFlash,
 		ModelCommandRplus,
 		ModelMixtral8x7b,
@@ -514,23 +488,26 @@ var (
 		ModelLlama70b,
 		ModelLlama11b,
 		ModelLlama8b,
-		ModelYandexGPT4Pro,
 		ModelGigaChatPro,
 		ModelPhi35MoE,
 		ModelPhi35Vision,
 		ModelPhi35Mini,
 		ModelJambaLarge,
 		ModelJambaMini,
-		ModelJais30b,
 		ModelGemma9b,
 		ModelGemma27b,
-		ModelLiquid40b,
-		ModelYiLightning,
 	}
 
 	modelByName = map[string]Model{}
 
-	AllProviders = []string{ProviderGithub, ProviderZukijourney, ProviderFresed, ProviderHelixmind}
+	// In order of trial
+	AllProviders = []string{
+		ProviderGithub,
+		ProviderGroq,
+		ProviderZukijourney,
+		ProviderFresed,
+		ProviderHelixmind,
+	}
 )
 
 func init() {
@@ -546,27 +523,35 @@ func GetModelByName(name string) Model {
 	return ModelGpt4oMini
 }
 
-func (m Model) Client(provider string) (*openai.Client, string) {
-	_, hasGithub := m.Providers[ProviderGithub]
-	if provider == ProviderGithub && hasGithub {
-		// github marketplace
+func (m Model) Client(provider string, rp bool) (*openai.Client, string) {
+	if provider == ProviderGithub {
+		// github marketplace requires special tweaks
 		config := openai.DefaultAzureConfig(githubToken, m.Providers[provider].API)
 		config.APIType = openai.APITypeOpenAI
 		return openai.NewClientWithConfig(config), m.Providers[provider].Codename
-	} else if provider == ProviderZukijourney {
-		// zukijourney
-		config := openai.DefaultConfig(zjToken)
-		config.BaseURL = m.Providers[provider].API
-		return openai.NewClientWithConfig(config), m.Providers[provider].Codename
-	} else if provider == ProviderFresed {
-		// fresed
-		config := openai.DefaultConfig(fresedToken)
-		config.BaseURL = m.Providers[provider].API
-		return openai.NewClientWithConfig(config), m.Providers[provider].Codename
-	} else {
-		// helixmind
-		config := openai.DefaultConfig(hmToken)
-		config.BaseURL = m.Providers[provider].API
-		return openai.NewClientWithConfig(config), m.Providers[provider].Codename
 	}
+
+	var token string
+	switch provider {
+	case ProviderZukijourney:
+		token = zjToken
+	case ProviderFresed:
+		token = fresedToken
+	case ProviderHelixmind:
+		token = hmToken
+	case ProviderGroq:
+		token = groqToken
+	default:
+		token = githubToken
+	}
+
+	p := m.Providers[provider]
+
+	config := openai.DefaultConfig(token)
+	if rp && p.RPApi != "" {
+		config.BaseURL = p.RPApi
+	} else {
+		config.BaseURL = p.API
+	}
+	return openai.NewClientWithConfig(config), p.Codename
 }
