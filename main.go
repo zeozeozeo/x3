@@ -226,7 +226,8 @@ var (
 				},
 			},
 		},
-		// gpt commands are added in init()
+		// gpt commands are added in init(), except for this one
+		makeGptCommand("chat", "Chat with the current persona"),
 	}
 
 	db *sql.DB
@@ -386,13 +387,16 @@ func main() {
 					Flags:   discord.MessageFlagEphemeral,
 				})
 			}
-			return handleLlm(event, model)
+			return handleLlm(event, &model)
 		})
 	}
 	r.Group(func(r handler.Router) {
 		for _, model := range model.AllModels {
 			registerLlm(r, "/"+model.Command, model)
 		}
+		r.Command("/chat", func(e *handler.CommandEvent) error {
+			return handleLlm(e, nil)
+		})
 	})
 
 	// utils
@@ -598,7 +602,7 @@ func sendMessageSplits(client bot.Client, messageID snowflake.ID, event *handler
 	return botMessage, nil
 }
 
-func handleLlm(event *handler.CommandEvent, model model.Model) error {
+func handleLlm(event *handler.CommandEvent, m *model.Model) error {
 	data := event.SlashCommandInteractionData()
 	prompt := data.String("prompt")
 	ephemeral := data.Bool("ephemeral")
@@ -626,6 +630,10 @@ func handleLlm(event *handler.CommandEvent, model model.Model) error {
 
 	// set persona
 	llmer.SetPersona(persona.GetPersonaByMeta(cache.PersonaMeta))
+	if m == nil {
+		model := model.GetModelByName(cache.PersonaMeta.Model)
+		m = &model
+	}
 
 	// add context if possible
 	lastMessage := event.Channel().MessageChannel.LastMessageID()
@@ -651,7 +659,7 @@ func handleLlm(event *handler.CommandEvent, model model.Model) error {
 	// discord only gives us 3s to respond unless we do this (x3 is thinking...)
 	event.DeferCreateMessage(ephemeral)
 
-	response, err := llmer.RequestCompletion(model, cache.PersonaMeta.Roleplay)
+	response, err := llmer.RequestCompletion(*m, cache.PersonaMeta.Roleplay)
 	if err != nil {
 		slog.Error("failed to generate response", slog.Any("err", err))
 		return handleFollowupError(event, err, ephemeral)
