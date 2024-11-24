@@ -370,7 +370,7 @@ func init() {
 func main() {
 	defer db.Close()
 
-	slog.SetLogLoggerLevel(slog.LevelInfo)
+	slog.SetLogLoggerLevel(slog.LevelDebug)
 	slog.Info("x3 booting up...")
 	slog.Info("disgo version", slog.String("version", disgo.Version))
 

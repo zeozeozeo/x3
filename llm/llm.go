@@ -59,7 +59,7 @@ func (l *Llmer) Lobotomize(removeN int) {
 		if endIdx < startIdx {
 			endIdx = startIdx
 		}
-		l.Messages = append(l.Messages[:startIdx], l.Messages[endIdx:]...)
+		l.Messages = l.Messages[startIdx:endIdx]
 	} else {
 		l.Messages = l.Messages[startIdx:]
 	}
