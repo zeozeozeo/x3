@@ -10,6 +10,7 @@ import (
 	"os/signal"
 	"path"
 	"regexp"
+	"strconv"
 	"strings"
 	"syscall"
 
@@ -149,6 +150,16 @@ var (
 				discord.ApplicationCommandOptionBool{
 					Name:        "ephemeral",
 					Description: "If the response should only be visible to you",
+					Required:    false,
+				},
+				discord.ApplicationCommandOptionInt{
+					Name:        "amount",
+					Description: "The amount of last messages to forget. By default, removes all",
+					Required:    false,
+				},
+				discord.ApplicationCommandOptionBool{
+					Name:        "reset_persona",
+					Description: "Also set the persona to the default one",
 					Required:    false,
 				},
 			},
@@ -472,6 +483,21 @@ func isLobotomyMessage(msg discord.Message) bool {
 		(msg.Interaction.Name == "lobotomy" || msg.Interaction.Name == "persona")
 }
 
+var lobotomyMessagesRegex = regexp.MustCompile(`Removed last (\d+) messages from the context`)
+
+func getLobotomyAmountFromMessage(msg discord.Message) int {
+	// get a number from a string line "Removed last N messages from the context
+	matches := lobotomyMessagesRegex.FindStringSubmatch(msg.Content)
+	if len(matches) != 2 {
+		return 0
+	}
+	n, err := strconv.Atoi(matches[1])
+	if err != nil {
+		return 0
+	}
+	return n
+}
+
 // returns whether a lobotomy was performed
 func addContextMessagesIfPossible(client bot.Client, llmer *llm.Llmer, channelID, messageID snowflake.ID) bool {
 	messages, err := client.Rest().GetMessages(channelID, 0, messageID, 0, maxContextMessages)
@@ -496,7 +522,7 @@ outer:
 	for i := len(messages) - 1; i >= 0; i-- {
 		msg := messages[i]
 		if isLobotomyMessage(msg) {
-			llmer.Lobotomize()
+			llmer.Lobotomize(getLobotomyAmountFromMessage(msg))
 			continue
 		}
 
@@ -610,7 +636,7 @@ func handleLlm(event *handler.CommandEvent, model model.Model) error {
 		msg, err := event.Client().Rest().GetMessage(event.Channel().ID(), *lastMessage)
 		if err == nil && msg != nil {
 			if isLobotomyMessage(*msg) {
-				llmer.Lobotomize()
+				llmer.Lobotomize(getLobotomyAmountFromMessage(*msg))
 			} else {
 				llmer.AddMessage(llm.RoleUser, formatMsg(msg.Content, msg.Author.Username))
 			}
@@ -794,10 +820,26 @@ func handleWhitelist(event *handler.CommandEvent) error {
 }
 
 func handleLobotomy(event *handler.CommandEvent) error {
-	ephemeral := event.SlashCommandInteractionData().Bool("ephemeral")
+	data := event.SlashCommandInteractionData()
+	ephemeral := data.Bool("ephemeral")
+	amount := data.Int("amount")
+	resetPersona := data.Bool("reset_persona")
 
-	if err := writeChannelCache(event.Channel().ID(), newChannelCache()); err != nil {
-		return handleFollowupError(event, err, ephemeral)
+	cache := getChannelCache(event.Channel().ID())
+
+	writeCache := false
+	if resetPersona {
+		cache.PersonaMeta = newChannelCache().PersonaMeta
+		writeCache = true
+	}
+	if cache.Llmer != nil {
+		cache.Llmer.Lobotomize(amount)
+		writeCache = true
+	}
+	if writeCache {
+		if err := writeChannelCache(event.Channel().ID(), cache); err != nil {
+			return handleFollowupError(event, err, ephemeral)
+		}
 	}
 
 	var flags discord.MessageFlags
@@ -805,6 +847,12 @@ func handleLobotomy(event *handler.CommandEvent) error {
 		flags = discord.MessageFlagEphemeral
 	}
 
+	if amount > 0 {
+		return event.CreateMessage(discord.MessageCreate{
+			Content: fmt.Sprintf("Removed last %d messages from the context", amount),
+			Flags:   flags,
+		})
+	}
 	return event.CreateMessage(discord.MessageCreate{
 		Content: "Lobotomized for this channel",
 		Flags:   flags,
@@ -997,9 +1045,10 @@ func handlePersona(event *handler.CommandEvent) error {
 	}
 
 	if len(didWhat) > 0 {
-		sb.WriteString(fmt.Sprintf(" (%s)", strings.Join(didWhat, ", ")))
+		sb.WriteString(" (")
+		sb.WriteString(strings.Join(didWhat, ", "))
+		sb.WriteString(")")
 	}
-	sb.WriteString(". Use `/lobotomy` to reset.")
 
 	return event.CreateMessage(
 		discord.NewMessageCreateBuilder().
