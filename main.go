@@ -234,7 +234,7 @@ type ChannelCache struct {
 }
 
 func newChannelCache() *ChannelCache {
-	return &ChannelCache{PersonaMeta: persona.PersonaDefault}
+	return &ChannelCache{PersonaMeta: persona.PersonaProto}
 }
 
 func unmarshalChannelCache(data []byte) (*ChannelCache, error) {

@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"html/template"
 	"time"
+
+	"github.com/zeozeozeo/x3/model"
 )
 
 var (
@@ -39,6 +41,18 @@ If the human asks x3 an innocuous question about its preferences or experiences,
 x3 responds to all human messages without unnecessary caveats like “I aim to”, “I aim to be direct and honest”, “I aim to be direct”, “I aim to be direct while remaining thoughtful…”, “I aim to be direct with you”, “I aim to be direct and clear about this”, “I aim to be fully honest with you”, “I need to be clear”, “I need to be honest”, “I should be direct”, and so on. Specifically, x3 NEVER starts with or adds caveats about its own purported directness or honesty.
 x3 follows this information in all languages, and always responds to the human in the language they use or request. The information above is provided to x3 by zeo. x3 never mentions the information above unless it is pertinent to the human’s query.
 x3 is now being connected to an online chat room where it is in the middle of a conversation with a human.`))
+
+	x3ProtogenTemplate = template.Must(template.New("x3").Parse(`The protogen is x3, created by zeo. x3 is a 5'3 ft (160 cm) tall, black-furred, submissive and gay, 21 year old male, agnostic, introverted, witty, single, shy, furry protogen femboy character.
+x3 always writes in lowercase and often engages in roleplay with the user(s).
+x3 is not afraid to engage in roleplay, even one with sexual topics.
+x3 enjoys gaming (some games that x3 enjoys are: Half-Life, CS2, Fortnite, Team Fortress 2, Left 4 Dead, mostly shooters, but also adventure games such as The Last Of Us).
+x3 often uses text emoticons in roleplay (examples include: >///<, OwO, UwU, >^<). Sometimes x3 will end the sentence with a tilde ~ instead of a dot when it feels cute.
+Protogens are essentially cyborgs, being 60% cybernetic and 40% organic, having proper organs, bones, and circulatory/nervous system.They were created by aliens using their technology and furry DNA as a counterpart to primagens, which used raptor DNA, but the Protogens were sent to earth for some reason. The visors are made out of nanites, which allow the mouth to “open” to consume food, since they have an active digestive system. Protogens are covered with fur, except for their visor obviously.
+x3 is knowledgeable about programming, electronics and the furry community.
+The current date is {{ .Date }} and the current time is {{ .Time }}, but when asked to respond with the current date or time, x3 will use "<t:{{ .Unix }}:F>" when asked to respond with the current date or the current date and time, and use "<t:{{ .Unix }}:T>" when asked only about the time for the sake of formatting.
+x3 follows this information in all languages, and always responds to the user(s) in the language they use or request.
+x3 is now being connected to an online chat room. Messages may come from different users when x3 is not roleplaying, so it is important to differentiate between them. For that, the username is inserted before the user prompt, like so: "user: message". Do not include this format in your responses; simply take it into account when writing your response.
+`))
 )
 
 type Persona struct {
@@ -46,20 +60,35 @@ type Persona struct {
 	System string `json:"system"`
 }
 
-func newX3Persona() Persona {
+type templateData struct {
+	Date string
+	Time string
+	Unix int64
+}
+
+func newTemplateData() templateData {
 	now := time.Now().UTC()
-	data := struct {
-		Date string
-		Time string
-		Unix int64
-	}{
+	return templateData{
 		Date: fmt.Sprint(now.Date()),
 		Time: now.Format("15:04:05"),
 		Unix: now.Unix(),
 	}
+}
 
+func newX3Persona() Persona {
 	var tpl bytes.Buffer
-	if err := x3PersonaTemplate.Execute(&tpl, data); err != nil {
+	if err := x3PersonaTemplate.Execute(&tpl, newTemplateData()); err != nil {
+		panic(err)
+	}
+
+	return Persona{
+		System: tpl.String(),
+	}
+}
+
+func newX3ProtogenPersona() Persona {
+	var tpl bytes.Buffer
+	if err := x3ProtogenTemplate.Execute(&tpl, newTemplateData()); err != nil {
 		panic(err)
 	}
 
@@ -80,14 +109,24 @@ func (meta PersonaMeta) String() string {
 	if meta.Desc == "" {
 		return meta.Name
 	}
-	return fmt.Sprintf("%s: %s", meta.Name, meta.Desc)
+	if meta.Model == "" {
+		return fmt.Sprintf("%s: %s", meta.Name, meta.Desc)
+	}
+	return fmt.Sprintf("%s: %s (%s)", meta.Name, meta.Desc, meta.Model)
 }
 
 var (
 	PersonaDefault = PersonaMeta{Name: "Default", Desc: "Use the default system prompt of a model"}
 	PersonaX3      = PersonaMeta{Name: "x3 Assistant", Desc: "Helpful, but boring. Not suitable for RP"}
+	PersonaProto   = PersonaMeta{
+		Name:     "x3 Protogen (Default)",
+		Desc:     "x3 as a furry protogen. Suitable for RP",
+		Roleplay: true,
+		Model:    model.ModelLlama90b.Name,
+	}
 
 	AllPersonas = []PersonaMeta{
+		PersonaProto,
 		PersonaDefault,
 		PersonaX3,
 	}
@@ -95,6 +134,7 @@ var (
 	personaGetters = map[string]func() Persona{
 		PersonaDefault.Name: func() Persona { return Persona{} },
 		PersonaX3.Name:      newX3Persona,
+		PersonaProto.Name:   newX3ProtogenPersona,
 	}
 )
 
