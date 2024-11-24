@@ -3,6 +3,7 @@ package llm
 import (
 	"context"
 	"errors"
+	"html"
 	"io"
 	"log/slog"
 	"strings"
@@ -173,11 +174,14 @@ func (l *Llmer) requestCompletionInternal(m model.Model, provider string, rp boo
 
 	slog.Debug("response", slog.String("text", text.String()), slog.Duration("duration", time.Since(completionStart)))
 
+	unescaped := html.UnescapeString(text.String())
+
 	l.Messages = append(l.Messages, Message{
 		Role:    RoleAssistant,
-		Content: text.String(),
+		Content: unescaped,
 	})
-	return text.String(), nil
+
+	return unescaped, nil
 }
 
 func (l *Llmer) RequestCompletion(m model.Model, rp bool) (res string, err error) {
