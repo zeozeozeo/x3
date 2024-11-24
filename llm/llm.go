@@ -45,21 +45,23 @@ func (l *Llmer) TruncateMessages(max int) {
 }
 
 func (l *Llmer) Lobotomize(removeN int) {
-	if len(l.Messages) > 0 && l.Messages[0].Role == RoleSystem {
-		l.Messages = l.Messages[1:]
-		if removeN > 0 {
-			if removeN > len(l.Messages) {
-				removeN = len(l.Messages)
-			}
-			l.Messages = l.Messages[:len(l.Messages)-removeN]
+	if len(l.Messages) == 0 {
+		return
+	}
+
+	startIdx := 0
+	if l.Messages[0].Role == RoleSystem {
+		startIdx = 1
+	}
+
+	if removeN > 0 {
+		endIdx := len(l.Messages) - removeN
+		if endIdx < startIdx {
+			endIdx = startIdx
 		}
-	} else if removeN > 0 {
-		if removeN > len(l.Messages) {
-			removeN = len(l.Messages)
-		}
-		l.Messages = l.Messages[:len(l.Messages)-removeN]
+		l.Messages = append(l.Messages[:startIdx], l.Messages[endIdx:]...)
 	} else {
-		l.Messages = []Message{}
+		l.Messages = l.Messages[startIdx:]
 	}
 }
 
