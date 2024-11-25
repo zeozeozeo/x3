@@ -45,6 +45,10 @@ func (lhs Usage) Add(rhs Usage) Usage {
 	}
 }
 
+func (u Usage) IsEmpty() bool {
+	return u.PromptTokens == 0 && u.ResponseTokens == 0 && u.TotalTokens == 0
+}
+
 type Llmer struct {
 	Messages []Message `json:"messages"`
 }
@@ -164,6 +168,26 @@ func (l Llmer) convertMessages(hasVision bool) []openai.ChatCompletionMessage {
 	return messages
 }
 
+func (l Llmer) estimateUsage(m model.Model) Usage {
+	start := time.Now()
+	var usage Usage
+	codec := m.Tokenizer()
+	for _, msg := range l.Messages {
+		if ids, _, err := codec.Encode(msg.Content); err == nil {
+			switch msg.Role {
+			case RoleSystem:
+				fallthrough
+			case RoleUser:
+				usage.PromptTokens += len(ids)
+			default:
+				usage.ResponseTokens += len(ids)
+			}
+		}
+	}
+	slog.Debug("estimated token usage", slog.String("usage", usage.String()), slog.Duration("in", time.Since(start)))
+	return usage
+}
+
 func (l *Llmer) requestCompletionInternal(m model.Model, provider string, rp bool) (string, Usage, error) {
 	slog.Debug("request completion.. message history follows..", slog.String("model", m.Name))
 	for _, msg := range l.Messages {
@@ -203,16 +227,15 @@ func (l *Llmer) requestCompletionInternal(m model.Model, provider string, rp boo
 		if err != nil {
 			return text.String(), Usage{}, err
 		}
-		if len(response.Choices) == 0 {
-			if response.Usage != nil {
-				usage = Usage{
-					PromptTokens:   response.Usage.PromptTokens,
-					ResponseTokens: response.Usage.CompletionTokens,
-					TotalTokens:    response.Usage.TotalTokens,
-				}
-			} else {
-				slog.Warn("empty response", slog.Any("response", response))
+		if response.Usage != nil {
+			usage = Usage{
+				PromptTokens:   response.Usage.PromptTokens,
+				ResponseTokens: response.Usage.CompletionTokens,
+				TotalTokens:    response.Usage.TotalTokens,
 			}
+		}
+		if len(response.Choices) == 0 {
+			slog.Warn("empty response", slog.Any("response", response))
 			continue
 		}
 		text.WriteString(response.Choices[0].Delta.Content)
@@ -242,6 +265,11 @@ func (l *Llmer) RequestCompletion(m model.Model, rp bool) (res string, usage Usa
 		slog.Info("requesting completion", slog.String("provider", provider))
 
 		res, usage, err = l.requestCompletionInternal(m, provider, rp)
+
+		if usage.IsEmpty() {
+			usage = l.estimateUsage(m)
+		}
+
 		slog.Info("request usage", slog.String("usage", usage.String()))
 		if err == nil {
 			return

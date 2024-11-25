@@ -4,6 +4,7 @@ import (
 	"os"
 
 	openai "github.com/sashabaranov/go-openai"
+	"github.com/tiktoken-go/tokenizer"
 )
 
 var (
@@ -48,14 +49,16 @@ type Model struct {
 	Command        string
 	NeedsWhitelist bool
 	Vision         bool
+	Encoding       tokenizer.Encoding
 	Providers      map[string]ModelProvider
 }
 
 var (
 	ModelGpt4oMini = Model{
-		Name:    "OpenAI GPT-4o mini",
-		Command: "gpt4o",
-		Vision:  true,
+		Name:     "OpenAI GPT-4o mini",
+		Command:  "gpt4o",
+		Vision:   true,
+		Encoding: tokenizer.O200kBase,
 		Providers: map[string]ModelProvider{
 			ProviderGithub: {
 				API:      azureBaseURL,
@@ -82,6 +85,7 @@ var (
 		Command:        "gpt4",
 		NeedsWhitelist: true,
 		Vision:         true,
+		Encoding:       tokenizer.O200kBase,
 		Providers: map[string]ModelProvider{
 			ProviderGithub: {
 				API:      azureBaseURL,
@@ -630,4 +634,16 @@ func (m Model) Client(provider string, rp bool) (*openai.Client, string) {
 		config.BaseURL = p.API
 	}
 	return openai.NewClientWithConfig(config), p.Codename
+}
+
+func (m Model) Tokenizer() tokenizer.Codec {
+	encoding := tokenizer.Cl100kBase
+	if m.Encoding != "" {
+		encoding = m.Encoding
+	}
+	codec, err := tokenizer.Get(encoding)
+	if err != nil {
+		panic(err)
+	}
+	return codec
 }
