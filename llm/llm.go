@@ -28,9 +28,9 @@ type Message struct {
 }
 
 type Usage struct {
-	PromptTokens   int
-	ResponseTokens int
-	TotalTokens    int
+	PromptTokens   int `json:"prompt_tokens"`
+	ResponseTokens int `json:"response_tokens"`
+	TotalTokens    int `json:"total_tokens"`
 }
 
 func (u Usage) String() string {
@@ -180,10 +180,11 @@ func (l Llmer) estimateUsage(m model.Model) Usage {
 			case RoleUser:
 				usage.PromptTokens += len(ids)
 			default:
-				usage.ResponseTokens += len(ids)
+				usage.ResponseTokens = len(ids) // NB: not +=!
 			}
 		}
 	}
+	usage.TotalTokens = usage.PromptTokens + usage.ResponseTokens
 	slog.Debug("estimated token usage", slog.String("usage", usage.String()), slog.Duration("in", time.Since(start)))
 	return usage
 }

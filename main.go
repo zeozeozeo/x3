@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -268,6 +269,7 @@ type ChannelCache struct {
 	Llmer       *llm.Llmer          `json:"llmer"`
 	PersonaMeta persona.PersonaMeta `json:"persona_meta"`
 	Usage       llm.Usage           `json:"usage,omitempty"`
+	LastUsage   llm.Usage           `json:"last_usage,omitempty"`
 }
 
 func newChannelCache() *ChannelCache {
@@ -278,6 +280,64 @@ func unmarshalChannelCache(data []byte) (*ChannelCache, error) {
 	var cache ChannelCache
 	err := json.Unmarshal(data, &cache)
 	return &cache, err
+}
+
+func (cache ChannelCache) write(id snowflake.ID) error {
+	slog.Debug("writing channel cache", slog.String("channel_id", id.String()))
+	data, err := json.Marshal(cache)
+	if err != nil {
+		return err
+	}
+	_, err = db.Exec("INSERT OR REPLACE INTO channel_cache (channel_id, cache) VALUES (?, ?)", id.String(), data)
+	return err
+}
+
+type GlobalStats struct {
+	Usage llm.Usage `json:"usage"`
+	// total number of messages processed
+	MessageCount uint `json:"message_count"`
+}
+
+func unmarshalGlobalStats(data []byte) (GlobalStats, error) {
+	var stats GlobalStats
+	err := json.Unmarshal(data, &stats)
+	return stats, err
+}
+
+func (s GlobalStats) write() error {
+	data, err := json.Marshal(s)
+	if err != nil {
+		return err
+	}
+	_, err = db.Exec("UPDATE global_stats SET stats = ? WHERE EXISTS (SELECT 1 FROM global_stats)", data)
+	return err
+}
+
+func getGlobalStats() (GlobalStats, error) {
+	var data []byte
+	err := db.QueryRow("SELECT stats FROM global_stats").Scan(&data)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return GlobalStats{}, nil
+		}
+		return GlobalStats{}, err
+	}
+	return unmarshalGlobalStats(data)
+}
+
+func updateGlobalStats(usage llm.Usage) error {
+	stats, err := getGlobalStats()
+	if err != nil {
+		slog.Error("updateGlobalStats: failed to get global stats", slog.Any("err", err))
+		return err
+	}
+	stats.Usage = stats.Usage.Add(usage)
+	stats.MessageCount++
+	if err := stats.write(); err != nil {
+		slog.Error("updateGlobalStats: failed to write global stats", slog.Any("err", err))
+		return err
+	}
+	return nil
 }
 
 func addToWhitelist(id snowflake.ID) {
@@ -324,20 +384,9 @@ func getChannelCache(id snowflake.ID) *ChannelCache {
 	if err != nil {
 		slog.Warn("failed to unmarshal channel cache", slog.Any("err", err))
 		cache = newChannelCache()
-		writeChannelCache(id, cache)
+		cache.write(id)
 	}
 	return cache
-}
-
-func writeChannelCache(id snowflake.ID, cache *ChannelCache) error {
-	slog.Debug("writing channel cache", slog.String("channel_id", id.String()))
-	data, err := json.Marshal(cache)
-	if err != nil {
-		return err
-	}
-	// write json
-	_, err = db.Exec("INSERT OR REPLACE INTO channel_cache (channel_id, cache) VALUES (?, ?)", id.String(), data)
-	return err
 }
 
 func writeMessageInteractionPrompt(id snowflake.ID, prompt string) error {
@@ -382,6 +431,32 @@ func init() {
 		`)
 	if err != nil {
 		panic(err)
+	}
+
+	// global stats (a single value that stores json for the GlobalStats struct)
+	_, err = db.Exec(`
+			CREATE TABLE IF NOT EXISTS global_stats (
+				stats BLOB
+			)
+		`)
+	if err != nil {
+		panic(err)
+	}
+	// check if the global stats table has any rows, if not, create one
+	var count int
+	err = db.QueryRow("SELECT COUNT(*) FROM global_stats").Scan(&count)
+	if err != nil {
+		panic(err)
+	}
+	if count == 0 {
+		data, err := json.Marshal(GlobalStats{})
+		if err != nil {
+			panic(err)
+		}
+		_, err = db.Exec("INSERT INTO global_stats (stats) VALUES (?)", data)
+		if err != nil {
+			panic(err)
+		}
 	}
 
 	// default db state
@@ -713,6 +788,7 @@ func handleLlm(event *handler.CommandEvent, m *model.Model) error {
 	}
 
 	cache.Usage = cache.Usage.Add(usage)
+	cache.LastUsage = usage
 	slog.Debug("usage stats", slog.String("usage", usage.String()))
 
 	if len(strings.TrimSpace(response)) == 0 {
@@ -758,10 +834,12 @@ func handleLlm(event *handler.CommandEvent, m *model.Model) error {
 		cache.Llmer = llmer
 	}
 	// but update cache anyway incase we got new usage stats
-	if err := writeChannelCache(event.Channel().ID(), cache); err != nil {
+	if err := cache.write(event.Channel().ID()); err != nil {
 		// is fine, don't sweat
 		slog.Error("failed to save channel cache", slog.Any("err", err))
 	}
+
+	updateGlobalStats(usage)
 
 	return nil
 }
@@ -805,12 +883,14 @@ func handleLlmInteraction(event *events.MessageCreate, eraseX3 bool) error {
 	}
 
 	cache.Usage = cache.Usage.Add(usage)
+	cache.LastUsage = usage
 
 	// and send the response
 	sendMessageSplits(event.Client(), event.MessageID, nil, 0, event.ChannelID, []rune(response))
 
 	// update cache incase we got token usage stats
-	writeChannelCache(event.ChannelID, cache)
+	cache.write(event.ChannelID)
+	updateGlobalStats(usage)
 
 	return nil
 }
@@ -906,7 +986,7 @@ func handleLobotomy(event *handler.CommandEvent) error {
 		writeCache = true
 	}
 	if writeCache {
-		if err := writeChannelCache(event.Channel().ID(), cache); err != nil {
+		if err := cache.write(event.Channel().ID()); err != nil {
 			return handleFollowupError(event, err, ephemeral)
 		}
 	}
@@ -1099,7 +1179,7 @@ func handlePersona(event *handler.CommandEvent) error {
 	prevRoleplay := cache.PersonaMeta.Roleplay
 	cache.PersonaMeta.Roleplay = dataRoleplay
 
-	if err := writeChannelCache(event.Channel().ID(), cache); err != nil {
+	if err := cache.write(event.Channel().ID()); err != nil {
 		return handleFollowupError(event, err, false)
 	}
 
@@ -1137,6 +1217,22 @@ func handlePersona(event *handler.CommandEvent) error {
 	)
 }
 
+func formatUsageStrings(usage llm.Usage) (string, string, string) {
+	prompt := "no data"
+	response := "no data"
+	total := "no data"
+	if usage.PromptTokens > 0 {
+		prompt = humanize.Comma(int64(usage.PromptTokens))
+	}
+	if usage.ResponseTokens > 0 {
+		response = humanize.Comma(int64(usage.ResponseTokens))
+	}
+	if usage.TotalTokens > 0 {
+		total = humanize.Comma(int64(usage.TotalTokens))
+	}
+	return prompt, response, total
+}
+
 func handleStats(event *handler.CommandEvent) error {
 	data := event.SlashCommandInteractionData()
 	ephemeral, ok := data.OptBool("ephemeral")
@@ -1145,20 +1241,16 @@ func handleStats(event *handler.CommandEvent) error {
 		ephemeral = true
 	}
 
+	stats, err := getGlobalStats()
+	if err != nil {
+		slog.Error("failed to get global stats", slog.Any("err", err))
+		return handleFollowupError(event, err, ephemeral)
+	}
 	cache := getChannelCache(event.Channel().ID())
 
-	prompt := "no data"
-	response := "no data"
-	total := "no data"
-	if cache.Usage.PromptTokens > 0 {
-		prompt = humanize.Comma(int64(cache.Usage.PromptTokens))
-	}
-	if cache.Usage.ResponseTokens > 0 {
-		response = humanize.Comma(int64(cache.Usage.ResponseTokens))
-	}
-	if cache.Usage.TotalTokens > 0 {
-		total = humanize.Comma(int64(cache.Usage.TotalTokens))
-	}
+	prompt, response, total := formatUsageStrings(cache.Usage)
+	promptLast, responseLast, totalLast := formatUsageStrings(cache.LastUsage)
+	promptTotal, responseTotal, totalTotal := formatUsageStrings(stats.Usage)
 	upSince := "since " + humanize.Time(startTime)
 
 	return event.CreateMessage(
@@ -1170,10 +1262,17 @@ func handleStats(event *handler.CommandEvent) error {
 					SetDescription("Per-channel and global bot stats").
 					SetFooter("x3", "https://i.imgur.com/ckpztZY.png").
 					SetTimestamp(time.Now()).
-					AddField("Prompt tokens", prompt, true).
-					AddField("Response tokens", response, true).
-					AddField("Total tokens", total, true).
-					AddField("Bot uptime", upSince, false).
+					AddField("Prompt tokens (channel)", prompt, true).
+					AddField("Response tokens (channel)", response, true).
+					AddField("Total tokens (channel)", total, true).
+					AddField("Prompt tokens (last)", promptLast, true).
+					AddField("Response tokens (last)", responseLast, true).
+					AddField("Total tokens (last)", totalLast, true).
+					AddField("Prompt tokens (global)", promptTotal, true).
+					AddField("Response tokens (global)", responseTotal, true).
+					AddField("Total tokens (global)", totalTotal, true).
+					AddField("Bot uptime", upSince, true).
+					AddField("Messages processed", humanize.Comma(int64(stats.MessageCount)), true).
 					Build(),
 			).
 			SetEphemeral(ephemeral).
