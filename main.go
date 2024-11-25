@@ -368,10 +368,25 @@ func init() {
 	}
 }
 
+func levelFromString(s string) slog.Level {
+	switch s {
+	case "debug":
+		return slog.LevelDebug
+	case "info":
+		return slog.LevelInfo
+	case "warn":
+		return slog.LevelWarn
+	case "error":
+		return slog.LevelError
+	default:
+		return slog.LevelInfo
+	}
+}
+
 func main() {
 	defer db.Close()
 
-	slog.SetLogLoggerLevel(slog.LevelInfo)
+	slog.SetLogLoggerLevel(levelFromString(os.Getenv("X3_LOG_LEVEL")))
 	slog.Info("x3 booting up...")
 	slog.Info("disgo version", slog.String("version", disgo.Version))
 
@@ -467,7 +482,7 @@ func handleFollowupError(event *handler.CommandEvent, err error, ephemeral bool)
 }
 
 func formatMsg(msg, username string) string {
-	return msg
+	return stripX3(msg)
 }
 
 func isImageAttachment(attachment discord.Attachment) bool {
@@ -526,7 +541,9 @@ outer:
 	for i := len(messages) - 1; i >= 0; i-- {
 		msg := messages[i]
 		if isLobotomyMessage(msg) {
-			llmer.Lobotomize(getLobotomyAmountFromMessage(msg))
+			amount := getLobotomyAmountFromMessage(msg)
+			llmer.Lobotomize(amount)
+			slog.Debug("handled lobotomy history", slog.Int("amount", amount), slog.Int("num_messages", llmer.NumMessages()))
 			continue
 		}
 
@@ -716,6 +733,10 @@ func handleLlm(event *handler.CommandEvent, m *model.Model) error {
 
 var containsX3Regex = regexp.MustCompile(`\b[Xx]3\b`)
 
+func stripX3(s string) string {
+	return strings.TrimSpace(containsX3Regex.ReplaceAllString(s, ""))
+}
+
 func handleLlmInteraction(event *events.MessageCreate, eraseX3 bool) error {
 	if err := event.Client().Rest().SendTyping(event.ChannelID); err != nil {
 		slog.Error("failed to SendTyping", slog.Any("err", err))
@@ -729,8 +750,7 @@ func handleLlmInteraction(event *events.MessageCreate, eraseX3 bool) error {
 	// and we also want the event message
 	var content string
 	if eraseX3 {
-		content = containsX3Regex.ReplaceAllString(event.Message.Content, "")
-		content = strings.TrimSpace(content)
+		content = stripX3(event.Message.Content)
 	} else {
 		content = event.Message.Content
 	}
@@ -1003,6 +1023,11 @@ func handlePersona(event *handler.CommandEvent) error {
 	dataRoleplay := data.Bool("roleplay")
 	ephemeral := data.Bool("ephemeral")
 
+	persona, err := persona.GetMetaByName(dataPersona)
+	if err != nil {
+		return handleFollowupError(event, err, ephemeral)
+	}
+
 	m := model.GetModelByName(dataModel)
 	if m.NeedsWhitelist && !isInWhitelist(event.User().ID) {
 		return event.CreateMessage(
@@ -1011,6 +1036,11 @@ func handlePersona(event *handler.CommandEvent) error {
 				SetEphemeral(ephemeral).
 				Build(),
 		)
+	}
+
+	// perhaps the user hasn't specified a model, but the persona specifies one
+	if dataModel == "" && persona.Model != "" {
+		dataModel = persona.Model
 	}
 
 	cache := getChannelCache(event.Channel().ID())

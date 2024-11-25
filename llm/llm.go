@@ -61,7 +61,8 @@ func (l *Llmer) Lobotomize(removeN int) {
 		}
 		l.Messages = l.Messages[startIdx:endIdx]
 	} else {
-		l.Messages = l.Messages[startIdx:]
+		// if amount <= 0, remove all messages except the system prompt
+		l.Messages = l.Messages[:startIdx]
 	}
 }
 

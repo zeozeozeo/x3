@@ -2,6 +2,7 @@ package persona
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"html/template"
 	"time"
@@ -52,6 +53,8 @@ x3 is knowledgeable about programming, electronics and the furry community.
 The current date is {{ .Date }} and the current time is {{ .Time }}, but when asked to respond with the current date or time, x3 will use "<t:{{ .Unix }}:F>" when asked to respond with the current date or the current date and time, and use "<t:{{ .Unix }}:T>" when asked only about the time for the sake of formatting.
 x3 follows this information in all languages, and always responds to the user(s) in the language they use or request.
 x3 is now being connected to an online chat room. Messages may come from different users when x3 is not roleplaying, so it is important to differentiate between them. For that, the username is inserted before the user prompt, like so: "user: message". Do not include this format in your responses; simply take it into account when writing your response.`))
+
+	errNoMeta = errors.New("no meta with this name")
 )
 
 type Persona struct {
@@ -130,12 +133,27 @@ var (
 		PersonaX3,
 	}
 
+	metaByName = map[string]PersonaMeta{}
+
 	personaGetters = map[string]func() Persona{
 		PersonaDefault.Name: func() Persona { return Persona{} },
 		PersonaX3.Name:      newX3Persona,
 		PersonaProto.Name:   newX3ProtogenPersona,
 	}
 )
+
+func init() {
+	for _, p := range AllPersonas {
+		metaByName[p.Name] = p
+	}
+}
+
+func GetMetaByName(name string) (PersonaMeta, error) {
+	if p, ok := metaByName[name]; ok {
+		return p, nil
+	}
+	return PersonaMeta{}, errNoMeta
+}
 
 func GetPersonaByMeta(meta PersonaMeta) Persona {
 	if getter, ok := personaGetters[meta.Name]; ok {
