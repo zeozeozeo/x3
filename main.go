@@ -13,6 +13,7 @@ import (
 	"strconv"
 	"strings"
 	"syscall"
+	"time"
 
 	// load .env before importing our modules
 	_ "github.com/joho/godotenv/autoload"
@@ -25,6 +26,7 @@ import (
 	"github.com/disgoorg/disgo/handler"
 	"github.com/disgoorg/disgo/handler/middleware"
 	"github.com/disgoorg/snowflake/v2"
+	"github.com/dustin/go-humanize"
 	"github.com/zeozeozeo/x3/llm"
 	"github.com/zeozeozeo/x3/model"
 	"github.com/zeozeozeo/x3/persona"
@@ -226,11 +228,33 @@ var (
 				},
 			},
 		},
+		discord.SlashCommandCreate{
+			Name:        "stats",
+			Description: "Bot and per-chat usage stats",
+			IntegrationTypes: []discord.ApplicationIntegrationType{
+				discord.ApplicationIntegrationTypeGuildInstall,
+				discord.ApplicationIntegrationTypeUserInstall,
+			},
+			Contexts: []discord.InteractionContextType{
+				discord.InteractionContextTypeGuild,
+				discord.InteractionContextTypeBotDM,
+				discord.InteractionContextTypePrivateChannel,
+			},
+			Options: []discord.ApplicationCommandOption{
+				discord.ApplicationCommandOptionBool{
+					Name:        "ephemeral",
+					Description: "If the response should only be visible to you (default: true)",
+					Required:    false,
+				},
+			},
+		},
 		// gpt commands are added in init(), except for this one
 		makeGptCommand("chat", "Chat with the current persona"),
 	}
 
 	db *sql.DB
+
+	startTime = time.Now()
 )
 
 const (
@@ -243,6 +267,7 @@ type ChannelCache struct {
 	// in channels where the bot cannot read messages this is set for caching messages
 	Llmer       *llm.Llmer          `json:"llmer"`
 	PersonaMeta persona.PersonaMeta `json:"persona_meta"`
+	Usage       llm.Usage           `json:"usage,omitempty"`
 }
 
 func newChannelCache() *ChannelCache {
@@ -305,6 +330,7 @@ func getChannelCache(id snowflake.ID) *ChannelCache {
 }
 
 func writeChannelCache(id snowflake.ID, cache *ChannelCache) error {
+	slog.Debug("writing channel cache", slog.String("channel_id", id.String()))
 	data, err := json.Marshal(cache)
 	if err != nil {
 		return err
@@ -418,6 +444,7 @@ func main() {
 		r.Command("/whitelist", handleWhitelist)
 		r.Command("/lobotomy", handleLobotomy)
 		r.Command("/persona", handlePersona)
+		r.Command("/stats", handleStats)
 	})
 
 	// image
@@ -679,11 +706,14 @@ func handleLlm(event *handler.CommandEvent, m *model.Model) error {
 	// discord only gives us 3s to respond unless we do this (x3 is thinking...)
 	event.DeferCreateMessage(ephemeral)
 
-	response, err := llmer.RequestCompletion(*m, cache.PersonaMeta.Roleplay)
+	response, usage, err := llmer.RequestCompletion(*m, cache.PersonaMeta.Roleplay)
 	if err != nil {
 		slog.Error("failed to generate response", slog.Any("err", err))
 		return handleFollowupError(event, err, ephemeral)
 	}
+
+	cache.Usage = cache.Usage.Add(usage)
+	slog.Debug("usage stats", slog.String("usage", usage.String()))
 
 	if len(strings.TrimSpace(response)) == 0 {
 		response = "<empty response>\n-# If this is unexpected, try changing the model and/or system prompt?"
@@ -724,11 +754,13 @@ func handleLlm(event *handler.CommandEvent, m *model.Model) error {
 	writeMessageInteractionPrompt(botMessage.ID, prompt)
 
 	if useCache {
+		// make sure we write message history in channels we cant read
 		cache.Llmer = llmer
-		if err := writeChannelCache(event.Channel().ID(), cache); err != nil {
-			// is fine, don't sweat
-			slog.Error("failed to save channel cache", slog.Any("err", err))
-		}
+	}
+	// but update cache anyway incase we got new usage stats
+	if err := writeChannelCache(event.Channel().ID(), cache); err != nil {
+		// is fine, don't sweat
+		slog.Error("failed to save channel cache", slog.Any("err", err))
 	}
 
 	return nil
@@ -766,14 +798,19 @@ func handleLlmInteraction(event *events.MessageCreate, eraseX3 bool) error {
 	llmer.SetPersona(persona)
 
 	// now we generate the LLM response
-	response, err := llmer.RequestCompletion(model.GetModelByName(cache.PersonaMeta.Model), cache.PersonaMeta.Roleplay)
+	response, usage, err := llmer.RequestCompletion(model.GetModelByName(cache.PersonaMeta.Model), cache.PersonaMeta.Roleplay)
 	if err != nil {
 		slog.Error("failed to generate response", slog.Any("err", err))
 		return err
 	}
 
+	cache.Usage = cache.Usage.Add(usage)
+
 	// and send the response
 	sendMessageSplits(event.Client(), event.MessageID, nil, 0, event.ChannelID, []rune(response))
+
+	// update cache incase we got token usage stats
+	writeChannelCache(event.ChannelID, cache)
 
 	return nil
 }
@@ -1098,4 +1135,49 @@ func handlePersona(event *handler.CommandEvent) error {
 			SetEphemeral(ephemeral).
 			Build(),
 	)
+}
+
+func handleStats(event *handler.CommandEvent) error {
+	data := event.SlashCommandInteractionData()
+	ephemeral, ok := data.OptBool("ephemeral")
+	if !ok {
+		// ephemeral is true by default for this command
+		ephemeral = true
+	}
+
+	cache := getChannelCache(event.Channel().ID())
+
+	prompt := "no data"
+	response := "no data"
+	total := "no data"
+	if cache.Usage.PromptTokens > 0 {
+		prompt = humanize.Comma(int64(cache.Usage.PromptTokens))
+	}
+	if cache.Usage.ResponseTokens > 0 {
+		response = humanize.Comma(int64(cache.Usage.ResponseTokens))
+	}
+	if cache.Usage.TotalTokens > 0 {
+		total = humanize.Comma(int64(cache.Usage.TotalTokens))
+	}
+	upSince := "since " + humanize.Time(startTime)
+
+	return event.CreateMessage(
+		discord.NewMessageCreateBuilder().
+			AddEmbeds(
+				discord.NewEmbedBuilder().
+					SetTitle("Stats").
+					SetColor(0x0085ff).
+					SetDescription("Per-channel and global bot stats").
+					SetFooter("x3", "https://i.imgur.com/ckpztZY.png").
+					SetTimestamp(time.Now()).
+					AddField("Prompt tokens", prompt, true).
+					AddField("Response tokens", response, true).
+					AddField("Total tokens", total, true).
+					AddField("Bot uptime", upSince, false).
+					Build(),
+			).
+			SetEphemeral(ephemeral).
+			Build(),
+	)
+
 }

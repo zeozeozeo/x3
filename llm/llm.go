@@ -3,6 +3,7 @@ package llm
 import (
 	"context"
 	"errors"
+	"fmt"
 	"html"
 	"io"
 	"log/slog"
@@ -24,6 +25,24 @@ type Message struct {
 	Role    string   `json:"role"`
 	Content string   `json:"content"`
 	Images  []string `json:"images"` // image URIs
+}
+
+type Usage struct {
+	PromptTokens   int
+	ResponseTokens int
+	TotalTokens    int
+}
+
+func (u Usage) String() string {
+	return fmt.Sprintf("Prompt: %d, Response: %d, Total: %d", u.PromptTokens, u.ResponseTokens, u.TotalTokens)
+}
+
+func (lhs Usage) Add(rhs Usage) Usage {
+	return Usage{
+		PromptTokens:   lhs.PromptTokens + rhs.PromptTokens,
+		ResponseTokens: lhs.ResponseTokens + rhs.ResponseTokens,
+		TotalTokens:    lhs.TotalTokens + rhs.TotalTokens,
+	}
 }
 
 type Llmer struct {
@@ -145,7 +164,7 @@ func (l Llmer) convertMessages(hasVision bool) []openai.ChatCompletionMessage {
 	return messages
 }
 
-func (l *Llmer) requestCompletionInternal(m model.Model, provider string, rp bool) (string, error) {
+func (l *Llmer) requestCompletionInternal(m model.Model, provider string, rp bool) (string, Usage, error) {
 	slog.Debug("request completion.. message history follows..", slog.String("model", m.Name))
 	for _, msg := range l.Messages {
 		slog.Debug("    message", slog.String("role", msg.Role), slog.String("content", msg.Content))
@@ -157,6 +176,9 @@ func (l *Llmer) requestCompletionInternal(m model.Model, provider string, rp boo
 		// google api doesn't support image URIs, WTF google?
 		Messages: l.convertMessages(m.Vision && provider != model.ProviderGoogle),
 		Stream:   true,
+		StreamOptions: &openai.StreamOptions{
+			IncludeUsage: true,
+		},
 	}
 
 	completionStart := time.Now()
@@ -166,21 +188,31 @@ func (l *Llmer) requestCompletionInternal(m model.Model, provider string, rp boo
 
 	stream, err := client.CreateChatCompletionStream(ctx, req)
 	if err != nil {
-		return "", err
+		return "", Usage{}, err
 	}
 	defer stream.Close()
 
 	var text strings.Builder
+	usage := Usage{}
+
 	for {
 		response, err := stream.Recv()
 		if errors.Is(err, io.EOF) {
 			break
 		}
 		if err != nil {
-			return text.String(), err
+			return text.String(), Usage{}, err
 		}
 		if len(response.Choices) == 0 {
-			slog.Warn("empty response", slog.Any("response", response))
+			if response.Usage != nil {
+				usage = Usage{
+					PromptTokens:   response.Usage.PromptTokens,
+					ResponseTokens: response.Usage.CompletionTokens,
+					TotalTokens:    response.Usage.TotalTokens,
+				}
+			} else {
+				slog.Warn("empty response", slog.Any("response", response))
+			}
 			continue
 		}
 		text.WriteString(response.Choices[0].Delta.Content)
@@ -188,24 +220,29 @@ func (l *Llmer) requestCompletionInternal(m model.Model, provider string, rp boo
 
 	slog.Debug("response", slog.String("text", text.String()), slog.Duration("duration", time.Since(completionStart)))
 
+	// if the api provider is retarded enough to use HTML escapes like &lt; in a fucking API,
+	// strip the fuckers off
 	unescaped := html.UnescapeString(text.String())
+	// if the model is dumb enough to respond with `x3: `, cut it off here
+	unescaped = strings.TrimPrefix(unescaped, "x3: ")
 
 	l.Messages = append(l.Messages, Message{
 		Role:    RoleAssistant,
 		Content: unescaped,
 	})
 
-	return unescaped, nil
+	return unescaped, usage, nil
 }
 
-func (l *Llmer) RequestCompletion(m model.Model, rp bool) (res string, err error) {
+func (l *Llmer) RequestCompletion(m model.Model, rp bool) (res string, usage Usage, err error) {
 	for _, provider := range model.AllProviders {
 		if _, ok := m.Providers[provider]; !ok {
 			continue
 		}
-		slog.Debug("requesting completion", slog.String("provider", provider))
+		slog.Info("requesting completion", slog.String("provider", provider))
 
-		res, err = l.requestCompletionInternal(m, provider, rp)
+		res, usage, err = l.requestCompletionInternal(m, provider, rp)
+		slog.Info("request usage", slog.String("usage", usage.String()))
 		if err == nil {
 			return
 		}
