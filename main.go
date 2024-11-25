@@ -1144,7 +1144,7 @@ func handlePersona(event *handler.CommandEvent) error {
 	dataRoleplay := data.Bool("roleplay")
 	ephemeral := data.Bool("ephemeral")
 
-	persona, err := persona.GetMetaByName(dataPersona)
+	personaMeta, err := persona.GetMetaByName(dataPersona)
 	if err != nil {
 		return handleFollowupError(event, err, ephemeral)
 	}
@@ -1159,14 +1159,11 @@ func handlePersona(event *handler.CommandEvent) error {
 		)
 	}
 
-	// perhaps the user hasn't specified a model, but the persona specifies one
-	if dataModel == "" && persona.Model != "" {
-		dataModel = persona.Model
-	}
-
 	cache := getChannelCache(event.Channel().ID())
 
-	// update non-empty slash command fields
+	// update persona meta in channel cache
+	prevMeta := cache.PersonaMeta
+	cache.PersonaMeta = personaMeta
 	if dataPersona != "" {
 		cache.PersonaMeta.Name = dataPersona
 	}
@@ -1176,7 +1173,6 @@ func handlePersona(event *handler.CommandEvent) error {
 	if dataModel != "" {
 		cache.PersonaMeta.Model = dataModel
 	}
-	prevRoleplay := cache.PersonaMeta.Roleplay
 	cache.PersonaMeta.Roleplay = dataRoleplay
 
 	if err := cache.write(event.Channel().ID()); err != nil {
@@ -1186,17 +1182,17 @@ func handlePersona(event *handler.CommandEvent) error {
 	var sb strings.Builder
 	sb.WriteString("Updated persona for this channel")
 	didWhat := []string{}
-	if dataPersona != "" {
+	if cache.PersonaMeta.Name != prevMeta.Name {
 		didWhat = append(didWhat, fmt.Sprintf("set persona to `%s`", cache.PersonaMeta.Name))
 	}
-	if dataModel != "" {
+	if cache.PersonaMeta.Model != prevMeta.Model {
 		didWhat = append(didWhat, fmt.Sprintf("set model to `%s`", cache.PersonaMeta.Model))
 	}
-	if dataSystem != "" {
+	if cache.PersonaMeta.System != prevMeta.System {
 		didWhat = append(didWhat, "updated the system prompt")
 	}
-	if dataRoleplay != prevRoleplay {
-		if dataRoleplay {
+	if cache.PersonaMeta.Roleplay != prevMeta.Roleplay {
+		if cache.PersonaMeta.Roleplay {
 			didWhat = append(didWhat, "enabled roleplay mode")
 		} else {
 			didWhat = append(didWhat, "disabled roleplay mode")
