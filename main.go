@@ -281,9 +281,8 @@ func isInWhitelist(id snowflake.ID) bool {
 func getMessageInteractionPrompt(id snowflake.ID) (string, error) {
 	var prompt string
 	err := db.QueryRow("SELECT prompt FROM message_interaction_cache WHERE message_id = ?", id.String()).Scan(&prompt)
-	if err != nil {
-		slog.Warn("failed to get message interaction prompt", slog.Any("err", err))
-	}
+	// if this fails this is actually fine, we expect most of calls to this to fail
+	// (because only slash command interactions are cached)
 	return prompt, err
 }
 
@@ -481,7 +480,10 @@ func handleFollowupError(event *handler.CommandEvent, err error, ephemeral bool)
 	}
 }
 
-func formatMsg(msg, username string) string {
+func formatMsg(msg, username string, formatUsernames bool) string {
+	if formatUsernames {
+		return fmt.Sprintf("%s: %s", username, stripX3(msg))
+	}
 	return stripX3(msg)
 }
 
@@ -518,7 +520,7 @@ func getLobotomyAmountFromMessage(msg discord.Message) int {
 }
 
 // returns whether a lobotomy was performed
-func addContextMessagesIfPossible(client bot.Client, llmer *llm.Llmer, channelID, messageID snowflake.ID) bool {
+func addContextMessagesIfPossible(client bot.Client, llmer *llm.Llmer, channelID, messageID snowflake.ID, formatUsernames bool) bool {
 	messages, err := client.Rest().GetMessages(channelID, 0, messageID, 0, maxContextMessages)
 	if err != nil {
 		return false
@@ -555,7 +557,7 @@ outer:
 			llmer.AddMessage(llm.RoleUser, interaction)
 		}
 
-		llmer.AddMessage(role, formatMsg(msg.Content, msg.Author.Username))
+		llmer.AddMessage(role, formatMsg(msg.Content, msg.Author.Username, formatUsernames))
 
 		// if this is the last message with an image we add, check for images
 		if i == latestImageAttachmentIdx {
@@ -646,7 +648,8 @@ func handleLlm(event *handler.CommandEvent, m *model.Model) error {
 	}
 
 	// set persona
-	llmer.SetPersona(persona.GetPersonaByMeta(cache.PersonaMeta))
+	persona := persona.GetPersonaByMeta(cache.PersonaMeta)
+	llmer.SetPersona(persona)
 	if m == nil {
 		model := model.GetModelByName(cache.PersonaMeta.Model)
 		m = &model
@@ -655,7 +658,7 @@ func handleLlm(event *handler.CommandEvent, m *model.Model) error {
 	// add context if possible
 	lastMessage := event.Channel().MessageChannel.LastMessageID()
 	if !useCache && lastMessage != nil {
-		addContextMessagesIfPossible(event.Client(), llmer, event.Channel().ID(), *lastMessage)
+		addContextMessagesIfPossible(event.Client(), llmer, event.Channel().ID(), *lastMessage, persona.FormatUsernames)
 
 		// and we also want the last message in the channel
 		msg, err := event.Client().Rest().GetMessage(event.Channel().ID(), *lastMessage)
@@ -663,7 +666,7 @@ func handleLlm(event *handler.CommandEvent, m *model.Model) error {
 			if isLobotomyMessage(*msg) {
 				llmer.Lobotomize(getLobotomyAmountFromMessage(*msg))
 			} else {
-				llmer.AddMessage(llm.RoleUser, formatMsg(msg.Content, msg.Author.Username))
+				llmer.AddMessage(llm.RoleUser, formatMsg(msg.Content, msg.Author.Username, persona.FormatUsernames))
 			}
 		}
 	}
@@ -671,7 +674,7 @@ func handleLlm(event *handler.CommandEvent, m *model.Model) error {
 	slog.Debug("handleLlm: got context messages", slog.Int("count", llmer.NumMessages()))
 
 	// and we also want the actual slash command prompt
-	llmer.AddMessage(llm.RoleUser, formatMsg(prompt, event.User().Username))
+	llmer.AddMessage(llm.RoleUser, formatMsg(prompt, event.User().Username, persona.FormatUsernames))
 
 	// discord only gives us 3s to respond unless we do this (x3 is thinking...)
 	event.DeferCreateMessage(ephemeral)
@@ -742,9 +745,12 @@ func handleLlmInteraction(event *events.MessageCreate, eraseX3 bool) error {
 		slog.Error("failed to SendTyping", slog.Any("err", err))
 	}
 
-	// the interaction happened in a server, so we can get the surrounding messages
+	cache := getChannelCache(event.ChannelID)
+	persona := persona.GetPersonaByMeta(cache.PersonaMeta)
+
+	// the interaction happened in a server or in a bot DM, so we can get the surrounding messages
 	llmer := llm.NewLlmer()
-	addContextMessagesIfPossible(event.Client(), llmer, event.ChannelID, event.MessageID)
+	addContextMessagesIfPossible(event.Client(), llmer, event.ChannelID, event.MessageID, persona.FormatUsernames)
 	slog.Debug("interaction; added context messages", slog.Int("count", llmer.NumMessages()))
 
 	// and we also want the event message
@@ -754,12 +760,10 @@ func handleLlmInteraction(event *events.MessageCreate, eraseX3 bool) error {
 	} else {
 		content = event.Message.Content
 	}
-	llmer.AddMessage(llm.RoleUser, formatMsg(content, event.Message.Author.Username))
+	llmer.AddMessage(llm.RoleUser, formatMsg(content, event.Message.Author.Username, persona.FormatUsernames))
 	addImageAttachments(llmer, event.Message)
 
-	// get channel cache to get the channel persona
-	cache := getChannelCache(event.ChannelID)
-	llmer.SetPersona(persona.GetPersonaByMeta(cache.PersonaMeta))
+	llmer.SetPersona(persona)
 
 	// now we generate the LLM response
 	response, err := llmer.RequestCompletion(model.GetModelByName(cache.PersonaMeta.Model), cache.PersonaMeta.Roleplay)

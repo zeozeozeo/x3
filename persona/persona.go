@@ -58,8 +58,8 @@ x3 is now being connected to an online chat room. Messages may come from differe
 )
 
 type Persona struct {
-	// System prompt
-	System string `json:"system"`
+	System          string // System prompt
+	FormatUsernames bool
 }
 
 type templateData struct {
@@ -84,7 +84,8 @@ func newX3Persona() Persona {
 	}
 
 	return Persona{
-		System: tpl.String(),
+		System:          tpl.String(),
+		FormatUsernames: true,
 	}
 }
 
