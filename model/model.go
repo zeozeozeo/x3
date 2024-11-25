@@ -7,22 +7,24 @@ import (
 )
 
 var (
-	githubToken = os.Getenv("X3_GITHUB_TOKEN")
-	zjToken     = os.Getenv("X3_ZJ_TOKEN")
-	hmToken     = os.Getenv("X3_HM_TOKEN")
-	fresedToken = os.Getenv("X3_FRESED_TOKEN")
-	groqToken   = os.Getenv("X3_GROQ_TOKEN")
-	googleToken = os.Getenv("X3_GOOGLE_AISTUDIO_TOKEN")
+	githubToken     = os.Getenv("X3_GITHUB_TOKEN")
+	zjToken         = os.Getenv("X3_ZJ_TOKEN")
+	hmToken         = os.Getenv("X3_HM_TOKEN")
+	fresedToken     = os.Getenv("X3_FRESED_TOKEN")
+	groqToken       = os.Getenv("X3_GROQ_TOKEN")
+	googleToken     = os.Getenv("X3_GOOGLE_AISTUDIO_TOKEN")
+	openRouterToken = os.Getenv("X3_OPENROUTER_TOKEN")
 )
 
 const (
-	azureBaseURL  = "https://models.inference.ai.azure.com"
-	zjBaseURL     = "https://api.zukijourney.com/v1"
-	zjRPBaseUrl   = "https://api.zukijourney.com/unf"
-	hmBaseUrl     = "https://helixmind.online/v1"
-	fresedBaseUrl = "https://fresedgpt.space/v1"
-	groqBaseUrl   = "https://api.groq.com/openai/v1"
-	googleBaseUrl = "https://generativelanguage.googleapis.com/v1beta/openai"
+	azureBaseURL      = "https://models.inference.ai.azure.com"
+	zjBaseURL         = "https://api.zukijourney.com/v1"
+	zjRPBaseURL       = "https://api.zukijourney.com/unf"
+	hmBaseURL         = "https://helixmind.online/v1"
+	fresedBaseURL     = "https://fresedgpt.space/v1"
+	groqBaseURL       = "https://api.groq.com/openai/v1"
+	googleBaseURL     = "https://generativelanguage.googleapis.com/v1beta/openai"
+	openRouterBaseURL = "https://openrouter.ai/api/v1"
 )
 
 const (
@@ -32,12 +34,13 @@ const (
 	ProviderHelixmind   = "helixmind"
 	ProviderGroq        = "groq"
 	ProviderGoogle      = "google"
+	ProviderOpenRouter  = "openrouter"
 )
 
 type ModelProvider struct {
-	API           string
-	RPApi         string // API for roleplay, if any
-	Codename      string
+	API      string
+	RPApi    string // API for roleplay, if any
+	Codename string
 }
 
 type Model struct {
@@ -60,15 +63,15 @@ var (
 			},
 			ProviderZukijourney: {
 				API:      zjBaseURL,
-				RPApi:    zjRPBaseUrl,
+				RPApi:    zjRPBaseURL,
 				Codename: "gpt-4o-mini",
 			},
 			ProviderFresed: {
-				API:      fresedBaseUrl,
+				API:      fresedBaseURL,
 				Codename: "gpt-4o-mini",
 			},
 			ProviderHelixmind: {
-				API:      hmBaseUrl,
+				API:      hmBaseURL,
 				Codename: "gpt-4o-mini",
 			},
 		},
@@ -86,15 +89,15 @@ var (
 			},
 			ProviderZukijourney: {
 				API:      zjBaseURL,
-				RPApi:    zjRPBaseUrl,
+				RPApi:    zjRPBaseURL,
 				Codename: "gpt-4o",
 			},
 			ProviderFresed: {
-				API:      fresedBaseUrl,
+				API:      fresedBaseURL,
 				Codename: "gpt-4o",
 			},
 			ProviderHelixmind: {
-				API:      hmBaseUrl,
+				API:      hmBaseURL,
 				Codename: "gpt-4o",
 			},
 		},
@@ -106,33 +109,33 @@ var (
 		Vision:  true,
 		Providers: map[string]ModelProvider{
 			ProviderGoogle: {
-				API:           googleBaseUrl,
-				Codename:      "gemini-1.5-pro",
+				API:      googleBaseURL,
+				Codename: "gemini-1.5-pro",
+			},
+			ProviderOpenRouter: {
+				API:      openRouterBaseURL,
+				Codename: "google/gemini-pro-1.5-exp",
 			},
 			ProviderZukijourney: {
 				API:      zjBaseURL,
-				RPApi:    zjRPBaseUrl,
+				RPApi:    zjRPBaseURL,
 				Codename: "gemini-1.5-pro-latest",
 			},
 			ProviderFresed: {
-				API:      fresedBaseUrl,
+				API:      fresedBaseURL,
 				Codename: "gemini-1.5-pro-latest",
 			},
 		},
 	}
 
-	ModelGeminiExp1114 = Model{
-		Name:           "Google Gemini-Exp-1114",
-		Command:        "geminiexp",
+	ModelGeminiExp1121 = Model{
+		Name:           "Google Gemini Experimental 1121",
+		Command:        "gemini_exp",
 		NeedsWhitelist: true,
 		Providers: map[string]ModelProvider{
-			ProviderZukijourney: {
-				API:      zjBaseURL,
-				Codename: "gemini-exp-1114",
-			},
-			ProviderFresed: {
-				API:      fresedBaseUrl,
-				Codename: "gemini-exp-1114",
+			ProviderOpenRouter: {
+				Codename: "google/gemini-exp-1121:free",
+				API:      openRouterBaseURL,
 			},
 		},
 	}
@@ -144,11 +147,11 @@ var (
 		Providers: map[string]ModelProvider{
 			ProviderZukijourney: {
 				API:      zjBaseURL,
-				RPApi:    zjRPBaseUrl,
+				RPApi:    zjRPBaseURL,
 				Codename: "claude-3-haiku",
 			},
 			ProviderFresed: {
-				API:      fresedBaseUrl,
+				API:      fresedBaseURL,
 				Codename: "claude-3-haiku-20240307",
 			},
 		},
@@ -160,16 +163,20 @@ var (
 		Vision:  true,
 		Providers: map[string]ModelProvider{
 			ProviderGoogle: {
-				API:           googleBaseUrl,
-				Codename:      "gemini-1.5-flash",
+				API:      googleBaseURL,
+				Codename: "gemini-1.5-flash",
+			},
+			ProviderOpenRouter: {
+				API:      openRouterBaseURL,
+				Codename: "google/gemini-flash-1.5-exp",
 			},
 			ProviderZukijourney: {
 				API:      zjBaseURL,
-				RPApi:    zjRPBaseUrl,
+				RPApi:    zjRPBaseURL,
 				Codename: "gemini-1.5-flash-latest",
 			},
 			ProviderFresed: {
-				API:      fresedBaseUrl,
+				API:      fresedBaseURL,
 				Codename: "gemini-1.5-flash-latest",
 			},
 		},
@@ -184,7 +191,7 @@ var (
 				Codename: "command-r-plus",
 			},
 			ProviderFresed: {
-				API:      fresedBaseUrl,
+				API:      fresedBaseURL,
 				Codename: "command-r-plus",
 			},
 		},
@@ -195,12 +202,12 @@ var (
 		Command: "mixtral7b",
 		Providers: map[string]ModelProvider{
 			ProviderGroq: {
-				API:      groqBaseUrl,
+				API:      groqBaseURL,
 				Codename: "mixtral-8x7b-32768",
 			},
 			ProviderZukijourney: {
 				API:      zjBaseURL,
-				RPApi:    zjRPBaseUrl,
+				RPApi:    zjRPBaseURL,
 				Codename: "mixtral-8x7b-instruct",
 			},
 		},
@@ -230,7 +237,7 @@ var (
 
 	ModelMistralLarge = Model{
 		Name:           "Mistral Large (2407) 123B",
-		Command:        "mistral_large",
+		Command:        "mistral",
 		NeedsWhitelist: true,
 		Providers: map[string]ModelProvider{
 			ProviderGithub: {
@@ -239,11 +246,11 @@ var (
 			},
 			ProviderZukijourney: {
 				API:      zjBaseURL,
-				RPApi:    zjRPBaseUrl,
+				RPApi:    zjRPBaseURL,
 				Codename: "mistral-large-2407",
 			},
 			ProviderFresed: {
-				API:      fresedBaseUrl,
+				API:      fresedBaseURL,
 				Codename: "mistral-large-2",
 			},
 		},
@@ -259,11 +266,11 @@ var (
 			},
 			ProviderZukijourney: {
 				API:      zjBaseURL,
-				RPApi:    zjRPBaseUrl,
+				RPApi:    zjRPBaseURL,
 				Codename: "mistral-nemo",
 			},
 			ProviderFresed: {
-				API:      fresedBaseUrl,
+				API:      fresedBaseURL,
 				Codename: "mistral-nemo-12b",
 			},
 		},
@@ -273,13 +280,17 @@ var (
 		Name:    "Meta Llama 3.1 405B Instruct",
 		Command: "llama405b",
 		Providers: map[string]ModelProvider{
+			ProviderOpenRouter: {
+				API:      openRouterBaseURL,
+				Codename: "meta-llama/llama-3.1-405b-instruct:free",
+			},
 			ProviderZukijourney: {
 				API:      zjBaseURL,
-				RPApi:    zjRPBaseUrl,
+				RPApi:    zjRPBaseURL,
 				Codename: "llama-3.1-405b-instruct",
 			},
 			ProviderFresed: {
-				API:      fresedBaseUrl,
+				API:      fresedBaseURL,
 				Codename: "llama-3.1-405b",
 			},
 			// github doesn't work for some reason
@@ -292,15 +303,19 @@ var (
 		Vision:  true,
 		Providers: map[string]ModelProvider{
 			ProviderGroq: {
-				API:      groqBaseUrl,
+				API:      groqBaseURL,
 				Codename: "llama-3.2-90b-vision-preview",
+			},
+			ProviderOpenRouter: {
+				API:      openRouterBaseURL,
+				Codename: "meta-llama/llama-3.2-90b-vision-instruct:free",
 			},
 			ProviderZukijourney: {
 				API:      zjBaseURL,
 				Codename: "llama-3.2-90b-instruct",
 			},
 			ProviderFresed: {
-				API:      fresedBaseUrl,
+				API:      fresedBaseURL,
 				Codename: "llama-3.2-90b",
 			},
 		},
@@ -312,15 +327,19 @@ var (
 		Vision:  true,
 		Providers: map[string]ModelProvider{
 			ProviderGroq: {
-				API:      groqBaseUrl,
+				API:      groqBaseURL,
 				Codename: "llama-3.2-11b-vision-preview",
+			},
+			ProviderOpenRouter: {
+				API:      openRouterBaseURL,
+				Codename: "meta-llama/llama-3.2-11b-vision-instruct:free",
 			},
 			ProviderZukijourney: {
 				API:      zjBaseURL,
 				Codename: "llama-3.2-11b-instruct",
 			},
 			ProviderFresed: {
-				API:      fresedBaseUrl,
+				API:      fresedBaseURL,
 				Codename: "llama-3.2-11b",
 			},
 		},
@@ -331,16 +350,20 @@ var (
 		Command: "llama70b",
 		Providers: map[string]ModelProvider{
 			ProviderGroq: {
-				API:      groqBaseUrl,
+				API:      groqBaseURL,
 				Codename: "llama-3.1-70b-versatile",
+			},
+			ProviderOpenRouter: {
+				API:      openRouterBaseURL,
+				Codename: "meta-llama/llama-3.1-70b-instruct:free",
 			},
 			ProviderZukijourney: {
 				API:      zjBaseURL,
-				RPApi:    zjRPBaseUrl,
+				RPApi:    zjRPBaseURL,
 				Codename: "llama-3.1-70b-instruct",
 			},
 			ProviderFresed: {
-				API:      fresedBaseUrl,
+				API:      fresedBaseURL,
 				Codename: "llama-3.1-70b",
 			},
 		},
@@ -351,17 +374,47 @@ var (
 		Command: "llama8b",
 		Providers: map[string]ModelProvider{
 			ProviderGroq: {
-				API:      groqBaseUrl,
+				API:      groqBaseURL,
 				Codename: "llama-3.1-8b-instant",
+			},
+			ProviderOpenRouter: {
+				API:      openRouterBaseURL,
+				Codename: "meta-llama/llama-3.1-8b-instruct:free",
 			},
 			ProviderZukijourney: {
 				API:      zjBaseURL,
-				RPApi:    zjRPBaseUrl,
+				RPApi:    zjRPBaseURL,
 				Codename: "llama-3.1-8b-instruct",
 			},
 			ProviderFresed: {
-				API:      fresedBaseUrl,
+				API:      fresedBaseURL,
 				Codename: "llama-3.1-8b",
+			},
+		},
+	}
+
+	ModelNousHermes405b = Model{
+		Name:    "Nous Hermes 3 405B Instruct",
+		Command: "hermes",
+		Providers: map[string]ModelProvider{
+			ProviderOpenRouter: {
+				API:      openRouterBaseURL,
+				Codename: "nousresearch/hermes-3-llama-3.1-405b:free",
+			},
+		},
+	}
+
+	ModelLiquidLFM40b = Model{
+		Name:    "Liquid LFM 40B MoE",
+		Command: "liquid",
+		Providers: map[string]ModelProvider{
+			ProviderOpenRouter: {
+				API:      openRouterBaseURL,
+				Codename: "liquid/lfm-40b:free",
+			},
+			ProviderZukijourney: {
+				API:      zjBaseURL,
+				Codename: "liquid-40b",
 			},
 		},
 	}
@@ -386,7 +439,7 @@ var (
 				Codename: "Phi-3.5-MoE-instruct",
 			},
 			ProviderFresed: {
-				API:      fresedBaseUrl,
+				API:      fresedBaseURL,
 				Codename: "phi-3.5-moe",
 			},
 		},
@@ -413,7 +466,7 @@ var (
 				Codename: "Phi-3.5-mini-instruct",
 			},
 			ProviderFresed: {
-				API:      fresedBaseUrl,
+				API:      fresedBaseURL,
 				Codename: "phi-3.5-mini",
 			},
 		},
@@ -428,7 +481,7 @@ var (
 				Codename: "AI21-Jamba-1.5-Large",
 			},
 			ProviderFresed: {
-				API:      fresedBaseUrl,
+				API:      fresedBaseURL,
 				Codename: "jamba-1.5-large",
 			},
 			ProviderZukijourney: {
@@ -447,7 +500,7 @@ var (
 				Codename: "AI21-Jamba-1.5-Mini",
 			},
 			ProviderFresed: {
-				API:      fresedBaseUrl,
+				API:      fresedBaseURL,
 				Codename: "jamba-1.5-mini",
 			},
 		},
@@ -457,13 +510,17 @@ var (
 		Name:    "Google Gemma 2 9B",
 		Command: "gemma9b",
 		Providers: map[string]ModelProvider{
+			ProviderOpenRouter: {
+				API:      openRouterBaseURL,
+				Codename: "google/gemma-2-9b-it:free",
+			},
 			ProviderGroq: {
-				API:      groqBaseUrl,
+				API:      groqBaseURL,
 				Codename: "gemma2-9b-it",
 			},
 			ProviderZukijourney: {
 				API:      zjBaseURL,
-				RPApi:    zjRPBaseUrl,
+				RPApi:    zjRPBaseURL,
 				Codename: "gemma-2-9b",
 			},
 		},
@@ -475,7 +532,7 @@ var (
 		Providers: map[string]ModelProvider{
 			ProviderZukijourney: {
 				API:      zjBaseURL,
-				RPApi:    zjRPBaseUrl,
+				RPApi:    zjRPBaseURL,
 				Codename: "gemma-2-27b",
 			},
 		},
@@ -485,9 +542,9 @@ var (
 		ModelGpt4oMini,
 		ModelGpt4o,
 		ModelGeminiPro,
-		//ModelGeminiExp1114,
 		ModelClaude3Haiku,
 		ModelGeminiFlash,
+		ModelGeminiExp1121,
 		ModelCommandRplus,
 		ModelMixtral8x7b,
 		ModelMixtral8x22b,
@@ -499,6 +556,8 @@ var (
 		ModelLlama70b,
 		ModelLlama11b,
 		ModelLlama8b,
+		ModelNousHermes405b,
+		ModelLiquidLFM40b,
 		ModelGigaChatPro,
 		ModelPhi35MoE,
 		ModelPhi35Vision,
@@ -516,6 +575,7 @@ var (
 		ProviderGithub,
 		ProviderGoogle,
 		ProviderGroq,
+		ProviderOpenRouter,
 		ProviderZukijourney,
 		ProviderFresed,
 		ProviderHelixmind,
@@ -555,6 +615,8 @@ func (m Model) Client(provider string, rp bool) (*openai.Client, string) {
 		token = groqToken
 	case ProviderGoogle:
 		token = googleToken
+	case ProviderOpenRouter:
+		token = openRouterToken
 	default:
 		token = githubToken
 	}
