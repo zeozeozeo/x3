@@ -48,9 +48,12 @@ type Model struct {
 	Name           string
 	Command        string
 	NeedsWhitelist bool
-	Vision         bool
-	Encoding       tokenizer.Encoding
-	Providers      map[string]ModelProvider
+	// Llama 3.2 doesn't support system prompts when images are passed, so we
+	// have to detect it :/
+	IsLlama   bool
+	Vision    bool
+	Encoding  tokenizer.Encoding
+	Providers map[string]ModelProvider
 }
 
 var (
@@ -283,6 +286,7 @@ var (
 	ModelLlama405b = Model{
 		Name:    "Meta Llama 3.1 405B Instruct",
 		Command: "llama405b",
+		IsLlama: true,
 		Providers: map[string]ModelProvider{
 			ProviderOpenRouter: {
 				API:      openRouterBaseURL,
@@ -304,6 +308,7 @@ var (
 	ModelLlama90b = Model{
 		Name:    "Meta Llama 3.2 90B Instruct",
 		Command: "llama90b",
+		IsLlama: true,
 		Vision:  true,
 		Providers: map[string]ModelProvider{
 			ProviderGroq: {
@@ -328,6 +333,7 @@ var (
 	ModelLlama11b = Model{
 		Name:    "Meta Llama 3.2 11B Instruct",
 		Command: "llama11b",
+		IsLlama: true,
 		Vision:  true,
 		Providers: map[string]ModelProvider{
 			ProviderGroq: {
@@ -352,6 +358,7 @@ var (
 	ModelLlama70b = Model{
 		Name:    "Meta Llama 3.1 70B Instruct",
 		Command: "llama70b",
+		IsLlama: true,
 		Providers: map[string]ModelProvider{
 			ProviderGroq: {
 				API:      groqBaseURL,
@@ -376,6 +383,7 @@ var (
 	ModelLlama8b = Model{
 		Name:    "Meta Llama 3.1 8B Instruct",
 		Command: "llama8b",
+		IsLlama: true,
 		Providers: map[string]ModelProvider{
 			ProviderGroq: {
 				API:      groqBaseURL,

@@ -222,6 +222,11 @@ var (
 					Description: "Set roleplay mode for this chat",
 					Required:    false,
 				},
+				discord.ApplicationCommandOptionInt{
+					Name:        "context",
+					Description: "Amount of surrounding messages to use as context. Pass a negative number to reset",
+					Required:    false,
+				},
 				discord.ApplicationCommandOptionBool{
 					Name:        "ephemeral",
 					Description: "If the response should only be visible to you",
@@ -266,18 +271,21 @@ const (
 
 type ChannelCache struct {
 	// in channels where the bot cannot read messages this is set for caching messages
-	Llmer       *llm.Llmer          `json:"llmer"`
-	PersonaMeta persona.PersonaMeta `json:"persona_meta"`
-	Usage       llm.Usage           `json:"usage,omitempty"`
-	LastUsage   llm.Usage           `json:"last_usage,omitempty"`
+	Llmer         *llm.Llmer          `json:"llmer"`
+	PersonaMeta   persona.PersonaMeta `json:"persona_meta"`
+	Usage         llm.Usage           `json:"usage,omitempty"`
+	LastUsage     llm.Usage           `json:"last_usage,omitempty"`
+	ContextLength int                 `json:"context_length"`
 }
 
 func newChannelCache() *ChannelCache {
-	return &ChannelCache{PersonaMeta: persona.PersonaProto}
+	return &ChannelCache{PersonaMeta: persona.PersonaProto, ContextLength: maxContextMessages}
 }
 
 func unmarshalChannelCache(data []byte) (*ChannelCache, error) {
-	var cache ChannelCache
+	cache := ChannelCache{
+		ContextLength: maxContextMessages,
+	}
 	err := json.Unmarshal(data, &cache)
 	return &cache, err
 }
@@ -596,6 +604,7 @@ func isImageAttachment(attachment discord.Attachment) bool {
 func addImageAttachments(llmer *llm.Llmer, msg discord.Message) {
 	for _, attachment := range msg.Attachments {
 		if isImageAttachment(attachment) {
+			slog.Debug("adding image attachment", slog.String("url", attachment.URL))
 			llmer.AddImage(attachment.URL)
 		}
 	}
@@ -622,8 +631,8 @@ func getLobotomyAmountFromMessage(msg discord.Message) int {
 }
 
 // returns whether a lobotomy was performed
-func addContextMessagesIfPossible(client bot.Client, llmer *llm.Llmer, channelID, messageID snowflake.ID, formatUsernames bool) bool {
-	messages, err := client.Rest().GetMessages(channelID, 0, messageID, 0, maxContextMessages)
+func addContextMessagesIfPossible(client bot.Client, llmer *llm.Llmer, channelID, messageID snowflake.ID, formatUsernames bool, contextLen int) bool {
+	messages, err := client.Rest().GetMessages(channelID, 0, messageID, 0, contextLen)
 	if err != nil {
 		return false
 	}
@@ -760,7 +769,7 @@ func handleLlm(event *handler.CommandEvent, m *model.Model) error {
 	// add context if possible
 	lastMessage := event.Channel().MessageChannel.LastMessageID()
 	if !useCache && lastMessage != nil {
-		addContextMessagesIfPossible(event.Client(), llmer, event.Channel().ID(), *lastMessage, persona.FormatUsernames)
+		addContextMessagesIfPossible(event.Client(), llmer, event.Channel().ID(), *lastMessage, persona.FormatUsernames, cache.ContextLength)
 
 		// and we also want the last message in the channel
 		msg, err := event.Client().Rest().GetMessage(event.Channel().ID(), *lastMessage)
@@ -860,7 +869,7 @@ func handleLlmInteraction(event *events.MessageCreate, eraseX3 bool) error {
 
 	// the interaction happened in a server or in a bot DM, so we can get the surrounding messages
 	llmer := llm.NewLlmer()
-	addContextMessagesIfPossible(event.Client(), llmer, event.ChannelID, event.MessageID, persona.FormatUsernames)
+	addContextMessagesIfPossible(event.Client(), llmer, event.ChannelID, event.MessageID, persona.FormatUsernames, cache.ContextLength)
 	slog.Debug("interaction; added context messages", slog.Int("count", llmer.NumMessages()))
 
 	// and we also want the event message
@@ -1142,14 +1151,33 @@ func handlePersona(event *handler.CommandEvent) error {
 	dataModel := data.String("model")
 	dataSystem := data.String("system")
 	dataRoleplay := data.Bool("roleplay")
+	dataContext := data.Int("context")
+	if dataContext < 0 {
+		dataContext = maxContextMessages
+	}
 	ephemeral := data.Bool("ephemeral")
 
 	m := model.GetModelByName(dataModel)
-	if m.NeedsWhitelist && !isInWhitelist(event.User().ID) {
+
+	// only query whitelist if we need to
+	inWhitelist := false
+	if m.NeedsWhitelist || dataContext > 50 {
+		inWhitelist = isInWhitelist(event.User().ID)
+	}
+
+	if m.NeedsWhitelist && !inWhitelist {
 		return event.CreateMessage(
 			discord.NewMessageCreateBuilder().
 				SetContentf("You need to be whitelisted to set the model `%s`. Try `%s`", dataModel, model.ModelGpt4oMini.Name).
-				SetEphemeral(ephemeral).
+				SetEphemeral(true).
+				Build(),
+		)
+	}
+	if dataContext > 50 && !inWhitelist {
+		return event.CreateMessage(
+			discord.NewMessageCreateBuilder().
+				SetContent("The maximum allowed context length for users outside the whitelist is 50").
+				SetEphemeral(true).
 				Build(),
 		)
 	}
@@ -1173,6 +1201,8 @@ func handlePersona(event *handler.CommandEvent) error {
 		cache.PersonaMeta.Model = dataModel
 	}
 	cache.PersonaMeta.Roleplay = dataRoleplay
+	prevContextLen := cache.ContextLength
+	cache.ContextLength = dataContext
 
 	if err := cache.write(event.Channel().ID()); err != nil {
 		return handleFollowupError(event, err, false)
@@ -1196,6 +1226,9 @@ func handlePersona(event *handler.CommandEvent) error {
 		} else {
 			didWhat = append(didWhat, "disabled roleplay mode")
 		}
+	}
+	if cache.ContextLength != prevContextLen {
+		didWhat = append(didWhat, fmt.Sprintf("updated context length %d → %d", prevContextLen, cache.ContextLength))
 	}
 
 	if len(didWhat) > 0 {

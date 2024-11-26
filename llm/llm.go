@@ -134,15 +134,43 @@ func (l *Llmer) AddImage(imageURL string) {
 	msg.Images = append(msg.Images, imageURL)
 }
 
-func (l Llmer) convertMessages(hasVision bool) []openai.ChatCompletionMessage {
+func (l Llmer) convertMessages(hasVision bool, isLlama bool) []openai.ChatCompletionMessage {
+	// find the index of the last message with images
+	imageIdx := -1
+	for i := len(l.Messages) - 1; i >= 0; i-- {
+		if len(l.Messages[i].Images) > 0 {
+			imageIdx = i
+			break
+		}
+	}
+
+	if imageIdx != len(l.Messages)-1 && hasVision && isLlama {
+		// llama 3.2 doesn't support a system prompt and an image,
+		// but we can't afford to remove the system prompt in every context
+		// with images; and this message is not the last one, so we're not going
+		// to attach old context images
+		imageIdx = -1
+	} else if imageIdx != -1 && len(l.Messages)-imageIdx >= 4 {
+		// older than 4 messages, we can probably let it go
+		imageIdx = -1
+	}
+
 	var messages []openai.ChatCompletionMessage
-	for _, msg := range l.Messages {
-		if len(msg.Images) == 0 || !hasVision {
+	for i, msg := range l.Messages {
+		if len(msg.Images) == 0 || !hasVision || i != imageIdx {
+			role := msg.Role
+			if msg.Role == RoleSystem && imageIdx != -1 && isLlama && hasVision {
+				// llama 3.2 doesn't support system messages with images
+				// so we're going to convert the system prompt into a user message
+				slog.Debug("replacing system message -> user message because of image (llama 3.2 with image)")
+				role = RoleUser
+			}
 			messages = append(messages, openai.ChatCompletionMessage{
-				Role:    msg.Role,
+				Role:    role,
 				Content: msg.Content,
 			})
 		} else {
+			slog.Debug("adding image")
 			// must structure as a multipart message if we have images
 			parts := []openai.ChatMessagePart{
 				{
@@ -150,14 +178,24 @@ func (l Llmer) convertMessages(hasVision bool) []openai.ChatCompletionMessage {
 					Text: msg.Content,
 				},
 			}
-			for _, imageURL := range msg.Images {
-				parts = append(parts, openai.ChatMessagePart{
-					Type: openai.ChatMessagePartTypeImageURL,
-					ImageURL: &openai.ChatMessageImageURL{
-						URL: imageURL,
-					},
-				})
-			}
+			/*
+				for _, imageURL := range msg.Images {
+					parts = append(parts, openai.ChatMessagePart{
+						Type: openai.ChatMessagePartTypeImageURL,
+						ImageURL: &openai.ChatMessageImageURL{
+							URL: imageURL,
+						},
+					})
+				}
+			*/
+			// NB: most apis seem to only support one image sadly
+			// we choose the first attachment
+			parts = append(parts, openai.ChatMessagePart{
+				Type: openai.ChatMessagePartTypeImageURL,
+				ImageURL: &openai.ChatMessageImageURL{
+					URL: msg.Images[0],
+				},
+			})
 
 			messages = append(messages, openai.ChatCompletionMessage{
 				Role:         msg.Role,
@@ -174,6 +212,7 @@ func (l Llmer) estimateUsage(m model.Model) Usage {
 	codec := m.Tokenizer()
 
 	var responseMsg *Message
+	numImages := 0
 	for _, msg := range l.Messages {
 		if msg.Role == RoleAssistant {
 			responseMsg = &msg
@@ -185,6 +224,9 @@ func (l Llmer) estimateUsage(m model.Model) Usage {
 				fallthrough
 			case RoleUser:
 				usage.PromptTokens += len(ids)
+				if len(msg.Images) > 0 {
+					numImages = len(msg.Images)
+				}
 			}
 		}
 	}
@@ -196,21 +238,21 @@ func (l Llmer) estimateUsage(m model.Model) Usage {
 	}
 
 	usage.TotalTokens = usage.PromptTokens + usage.ResponseTokens
-	slog.Debug("estimated token usage", slog.String("usage", usage.String()), slog.Duration("in", time.Since(start)))
+	slog.Debug("estimated token usage", slog.String("usage", usage.String()), slog.Duration("in", time.Since(start)), slog.Int("images", numImages))
 	return usage
 }
 
 func (l *Llmer) requestCompletionInternal(m model.Model, provider string, rp bool) (string, Usage, error) {
 	slog.Debug("request completion.. message history follows..", slog.String("model", m.Name))
 	for _, msg := range l.Messages {
-		slog.Debug("    message", slog.String("role", msg.Role), slog.String("content", msg.Content))
+		slog.Debug("    message", slog.String("role", msg.Role), slog.String("content", msg.Content), slog.Int("images", len(msg.Images)))
 	}
 
 	client, codename := m.Client(provider, rp)
 	req := openai.ChatCompletionRequest{
 		Model: codename,
 		// google api doesn't support image URIs, WTF google?
-		Messages: l.convertMessages(m.Vision && provider != model.ProviderGoogle),
+		Messages: l.convertMessages(m.Vision && provider != model.ProviderGoogle, m.IsLlama),
 		Stream:   true,
 		StreamOptions: &openai.StreamOptions{
 			IncludeUsage: true,
