@@ -265,8 +265,8 @@ var (
 
 const (
 	// LLM interaction context surrounding messages
-	maxContextMessages = 30
-	maxRedditAttempts  = 3
+	defaultContextMessages = 30
+	maxRedditAttempts      = 3
 )
 
 type ChannelCache struct {
@@ -279,12 +279,12 @@ type ChannelCache struct {
 }
 
 func newChannelCache() *ChannelCache {
-	return &ChannelCache{PersonaMeta: persona.PersonaProto, ContextLength: maxContextMessages}
+	return &ChannelCache{PersonaMeta: persona.PersonaProto, ContextLength: defaultContextMessages}
 }
 
 func unmarshalChannelCache(data []byte) (*ChannelCache, error) {
 	cache := ChannelCache{
-		ContextLength: maxContextMessages,
+		ContextLength: defaultContextMessages,
 	}
 	err := json.Unmarshal(data, &cache)
 	return &cache, err
@@ -1151,9 +1151,9 @@ func handlePersona(event *handler.CommandEvent) error {
 	dataModel := data.String("model")
 	dataSystem := data.String("system")
 	dataRoleplay := data.Bool("roleplay")
-	dataContext := data.Int("context")
-	if dataContext < 0 {
-		dataContext = maxContextMessages
+	dataContext, hasContext := data.OptInt("context")
+	if !hasContext || dataContext < 0 {
+		dataContext = defaultContextMessages
 	}
 	ephemeral := data.Bool("ephemeral")
 
