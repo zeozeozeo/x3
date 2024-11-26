@@ -172,18 +172,29 @@ func (l Llmer) estimateUsage(m model.Model) Usage {
 	start := time.Now()
 	var usage Usage
 	codec := m.Tokenizer()
+
+	var responseMsg *Message
 	for _, msg := range l.Messages {
+		if msg.Role == RoleAssistant {
+			responseMsg = &msg
+			continue
+		}
 		if ids, _, err := codec.Encode(msg.Content); err == nil {
 			switch msg.Role {
 			case RoleSystem:
 				fallthrough
 			case RoleUser:
 				usage.PromptTokens += len(ids)
-			default:
-				usage.ResponseTokens = len(ids) // NB: not +=!
 			}
 		}
 	}
+
+	if responseMsg != nil {
+		if ids, _, err := codec.Encode(responseMsg.Content); err == nil {
+			usage.ResponseTokens = len(ids)
+		}
+	}
+
 	usage.TotalTokens = usage.PromptTokens + usage.ResponseTokens
 	slog.Debug("estimated token usage", slog.String("usage", usage.String()), slog.Duration("in", time.Since(start)))
 	return usage
