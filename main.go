@@ -1144,11 +1144,6 @@ func handlePersona(event *handler.CommandEvent) error {
 	dataRoleplay := data.Bool("roleplay")
 	ephemeral := data.Bool("ephemeral")
 
-	personaMeta, err := persona.GetMetaByName(dataPersona)
-	if err != nil {
-		return handleFollowupError(event, err, ephemeral)
-	}
-
 	m := model.GetModelByName(dataModel)
 	if m.NeedsWhitelist && !isInWhitelist(event.User().ID) {
 		return event.CreateMessage(
@@ -1160,6 +1155,10 @@ func handlePersona(event *handler.CommandEvent) error {
 	}
 
 	cache := getChannelCache(event.Channel().ID())
+	personaMeta, err := persona.GetMetaByName(dataPersona)
+	if err != nil {
+		personaMeta = cache.PersonaMeta
+	}
 
 	// update persona meta in channel cache
 	prevMeta := cache.PersonaMeta
