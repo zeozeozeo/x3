@@ -6,11 +6,13 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"math/rand"
 	"net/http"
 	"os"
 	"os/signal"
 	"path"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 	"syscall"
@@ -28,6 +30,7 @@ import (
 	"github.com/disgoorg/disgo/handler/middleware"
 	"github.com/disgoorg/snowflake/v2"
 	"github.com/dustin/go-humanize"
+	"github.com/lithammer/fuzzysearch/fuzzy"
 	"github.com/zeozeozeo/x3/llm"
 	"github.com/zeozeozeo/x3/model"
 	"github.com/zeozeozeo/x3/persona"
@@ -278,6 +281,22 @@ var (
 							Required:     true,
 							Autocomplete: true,
 						},
+						discord.ApplicationCommandOptionBool{
+							Name:        "ephemeral",
+							Description: "If the response should only be visible to you",
+							Required:    false,
+						},
+					},
+				},
+				discord.ApplicationCommandOptionSubCommand{
+					Name:        "random",
+					Description: "Get a random quote",
+					Options: []discord.ApplicationCommandOption{
+						discord.ApplicationCommandOptionBool{
+							Name:        "ephemeral",
+							Description: "If the response should only be visible to you",
+							Required:    false,
+						},
 					},
 				},
 			},
@@ -352,7 +371,8 @@ func (s GlobalStats) write() error {
 type Quote struct {
 	MessageID     snowflake.ID `json:"message_id"`
 	Quoter        snowflake.ID `json:"quoter"`
-	Author        snowflake.ID `json:"author"`
+	AuthorID      snowflake.ID `json:"author_id"`
+	AuthorUser    string       `json:"author_user"`
 	Channel       snowflake.ID `json:"channel"`
 	Text          string       `json:"text"`
 	AttachmentURL string       `json:"attachment_url"`
@@ -622,8 +642,11 @@ func main() {
 	r.Command("/stats", handleStats)
 
 	// quote
-	r.Autocomplete("/quote get", handleQuoteGetAutocomplete)
-	r.Command("/quote get", handleQuoteGet)
+	r.Route("/quote", func(r handler.Router) {
+		r.Autocomplete("/get", handleQuoteGetAutocomplete)
+		r.Command("/get", handleQuoteGet)
+		r.Command("/random", handleQuoteRandom)
+	})
 
 	// image
 	r.Command("/boykisser", handleBoykisser)
@@ -761,7 +784,7 @@ outer:
 			llmer.AddMessage(llm.RoleUser, interaction)
 		}
 
-		llmer.AddMessage(role, formatMsg(msg.Content, msg.Author.Username, formatUsernames))
+		llmer.AddMessage(role, formatMsg(msg.Content, msg.Author.EffectiveName(), formatUsernames))
 
 		// if this is the last message with an image we add, check for images
 		if i == latestImageAttachmentIdx {
@@ -870,7 +893,7 @@ func handleLlm(event *handler.CommandEvent, m *model.Model) error {
 			if isLobotomyMessage(*msg) {
 				llmer.Lobotomize(getLobotomyAmountFromMessage(*msg))
 			} else {
-				llmer.AddMessage(llm.RoleUser, formatMsg(msg.Content, msg.Author.Username, persona.FormatUsernames))
+				llmer.AddMessage(llm.RoleUser, formatMsg(msg.Content, msg.Author.EffectiveName(), persona.FormatUsernames))
 			}
 		}
 	}
@@ -878,7 +901,7 @@ func handleLlm(event *handler.CommandEvent, m *model.Model) error {
 	slog.Debug("handleLlm: got context messages", slog.Int("count", llmer.NumMessages()))
 
 	// and we also want the actual slash command prompt
-	llmer.AddMessage(llm.RoleUser, formatMsg(prompt, event.User().Username, persona.FormatUsernames))
+	llmer.AddMessage(llm.RoleUser, formatMsg(prompt, event.User().EffectiveName(), persona.FormatUsernames))
 
 	// discord only gives us 3s to respond unless we do this (x3 is thinking...)
 	event.DeferCreateMessage(ephemeral)
@@ -972,7 +995,7 @@ func handleLlmInteraction(event *events.MessageCreate, eraseX3 bool) error {
 	} else {
 		content = event.Message.Content
 	}
-	llmer.AddMessage(llm.RoleUser, formatMsg(content, event.Message.Author.Username, persona.FormatUsernames))
+	llmer.AddMessage(llm.RoleUser, formatMsg(content, event.Message.Author.EffectiveName(), persona.FormatUsernames))
 	addImageAttachments(llmer, event.Message)
 
 	llmer.SetPersona(persona)
@@ -1481,11 +1504,11 @@ func sendPrettyError(client bot.Client, msg string, channelID, messageID snowfla
 	return err
 }
 
-func sendQuote(client bot.Client, channelID, messageID snowflake.ID, quote Quote, nr int) error {
+func sendQuote(event *handler.CommandEvent, client bot.Client, channelID, messageID snowflake.ID, quote Quote, nr int) error {
 	text := fmt.Sprintf(
 		"“%s”\n\n\\- <@%d> in <#%d>, quoted by <@%d>",
 		quote.Text,
-		quote.Author,
+		quote.AuthorID,
 		quote.Channel,
 		quote.Quoter,
 	)
@@ -1499,17 +1522,27 @@ func sendQuote(client bot.Client, channelID, messageID snowflake.ID, quote Quote
 		builder.SetImage(quote.AttachmentURL)
 	}
 
-	_, err := client.Rest().CreateMessage(
-		channelID,
-		discord.NewMessageCreateBuilder().
-			SetMessageReferenceByID(messageID).
-			SetAllowedMentions(&discord.AllowedMentions{
-				RepliedUser: false,
-			}).
-			AddEmbeds(builder.Build()).
-			Build(),
-	)
-	return err
+	if channelID != 0 && messageID != 0 {
+		_, err := client.Rest().CreateMessage(
+			channelID,
+			discord.NewMessageCreateBuilder().
+				SetMessageReferenceByID(messageID).
+				SetAllowedMentions(&discord.AllowedMentions{
+					RepliedUser: false,
+				}).
+				AddEmbeds(builder.Build()).
+				Build(),
+		)
+		return err
+	} else if event != nil {
+		return event.CreateMessage(
+			discord.NewMessageCreateBuilder().
+				AddEmbeds(builder.Build()).
+				SetEphemeral(event.SlashCommandInteractionData().Bool("ephemeral")).
+				Build(),
+		)
+	}
+	return nil
 }
 
 func handleQuote(event *events.MessageCreate) error {
@@ -1552,7 +1585,8 @@ func handleQuote(event *events.MessageCreate) error {
 	nr := server.AddQuote(Quote{
 		MessageID:     event.Message.ReferencedMessage.ID,
 		Quoter:        event.Message.Author.ID,
-		Author:        event.Message.ReferencedMessage.Author.ID,
+		AuthorID:      event.Message.ReferencedMessage.Author.ID,
+		AuthorUser:    event.Message.ReferencedMessage.Author.Username,
 		Channel:       event.Message.ReferencedMessage.ChannelID,
 		Text:          event.Message.ReferencedMessage.Content,
 		AttachmentURL: attachmentURL,
@@ -1565,6 +1599,7 @@ func handleQuote(event *events.MessageCreate) error {
 	}
 
 	return sendQuote(
+		nil,
 		event.Client(),
 		event.ChannelID,
 		event.MessageID,
@@ -1573,8 +1608,15 @@ func handleQuote(event *events.MessageCreate) error {
 	)
 }
 
+func ellipsisTrim(s string, length int) string {
+	r := []rune(s)
+	if len(r) > length {
+		return string(r[:length-1]) + "…"
+	}
+	return s
+}
+
 func handleQuoteGetAutocomplete(event *handler.AutocompleteEvent) error {
-	fmt.Println("----------- SEX")
 	var serverID snowflake.ID
 	if event.GuildID() != nil {
 		serverID = *event.GuildID()
@@ -1588,11 +1630,27 @@ func handleQuoteGetAutocomplete(event *handler.AutocompleteEvent) error {
 		return err
 	}
 
+	name := event.Data.String("name")
+	slog.Debug("handling autocomplete", slog.String("name", name))
+
+	var names []string
+	for _, quote := range server.Quotes {
+		names = append(names, fmt.Sprintf("%s %s", quote.Text, quote.AuthorUser))
+	}
+
+	matches := fuzzy.RankFindNormalizedFold(name, names)
+	sort.Sort(matches)
+
 	var choices []discord.AutocompleteChoice
-	for i, quote := range server.Quotes {
+	for _, match := range matches {
+		if len(choices) >= 25 {
+			break
+		}
+		quote := server.Quotes[match.OriginalIndex]
+		res := fmt.Sprintf("%d: %s (%s)", match.OriginalIndex+1, quote.Text, quote.AuthorUser)
 		choices = append(choices, discord.AutocompleteChoiceString{
-			Name:  fmt.Sprintf("%d", i+1),
-			Value: quote.Text,
+			Name:  ellipsisTrim(res, 100),
+			Value: fmt.Sprintf("%d", match.OriginalIndex), // STORES THE INDEX!!
 		})
 	}
 
@@ -1600,5 +1658,49 @@ func handleQuoteGetAutocomplete(event *handler.AutocompleteEvent) error {
 }
 
 func handleQuoteGet(event *handler.CommandEvent) error {
-	return nil
+	idx, err := strconv.Atoi(event.SlashCommandInteractionData().String("name"))
+	if err != nil {
+		return err
+	}
+
+	var serverID snowflake.ID
+	if event.GuildID() != nil {
+		serverID = *event.GuildID()
+	} else {
+		serverID = event.Channel().ID() // in dm, probably
+	}
+
+	server, err := getServerStats(serverID)
+	if err != nil {
+		slog.Error("failed to get server stats", slog.Any("err", err))
+		return err
+	}
+
+	if idx > len(server.Quotes)-1 || idx < 0 {
+		return handleFollowupError(event, fmt.Errorf("quote #%d does not exist", idx+1), true)
+	}
+
+	return sendQuote(event, event.Client(), 0, 0, server.Quotes[idx], idx+1)
+}
+
+func handleQuoteRandom(event *handler.CommandEvent) error {
+	var serverID snowflake.ID
+	if event.GuildID() != nil {
+		serverID = *event.GuildID()
+	} else {
+		serverID = event.Channel().ID() // in dm, probably
+	}
+
+	server, err := getServerStats(serverID)
+	if err != nil {
+		slog.Error("failed to get server stats", slog.Any("err", err))
+		return err
+	}
+
+	if len(server.Quotes) == 0 {
+		return handleFollowupError(event, fmt.Errorf("no quotes in this server"), true)
+	}
+
+	nr := rand.Intn(len(server.Quotes))
+	return sendQuote(event, event.Client(), 0, 0, server.Quotes[nr], nr+1)
 }
