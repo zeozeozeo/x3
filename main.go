@@ -1650,7 +1650,7 @@ func handleQuoteGetAutocomplete(event *handler.AutocompleteEvent) error {
 		res := fmt.Sprintf("%d: %s (%s)", match.OriginalIndex+1, quote.Text, quote.AuthorUser)
 		choices = append(choices, discord.AutocompleteChoiceString{
 			Name:  ellipsisTrim(res, 100),
-			Value: fmt.Sprintf("%d", match.OriginalIndex), // STORES THE INDEX!!
+			Value: fmt.Sprintf("%d", match.OriginalIndex+1),
 		})
 	}
 
@@ -1662,6 +1662,9 @@ func handleQuoteGet(event *handler.CommandEvent) error {
 	if err != nil {
 		return err
 	}
+
+	// 1-indexed
+	idx -= 1
 
 	var serverID snowflake.ID
 	if event.GuildID() != nil {
