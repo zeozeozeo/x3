@@ -254,6 +254,34 @@ var (
 				},
 			},
 		},
+		discord.SlashCommandCreate{
+			Name:        "quote",
+			Description: "Get a server quote. Reply to a message with \"x3 quote\" to make a new quote",
+			IntegrationTypes: []discord.ApplicationIntegrationType{
+				discord.ApplicationIntegrationTypeGuildInstall,
+				discord.ApplicationIntegrationTypeUserInstall,
+			},
+			Contexts: []discord.InteractionContextType{
+				discord.InteractionContextTypeGuild,
+				discord.InteractionContextTypeBotDM,
+				discord.InteractionContextTypePrivateChannel,
+			},
+			Options: []discord.ApplicationCommandOption{
+				discord.ApplicationCommandOptionSubCommand{
+					Name:        "get",
+					Description: "Get a quote by name",
+					Options: []discord.ApplicationCommandOption{
+						discord.ApplicationCommandOptionString{
+							// autocompleted
+							Name:         "name",
+							Description:  "Name of the quote",
+							Required:     true,
+							Autocomplete: true,
+						},
+					},
+				},
+			},
+		},
 		// gpt commands are added in init(), except for this one
 		makeGptCommand("chat", "Chat with the current persona"),
 	}
@@ -319,6 +347,61 @@ func (s GlobalStats) write() error {
 	}
 	_, err = db.Exec("UPDATE global_stats SET stats = ? WHERE EXISTS (SELECT 1 FROM global_stats)", data)
 	return err
+}
+
+type Quote struct {
+	MessageID     snowflake.ID `json:"message_id"`
+	Quoter        snowflake.ID `json:"quoter"`
+	Author        snowflake.ID `json:"author"`
+	Channel       snowflake.ID `json:"channel"`
+	Text          string       `json:"text"`
+	AttachmentURL string       `json:"attachment_url"`
+	Timestamp     time.Time    `json:"timestamp"`
+}
+
+type ServerStats struct {
+	Quotes []Quote `json:"quotes"`
+}
+
+func (s ServerStats) QuoteExists(messageID snowflake.ID) (bool, int) {
+	for i, quote := range s.Quotes {
+		if quote.MessageID == messageID {
+			return true, i
+		}
+	}
+	return false, 0
+}
+
+func (s *ServerStats) AddQuote(quote Quote) int {
+	s.Quotes = append(s.Quotes, quote)
+	return len(s.Quotes)
+}
+
+func unmarshalServerStats(data []byte) (ServerStats, error) {
+	var stats ServerStats
+	err := json.Unmarshal(data, &stats)
+	return stats, err
+}
+
+func (s ServerStats) write(serverID snowflake.ID) error {
+	data, err := json.Marshal(s)
+	if err != nil {
+		return err
+	}
+	_, err = db.Exec("INSERT OR REPLACE INTO server_stats (server_id, stats) VALUES (?, ?)", serverID.String(), data)
+	return err
+}
+
+func getServerStats(serverID snowflake.ID) (ServerStats, error) {
+	var data []byte
+	err := db.QueryRow("SELECT stats FROM server_stats WHERE server_id = ?", serverID.String()).Scan(&data)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return ServerStats{}, nil
+		}
+		return ServerStats{}, err
+	}
+	return unmarshalServerStats(data)
 }
 
 func getGlobalStats() (GlobalStats, error) {
@@ -450,6 +533,7 @@ func init() {
 	if err != nil {
 		panic(err)
 	}
+
 	// check if the global stats table has any rows, if not, create one
 	var count int
 	err = db.QueryRow("SELECT COUNT(*) FROM global_stats").Scan(&count)
@@ -465,6 +549,17 @@ func init() {
 		if err != nil {
 			panic(err)
 		}
+	}
+
+	// server stats
+	_, err = db.Exec(`
+			CREATE TABLE IF NOT EXISTS server_stats (
+				server_id TEXT PRIMARY KEY,
+				stats BLOB
+			)
+		`)
+	if err != nil {
+		panic(err)
 	}
 
 	// default db state
@@ -513,27 +608,25 @@ func main() {
 			return handleLlm(event, &model)
 		})
 	}
-	r.Group(func(r handler.Router) {
-		for _, model := range model.AllModels {
-			registerLlm(r, "/"+model.Command, model)
-		}
-		r.Command("/chat", func(e *handler.CommandEvent) error {
-			return handleLlm(e, nil)
-		})
+	for _, model := range model.AllModels {
+		registerLlm(r, "/"+model.Command, model)
+	}
+	r.Command("/chat", func(e *handler.CommandEvent) error {
+		return handleLlm(e, nil)
 	})
 
 	// utils
-	r.Group(func(r handler.Router) {
-		r.Command("/whitelist", handleWhitelist)
-		r.Command("/lobotomy", handleLobotomy)
-		r.Command("/persona", handlePersona)
-		r.Command("/stats", handleStats)
-	})
+	r.Command("/whitelist", handleWhitelist)
+	r.Command("/lobotomy", handleLobotomy)
+	r.Command("/persona", handlePersona)
+	r.Command("/stats", handleStats)
+
+	// quote
+	r.Autocomplete("/quote get", handleQuoteGetAutocomplete)
+	r.Command("/quote get", handleQuoteGet)
 
 	// image
-	r.Group(func(r handler.Router) {
-		r.Command("/boykisser", handleBoykisser)
-	})
+	r.Command("/boykisser", handleBoykisser)
 
 	r.ButtonComponent("/refresh_boykisser", handleBoykisserRefresh)
 
@@ -592,9 +685,9 @@ func handleFollowupError(event *handler.CommandEvent, err error, ephemeral bool)
 
 func formatMsg(msg, username string, formatUsernames bool) string {
 	if formatUsernames {
-		return fmt.Sprintf("%s: %s", username, stripX3(msg))
+		return fmt.Sprintf("%s: %s", username, msg)
 	}
-	return stripX3(msg)
+	return msg
 }
 
 func isImageAttachment(attachment discord.Attachment) bool {
@@ -853,7 +946,7 @@ func handleLlm(event *handler.CommandEvent, m *model.Model) error {
 	return nil
 }
 
-var containsX3Regex = regexp.MustCompile(`\b[Xx]3\b`)
+var containsX3Regex = regexp.MustCompile(`(?i)(^|\P{L})[Xx]3(\P{L}|$)`)
 
 func stripX3(s string) string {
 	return strings.TrimSpace(containsX3Regex.ReplaceAllString(s, ""))
@@ -904,6 +997,8 @@ func handleLlmInteraction(event *events.MessageCreate, eraseX3 bool) error {
 	return nil
 }
 
+var containsProtogenRegex = regexp.MustCompile(`(?i)(^|\W)(protogen|протоген)($|\W)`)
+
 func onMessageCreate(event *events.MessageCreate) {
 	if event.Message.Author.Bot {
 		return
@@ -941,9 +1036,34 @@ func onMessageCreate(event *events.MessageCreate) {
 
 	// check if "x3" is mentioned
 	if containsX3Regex.MatchString(event.Message.Content) {
+		trimmed := strings.TrimSpace(event.Message.Content)
+		if trimmed == "x3 quote" || trimmed == "x3 quote this" {
+			handleQuote(event)
+			return
+		}
 		slog.Debug("handling x3 interaction")
 		if err := handleLlmInteraction(event, true); err != nil {
 			slog.Error("failed to handle x3 interaction", slog.Any("err", err))
+		}
+		return
+	}
+
+	// check if "protogen" is mentioned
+	if containsProtogenRegex.MatchString(event.Message.Content) {
+		_, err := event.Client().Rest().CreateMessage(
+			event.ChannelID,
+			discord.MessageCreate{
+				Content: "https://tenor.com/view/protogen-vrchat-hello-hi-jumping-gif-18406743932972249866",
+				MessageReference: &discord.MessageReference{
+					MessageID: &event.MessageID,
+				},
+				AllowedMentions: &discord.AllowedMentions{
+					RepliedUser: false,
+				},
+			},
+		)
+		if err != nil {
+			slog.Error("failed to send protogen response", slog.Any("err", err))
 		}
 		return
 	}
@@ -1145,17 +1265,45 @@ func handleBoykisserRefresh(data discord.ButtonInteractionData, event *handler.C
 	return err
 }
 
+func handlePersonaInfo(event *handler.CommandEvent, ephemeral bool) error {
+	cache := getChannelCache(event.Channel().ID())
+	builder := discord.NewEmbedBuilder().
+		SetTitle("Persona").
+		SetColor(0x0085ff).
+		SetDescription("Current persona settings in channel. Use `/stats` to view usage stats").
+		SetFooter("x3", "https://i.imgur.com/ckpztZY.png").
+		SetTimestamp(time.Now()).
+		AddField("Name", cache.PersonaMeta.Name, true).
+		AddField("Description", cache.PersonaMeta.Desc, true).
+		AddField("Model", cache.PersonaMeta.Model, true)
+	if cache.PersonaMeta.System != "" {
+		builder.AddField("System prompt", cache.PersonaMeta.System, true)
+	}
+	builder.AddField("Roleplay", fmt.Sprintf("%v", cache.PersonaMeta.Roleplay), true).
+		AddField("Context length", fmt.Sprintf("%d", cache.ContextLength), true)
+	if cache.Llmer != nil {
+		builder.AddField("Message cache", fmt.Sprintf("%d messages", cache.Llmer.NumMessages()), true)
+	}
+	return event.CreateMessage(
+		discord.NewMessageCreateBuilder().
+			AddEmbeds(builder.Build()).
+			SetEphemeral(ephemeral).
+			Build(),
+	)
+}
+
 func handlePersona(event *handler.CommandEvent) error {
 	data := event.SlashCommandInteractionData()
 	dataPersona := data.String("persona")
 	dataModel := data.String("model")
 	dataSystem := data.String("system")
-	dataRoleplay := data.Bool("roleplay")
+	dataRoleplay, hasRoleplay := data.OptBool("roleplay")
 	dataContext, hasContext := data.OptInt("context")
-	if !hasContext || dataContext < 0 {
-		dataContext = defaultContextMessages
-	}
 	ephemeral := data.Bool("ephemeral")
+
+	if dataPersona == "" && dataModel == "" && dataSystem == "" && !hasRoleplay && !hasContext {
+		return handlePersonaInfo(event, ephemeral)
+	}
 
 	m := model.GetModelByName(dataModel)
 
@@ -1202,7 +1350,12 @@ func handlePersona(event *handler.CommandEvent) error {
 	}
 	cache.PersonaMeta.Roleplay = dataRoleplay
 	prevContextLen := cache.ContextLength
-	cache.ContextLength = dataContext
+	if hasContext {
+		if dataContext < 0 {
+			dataContext = defaultContextMessages
+		}
+		cache.ContextLength = dataContext
+	}
 
 	if err := cache.write(event.Channel().ID()); err != nil {
 		return handleFollowupError(event, err, false)
@@ -1306,5 +1459,146 @@ func handleStats(event *handler.CommandEvent) error {
 			SetEphemeral(ephemeral).
 			Build(),
 	)
+}
 
+func sendPrettyError(client bot.Client, msg string, channelID, messageID snowflake.ID) error {
+	_, err := client.Rest().CreateMessage(
+		channelID,
+		discord.NewMessageCreateBuilder().
+			SetMessageReferenceByID(messageID).
+			SetAllowedMentions(&discord.AllowedMentions{
+				RepliedUser: false,
+			}).
+			AddEmbeds(
+				discord.NewEmbedBuilder().
+					SetColor(0xf54242).
+					SetTitle("❌ Error").
+					SetDescription(msg).
+					Build(),
+			).
+			Build(),
+	)
+	return err
+}
+
+func sendQuote(client bot.Client, channelID, messageID snowflake.ID, quote Quote, nr int) error {
+	text := fmt.Sprintf(
+		"“%s”\n\n\\- <@%d> in <#%d>, quoted by <@%d>",
+		quote.Text,
+		quote.Author,
+		quote.Channel,
+		quote.Quoter,
+	)
+
+	builder := discord.NewEmbedBuilder().
+		SetColor(0xFFD700).
+		SetTitle(fmt.Sprintf("📜 Quote #%d", nr)).
+		SetTimestamp(quote.Timestamp).
+		SetDescription(text)
+	if quote.AttachmentURL != "" {
+		builder.SetImage(quote.AttachmentURL)
+	}
+
+	_, err := client.Rest().CreateMessage(
+		channelID,
+		discord.NewMessageCreateBuilder().
+			SetMessageReferenceByID(messageID).
+			SetAllowedMentions(&discord.AllowedMentions{
+				RepliedUser: false,
+			}).
+			AddEmbeds(builder.Build()).
+			Build(),
+	)
+	return err
+}
+
+func handleQuote(event *events.MessageCreate) error {
+	if event.Message.ReferencedMessage == nil {
+		return sendPrettyError(
+			event.Client(),
+			"You must reply to a message to quote it",
+			event.ChannelID,
+			event.MessageID,
+		)
+	}
+
+	var serverID snowflake.ID
+	if event.GuildID != nil {
+		serverID = *event.GuildID
+	} else {
+		serverID = event.ChannelID // in dm, probably
+	}
+
+	server, err := getServerStats(serverID)
+	if err != nil {
+		slog.Error("failed to get server stats", slog.Any("err", err))
+		return sendPrettyError(event.Client(), err.Error(), event.ChannelID, event.MessageID)
+	}
+
+	if exists, nr := server.QuoteExists(event.Message.ReferencedMessage.ID); exists {
+		return sendPrettyError(
+			event.Client(),
+			fmt.Sprintf("Quote #%d already exists", nr+1),
+			event.ChannelID,
+			event.MessageID,
+		)
+	}
+
+	var attachmentURL string
+	if len(event.Message.ReferencedMessage.Attachments) > 0 {
+		attachmentURL = event.Message.ReferencedMessage.Attachments[0].URL
+	}
+
+	nr := server.AddQuote(Quote{
+		MessageID:     event.Message.ReferencedMessage.ID,
+		Quoter:        event.Message.Author.ID,
+		Author:        event.Message.ReferencedMessage.Author.ID,
+		Channel:       event.Message.ReferencedMessage.ChannelID,
+		Text:          event.Message.ReferencedMessage.Content,
+		AttachmentURL: attachmentURL,
+		Timestamp:     event.Message.ReferencedMessage.CreatedAt,
+	})
+
+	if err := server.write(serverID); err != nil {
+		slog.Error("failed to save server stats", slog.Any("err", err))
+		return sendPrettyError(event.Client(), err.Error(), event.ChannelID, event.MessageID)
+	}
+
+	return sendQuote(
+		event.Client(),
+		event.ChannelID,
+		event.MessageID,
+		server.Quotes[len(server.Quotes)-1],
+		nr,
+	)
+}
+
+func handleQuoteGetAutocomplete(event *handler.AutocompleteEvent) error {
+	fmt.Println("----------- SEX")
+	var serverID snowflake.ID
+	if event.GuildID() != nil {
+		serverID = *event.GuildID()
+	} else {
+		serverID = event.Channel().ID() // in dm, probably
+	}
+
+	server, err := getServerStats(serverID)
+	if err != nil {
+		slog.Error("failed to get server stats", slog.Any("err", err))
+		return err
+	}
+
+	var choices []discord.AutocompleteChoice
+	for i, quote := range server.Quotes {
+		choices = append(choices, discord.AutocompleteChoiceString{
+			Name:  fmt.Sprintf("%d", i+1),
+			Value: quote.Text,
+		})
+	}
+
+	return event.AutocompleteResult(choices)
+}
+
+func handleQuoteGet(event *handler.CommandEvent) error {
+	return nil
 }

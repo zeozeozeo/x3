@@ -150,8 +150,8 @@ func (l Llmer) convertMessages(hasVision bool, isLlama bool) []openai.ChatComple
 		// with images; and this message is not the last one, so we're not going
 		// to attach old context images
 		imageIdx = -1
-	} else if imageIdx != -1 && len(l.Messages)-imageIdx >= 4 {
-		// older than 4 messages, we can probably let it go
+	} else if imageIdx != -1 && len(l.Messages)-imageIdx >= 8 {
+		// older than 8 messages, we can probably let it go
 		imageIdx = -1
 	}
 
