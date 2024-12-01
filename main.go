@@ -1664,7 +1664,7 @@ func handleQuoteGet(event *handler.CommandEvent) error {
 	}
 
 	// 1-indexed
-	idx -= 1
+	idx--
 
 	var serverID snowflake.ID
 	if event.GuildID() != nil {
