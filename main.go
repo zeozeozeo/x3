@@ -41,34 +41,6 @@ import (
 	_ "github.com/mattn/go-sqlite3"
 )
 
-func makeGptCommand(name, desc string) discord.SlashCommandCreate {
-	return discord.SlashCommandCreate{
-		Name:        name,
-		Description: desc,
-		IntegrationTypes: []discord.ApplicationIntegrationType{
-			discord.ApplicationIntegrationTypeGuildInstall,
-			discord.ApplicationIntegrationTypeUserInstall,
-		},
-		Contexts: []discord.InteractionContextType{
-			discord.InteractionContextTypeGuild,
-			discord.InteractionContextTypeBotDM,
-			discord.InteractionContextTypePrivateChannel,
-		},
-		Options: []discord.ApplicationCommandOption{
-			discord.ApplicationCommandOptionString{
-				Name:        "prompt",
-				Description: "8k input ctx, 4k output",
-				Required:    true,
-			},
-			discord.ApplicationCommandOptionBool{
-				Name:        "ephemeral",
-				Description: "If the response should only be visible to you",
-				Required:    false,
-			},
-		},
-	}
-}
-
 func formatModel(model model.Model) string {
 	var sb strings.Builder
 	sb.WriteString(model.Name)
@@ -81,10 +53,26 @@ func formatModel(model model.Model) string {
 	return sb.String()
 }
 
-func makeGptCommands() []discord.SlashCommandCreate {
-	var commands []discord.SlashCommandCreate
+func makeGptSubCommands() []discord.ApplicationCommandOptionSubCommand {
+	var commands []discord.ApplicationCommandOptionSubCommand
 	for _, model := range model.AllModels {
-		commands = append(commands, makeGptCommand(model.Command, formatModel(model)))
+		subcommand := discord.ApplicationCommandOptionSubCommand{
+			Name:        model.Command,
+			Description: ellipsisTrim(model.Name, 25),
+			Options: []discord.ApplicationCommandOption{
+				discord.ApplicationCommandOptionString{
+					Name:        "prompt",
+					Description: "LLM prompt",
+					Required:    true,
+				},
+				discord.ApplicationCommandOptionBool{
+					Name:        "ephemeral",
+					Description: "Only visible to you",
+					Required:    false,
+				},
+			},
+		}
+		commands = append(commands, subcommand)
 	}
 	return commands
 }
@@ -301,8 +289,7 @@ var (
 				},
 			},
 		},
-		// gpt commands are added in init(), except for this one
-		makeGptCommand("chat", "Chat with the current persona"),
+		// /chat is added in init()
 	}
 
 	db *sql.DB
@@ -585,10 +572,25 @@ func init() {
 	// default db state
 	addToWhitelist(890686470556356619)
 
-	// gpt commands
-	for _, command := range makeGptCommands() {
-		commands = append(commands, command)
+	// /chat
+	chatOptions := []discord.ApplicationCommandOption{
+		discord.ApplicationCommandOptionString{
+			Name:        "Prompt",
+			Description: "Prompt for the currently selected model",
+			Required:    true,
+		},
 	}
+	for _, command := range makeGptSubCommands() {
+		if len(chatOptions) >= 25 {
+			break
+		}
+		chatOptions = append(chatOptions, command)
+	}
+	commands = append(commands, discord.SlashCommandCreate{
+		Name:        "chat",
+		Description: "Chat with the current persona",
+		Options:     chatOptions,
+	})
 }
 
 func levelFromString(s string) slog.Level {
@@ -628,11 +630,13 @@ func main() {
 			return handleLlm(event, &model)
 		})
 	}
-	for _, model := range model.AllModels {
-		registerLlm(r, "/"+model.Command, model)
-	}
-	r.Command("/chat", func(e *handler.CommandEvent) error {
-		return handleLlm(e, nil)
+	r.Route("/chat", func(r handler.Router) {
+		r.Command("/", func(e *handler.CommandEvent) error {
+			return handleLlm(e, nil)
+		})
+		for _, model := range model.AllModels {
+			registerLlm(r, "/"+model.Command, model)
+		}
 	})
 
 	// utils
