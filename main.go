@@ -17,6 +17,7 @@ import (
 	"strings"
 	"syscall"
 	"time"
+	"unicode"
 
 	// load .env before importing our modules
 	_ "github.com/joho/godotenv/autoload"
@@ -299,6 +300,22 @@ var (
 						},
 					},
 				},
+				discord.ApplicationCommandOptionSubCommand{
+					Name:        "new",
+					Description: "Make a quote of your own. Available in DMs",
+					Options: []discord.ApplicationCommandOption{
+						discord.ApplicationCommandOptionString{
+							Name:        "text",
+							Description: "Text of the quote",
+							Required:    true,
+						},
+						discord.ApplicationCommandOptionBool{
+							Name:        "ephemeral",
+							Description: "If the response should only be visible to you",
+							Required:    false,
+						},
+					},
+				},
 			},
 		},
 		// gpt commands are added in init(), except for this one
@@ -383,9 +400,13 @@ type ServerStats struct {
 	Quotes []Quote `json:"quotes"`
 }
 
-func (s ServerStats) QuoteExists(messageID snowflake.ID) (bool, int) {
-	for i, quote := range s.Quotes {
-		if quote.MessageID == messageID {
+func (s ServerStats) QuoteExists(quote Quote) (bool, int) {
+	for i, q := range s.Quotes {
+		if quote.MessageID == 0 {
+			if q.Channel == quote.Channel && q.AuthorID == quote.AuthorID && q.Text == quote.Text {
+				return true, i
+			}
+		} else if q.MessageID == quote.MessageID || q.Timestamp.Equal(quote.Timestamp) {
 			return true, i
 		}
 	}
@@ -646,6 +667,7 @@ func main() {
 		r.Autocomplete("/get", handleQuoteGetAutocomplete)
 		r.Command("/get", handleQuoteGet)
 		r.Command("/random", handleQuoteRandom)
+		r.Command("/new", handleQuoteNew)
 	})
 
 	// image
@@ -689,21 +711,6 @@ func main() {
 
 func handleNotFound(event *handler.InteractionEvent) error {
 	return event.CreateMessage(discord.MessageCreate{Content: "Command not found", Flags: discord.MessageFlagEphemeral})
-}
-
-func handleFollowupError(event *handler.CommandEvent, err error, ephemeral bool) error {
-	slog.Error("handleFollowupError", slog.Any("err", err))
-	if ephemeral {
-		content := fmt.Sprintf("Error: %v", err)
-		flags := discord.MessageFlagEphemeral
-		_, err = event.UpdateInteractionResponse(discord.MessageUpdate{
-			Content: &content,
-			Flags:   &flags,
-		})
-		return err
-	} else {
-		return event.DeleteInteractionResponse()
-	}
 }
 
 func formatMsg(msg, username string, formatUsernames bool) string {
@@ -909,7 +916,7 @@ func handleLlm(event *handler.CommandEvent, m *model.Model) error {
 	response, usage, err := llmer.RequestCompletion(*m, cache.PersonaMeta.Roleplay)
 	if err != nil {
 		slog.Error("failed to generate response", slog.Any("err", err))
-		return handleFollowupError(event, err, ephemeral)
+		return updateInteractionError(event, err.Error())
 	}
 
 	cache.Usage = cache.Usage.Add(usage)
@@ -948,7 +955,7 @@ func handleLlm(event *handler.CommandEvent, m *model.Model) error {
 	}
 
 	if err != nil || botMessage == nil {
-		return handleFollowupError(event, err, ephemeral)
+		return updateInteractionError(event, err.Error())
 	}
 
 	// only clients can query options passed to commands, so we cache the action interaction
@@ -1139,7 +1146,7 @@ func handleLobotomy(event *handler.CommandEvent) error {
 	}
 	if writeCache {
 		if err := cache.write(event.Channel().ID()); err != nil {
-			return handleFollowupError(event, err, ephemeral)
+			return sendInteractionError(event, err.Error())
 		}
 	}
 
@@ -1208,7 +1215,7 @@ func handleBoykisser(event *handler.CommandEvent) error {
 
 	resp, post, err := fetchBoykisser(1)
 	if err != nil {
-		return handleFollowupError(event, err, ephemeral)
+		return updateInteractionError(event, err.Error())
 	}
 	defer resp.Body.Close()
 
@@ -1381,7 +1388,7 @@ func handlePersona(event *handler.CommandEvent) error {
 	}
 
 	if err := cache.write(event.Channel().ID()); err != nil {
-		return handleFollowupError(event, err, false)
+		return sendInteractionError(event, err.Error())
 	}
 
 	var sb strings.Builder
@@ -1448,7 +1455,7 @@ func handleStats(event *handler.CommandEvent) error {
 	stats, err := getGlobalStats()
 	if err != nil {
 		slog.Error("failed to get global stats", slog.Any("err", err))
-		return handleFollowupError(event, err, ephemeral)
+		return sendInteractionError(event, err.Error())
 	}
 	cache := getChannelCache(event.Channel().ID())
 
@@ -1484,6 +1491,15 @@ func handleStats(event *handler.CommandEvent) error {
 	)
 }
 
+func toTitle(str string) string {
+	if len(str) == 0 {
+		return str
+	}
+	runes := []rune(str)
+	runes[0] = unicode.ToUpper(runes[0])
+	return string(runes)
+}
+
 func sendPrettyError(client bot.Client, msg string, channelID, messageID snowflake.ID) error {
 	_, err := client.Rest().CreateMessage(
 		channelID,
@@ -1496,7 +1512,45 @@ func sendPrettyError(client bot.Client, msg string, channelID, messageID snowfla
 				discord.NewEmbedBuilder().
 					SetColor(0xf54242).
 					SetTitle("❌ Error").
-					SetDescription(msg).
+					SetFooter("x3", "https://i.imgur.com/hCF06SC.png").
+					SetTimestamp(time.Now()).
+					SetDescription(toTitle(msg)).
+					Build(),
+			).
+			Build(),
+	)
+	return err
+}
+
+func sendInteractionError(event *handler.CommandEvent, msg string) error {
+	return event.CreateMessage(
+		discord.NewMessageCreateBuilder().
+			SetAllowedMentions(&discord.AllowedMentions{
+				RepliedUser: false,
+			}).
+			AddEmbeds(
+				discord.NewEmbedBuilder().
+					SetColor(0xf54242).
+					SetTitle("❌ Error").
+					SetFooter("x3", "https://i.imgur.com/hCF06SC.png").
+					SetTimestamp(time.Now()).
+					SetDescription(toTitle(msg)).
+					Build(),
+			).
+			Build(),
+	)
+}
+
+func updateInteractionError(event *handler.CommandEvent, msg string) error {
+	_, err := event.UpdateInteractionResponse(
+		discord.NewMessageUpdateBuilder().
+			AddEmbeds(
+				discord.NewEmbedBuilder().
+					SetColor(0xf54242).
+					SetTitle("❌ Error").
+					SetFooter("x3", "https://i.imgur.com/hCF06SC.png").
+					SetTimestamp(time.Now()).
+					SetDescription(toTitle(msg)).
 					Build(),
 			).
 			Build(),
@@ -1568,21 +1622,12 @@ func handleQuote(event *events.MessageCreate) error {
 		return sendPrettyError(event.Client(), err.Error(), event.ChannelID, event.MessageID)
 	}
 
-	if exists, nr := server.QuoteExists(event.Message.ReferencedMessage.ID); exists {
-		return sendPrettyError(
-			event.Client(),
-			fmt.Sprintf("Quote #%d already exists", nr+1),
-			event.ChannelID,
-			event.MessageID,
-		)
-	}
-
 	var attachmentURL string
 	if len(event.Message.ReferencedMessage.Attachments) > 0 {
 		attachmentURL = event.Message.ReferencedMessage.Attachments[0].URL
 	}
 
-	nr := server.AddQuote(Quote{
+	quote := Quote{
 		MessageID:     event.Message.ReferencedMessage.ID,
 		Quoter:        event.Message.Author.ID,
 		AuthorID:      event.Message.ReferencedMessage.Author.ID,
@@ -1591,7 +1636,18 @@ func handleQuote(event *events.MessageCreate) error {
 		Text:          event.Message.ReferencedMessage.Content,
 		AttachmentURL: attachmentURL,
 		Timestamp:     event.Message.ReferencedMessage.CreatedAt,
-	})
+	}
+
+	if exists, nr := server.QuoteExists(quote); exists {
+		return sendPrettyError(
+			event.Client(),
+			fmt.Sprintf("Quote #%d already exists", nr+1),
+			event.ChannelID,
+			event.MessageID,
+		)
+	}
+
+	nr := server.AddQuote(quote)
 
 	if err := server.write(serverID); err != nil {
 		slog.Error("failed to save server stats", slog.Any("err", err))
@@ -1657,6 +1713,21 @@ func handleQuoteGetAutocomplete(event *handler.AutocompleteEvent) error {
 	return event.AutocompleteResult(choices)
 }
 
+func getServerFromEvent(event *handler.CommandEvent) (ServerStats, snowflake.ID, error) {
+	var serverID snowflake.ID
+	if event.GuildID() != nil {
+		serverID = *event.GuildID()
+	} else {
+		serverID = event.Channel().ID() // in dm, probably
+	}
+
+	server, err := getServerStats(serverID)
+	if err != nil {
+		slog.Error("failed to get server stats", slog.Any("err", err))
+	}
+	return server, serverID, err
+}
+
 func handleQuoteGet(event *handler.CommandEvent) error {
 	idx, err := strconv.Atoi(event.SlashCommandInteractionData().String("name"))
 	if err != nil {
@@ -1666,44 +1737,64 @@ func handleQuoteGet(event *handler.CommandEvent) error {
 	// 1-indexed
 	idx--
 
-	var serverID snowflake.ID
-	if event.GuildID() != nil {
-		serverID = *event.GuildID()
-	} else {
-		serverID = event.Channel().ID() // in dm, probably
-	}
-
-	server, err := getServerStats(serverID)
+	server, _, err := getServerFromEvent(event)
 	if err != nil {
-		slog.Error("failed to get server stats", slog.Any("err", err))
 		return err
 	}
 
 	if idx > len(server.Quotes)-1 || idx < 0 {
-		return handleFollowupError(event, fmt.Errorf("quote #%d does not exist", idx+1), true)
+		return sendInteractionError(event, fmt.Sprintf("quote #%d does not exist", idx+1))
 	}
 
 	return sendQuote(event, event.Client(), 0, 0, server.Quotes[idx], idx+1)
 }
 
 func handleQuoteRandom(event *handler.CommandEvent) error {
-	var serverID snowflake.ID
-	if event.GuildID() != nil {
-		serverID = *event.GuildID()
-	} else {
-		serverID = event.Channel().ID() // in dm, probably
-	}
-
-	server, err := getServerStats(serverID)
+	server, _, err := getServerFromEvent(event)
 	if err != nil {
-		slog.Error("failed to get server stats", slog.Any("err", err))
 		return err
 	}
 
 	if len(server.Quotes) == 0 {
-		return handleFollowupError(event, fmt.Errorf("no quotes in this server"), true)
+		return sendInteractionError(event, "no quotes in this server")
 	}
 
 	nr := rand.Intn(len(server.Quotes))
 	return sendQuote(event, event.Client(), 0, 0, server.Quotes[nr], nr+1)
+}
+
+func handleQuoteNew(event *handler.CommandEvent) error {
+	text := event.SlashCommandInteractionData().String("text")
+
+	if len(strings.TrimSpace(text)) == 0 {
+		sendInteractionError(event, "can't make a quote with no text")
+		return nil
+	}
+
+	server, serverID, err := getServerFromEvent(event)
+	if err != nil {
+		return err
+	}
+
+	quote := Quote{
+		Quoter:     event.User().ID,
+		AuthorID:   event.User().ID,
+		AuthorUser: event.User().EffectiveName(),
+		Channel:    event.Channel().ID(),
+		Text:       text,
+		Timestamp:  event.CreatedAt(),
+	}
+
+	if exists, nr := server.QuoteExists(quote); exists {
+		return sendInteractionError(event, fmt.Sprintf("quote #%d already exists", nr+1))
+	}
+
+	nr := server.AddQuote(quote)
+
+	if err := server.write(serverID); err != nil {
+		slog.Error("failed to save server stats", slog.Any("err", err))
+		return sendInteractionError(event, err.Error())
+	}
+
+	return sendQuote(event, event.Client(), 0, 0, quote, nr)
 }
