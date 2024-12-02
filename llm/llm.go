@@ -322,6 +322,10 @@ func (l *Llmer) RequestCompletion(m model.Model, rp bool) (res string, usage Usa
 
 		if usage.IsEmpty() {
 			usage = l.estimateUsage(m)
+		} else if usage.ResponseTokens == 1 {
+			// unrealistic
+			estimatedUsage := l.estimateUsage(m)
+			usage.ResponseTokens = estimatedUsage.ResponseTokens
 		}
 
 		slog.Info("request usage", slog.String("usage", usage.String()))
