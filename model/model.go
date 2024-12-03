@@ -3,6 +3,7 @@ package model
 import (
 	"os"
 	"sort"
+	"time"
 
 	openai "github.com/sashabaranov/go-openai"
 	"github.com/tiktoken-go/tokenizer"
@@ -598,9 +599,21 @@ var (
 		{Name: ProviderFresed, Errors: 5},
 		{Name: ProviderHelixmind, Errors: 6},
 	}
+
+	lastScoreReset = time.Now()
 )
 
+func resetProviderScore() {
+	for i, p := range allProviders {
+		p.Errors = i
+	}
+}
+
 func ScoreProviders() []*ScoredProvider {
+	if time.Since(lastScoreReset) > 5*time.Minute {
+		resetProviderScore()
+		lastScoreReset = time.Now()
+	}
 	providers := allProviders
 	sort.Slice(providers, func(i, j int) bool {
 		return providers[i].Errors < providers[j].Errors
