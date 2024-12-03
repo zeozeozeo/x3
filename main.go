@@ -1038,6 +1038,7 @@ func onMessageCreate(event *events.MessageCreate) {
 		// DM
 		if err := handleLlmInteraction(event, false); err != nil {
 			slog.Error("failed to handle DM interaction", slog.Any("err", err))
+			sendPrettyError(event.Client(), "No response from model. Try another", event.ChannelID, event.MessageID)
 		}
 		return
 	}
@@ -1067,7 +1068,10 @@ func onMessageCreate(event *events.MessageCreate) {
 	// check if "x3" is mentioned
 	if containsX3Regex.MatchString(event.Message.Content) {
 		trimmed := strings.TrimSpace(event.Message.Content)
-		if trimmed == "x3 quote" || trimmed == "x3 quote this" {
+		if trimmed == "x3 quote" ||
+			trimmed == "x3 quote this" ||
+			strings.HasSuffix(trimmed, " x3 quote") ||
+			strings.HasSuffix(trimmed, " x3 quote this") {
 			handleQuote(event)
 			return
 		}
