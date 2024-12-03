@@ -1301,22 +1301,24 @@ func handleBoykisserRefresh(data discord.ButtonInteractionData, event *handler.C
 
 func handlePersonaInfo(event *handler.CommandEvent, ephemeral bool) error {
 	cache := getChannelCache(event.Channel().ID())
+
+	meta, _ := persona.GetMetaByName(cache.PersonaMeta.Name)
+
 	builder := discord.NewEmbedBuilder().
 		SetTitle("Persona").
 		SetColor(0x0085ff).
-		SetDescription("Current persona settings in channel. Use `/stats` to view usage stats").
+		SetDescription("Current persona settings in channel. Use `/stats` to view usage stats.").
 		SetFooter("x3", "https://i.imgur.com/ckpztZY.png").
 		SetTimestamp(time.Now()).
 		AddField("Name", cache.PersonaMeta.Name, true).
-		AddField("Description", cache.PersonaMeta.Desc, true).
-		AddField("Model", cache.PersonaMeta.Model, true)
+		AddField("Description", meta.Desc, true).
+		AddField("Model", cache.PersonaMeta.Model, false)
 	if cache.PersonaMeta.System != "" {
-		builder.AddField("System prompt", cache.PersonaMeta.System, true)
+		builder.AddField("System prompt", cache.PersonaMeta.System, false)
 	}
-	builder.AddField("Roleplay", fmt.Sprintf("%v", cache.PersonaMeta.Roleplay), true).
-		AddField("Context length", fmt.Sprintf("%d", cache.ContextLength), true)
+	builder.AddField("Context length", fmt.Sprintf("%d", cache.ContextLength), false)
 	if cache.Llmer != nil {
-		builder.AddField("Message cache", fmt.Sprintf("%d messages", cache.Llmer.NumMessages()), true)
+		builder.AddField("Message cache", fmt.Sprintf("%d messages", cache.Llmer.NumMessages()), false)
 	}
 	return event.CreateMessage(
 		discord.NewMessageCreateBuilder().
@@ -1426,7 +1428,15 @@ func handlePersona(event *handler.CommandEvent) error {
 
 	return event.CreateMessage(
 		discord.NewMessageCreateBuilder().
-			SetContent(sb.String()).
+			AddEmbeds(
+				discord.NewEmbedBuilder().
+					SetColor(0x0085ff).
+					SetTitle("Persona").
+					SetFooter("x3", "https://i.imgur.com/ckpztZY.png").
+					SetTimestamp(time.Now()).
+					SetDescription(sb.String()).
+					Build(),
+			).
 			SetEphemeral(ephemeral).
 			Build(),
 	)

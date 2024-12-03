@@ -243,9 +243,9 @@ func (l Llmer) estimateUsage(m model.Model) Usage {
 }
 
 func (l *Llmer) requestCompletionInternal(m model.Model, provider string, rp bool) (string, Usage, error) {
-	slog.Debug("request completion.. message history follows..", slog.String("model", m.Name))
+	slog.Info("request completion.. message history follows..", slog.String("model", m.Name))
 	for _, msg := range l.Messages {
-		slog.Debug("    message", slog.String("role", msg.Role), slog.String("content", msg.Content), slog.Int("images", len(msg.Images)))
+		slog.Info("    message", slog.String("role", msg.Role), slog.String("content", msg.Content), slog.Int("images", len(msg.Images)))
 	}
 
 	client, codename := m.Client(provider, rp)
@@ -295,13 +295,24 @@ func (l *Llmer) requestCompletionInternal(m model.Model, provider string, rp boo
 		text.WriteString(response.Choices[0].Delta.Content)
 	}
 
-	slog.Debug("response", slog.String("text", text.String()), slog.Duration("duration", time.Since(completionStart)))
-
 	// if the api provider is retarded enough to use HTML escapes like &lt; in a fucking API,
 	// strip the fuckers off
 	unescaped := html.UnescapeString(text.String())
+	unescaped = strings.TrimSpace(unescaped)
 	// if the model is dumb enough to respond with `x3: `, cut it off here
 	unescaped = strings.TrimPrefix(unescaped, "x3: ")
+	if m.Name == model.ModelLlama90b.Name {
+		// this model is so stupid that it often ignores the instruction to
+		// not put a space before the tilde
+		unescaped = strings.ReplaceAll(unescaped, " ~", "~")
+	}
+	// Nous Hermes 3 is dumb, too
+	unescaped = strings.TrimSuffix(unescaped, "@ [email protected]")
+	unescaped = strings.TrimSuffix(unescaped, "[email protected] ;")
+	unescaped = strings.TrimSuffix(unescaped, "[email protected];")
+	// and trim spaces again after our checks, for good measure
+	unescaped = strings.TrimSpace(unescaped)
+	slog.Info("response", slog.String("text", text.String()), slog.String("unescaped", unescaped), slog.Duration("duration", time.Since(completionStart)), slog.String("model", m.Name), slog.String("provider", provider))
 
 	l.Messages = append(l.Messages, Message{
 		Role:    RoleAssistant,
@@ -313,17 +324,27 @@ func (l *Llmer) requestCompletionInternal(m model.Model, provider string, rp boo
 
 func (l *Llmer) RequestCompletion(m model.Model, rp bool) (res string, usage Usage, err error) {
 	for _, provider := range model.AllProviders {
+		retries := 0
+	retry:
+		if retries >= 3 {
+			continue
+		}
 		if _, ok := m.Providers[provider]; !ok {
 			continue
 		}
-		slog.Info("requesting completion", slog.String("provider", provider))
+		slog.Info("requesting completion", slog.String("provider", provider), slog.Int("retries", retries))
 
 		res, usage, err = l.requestCompletionInternal(m, provider, rp)
+		if res == "" {
+			slog.Warn("got an empty response from requestCompletionInternal", slog.String("provider", provider))
+			retries++
+			goto retry
+		}
 
 		if usage.IsEmpty() {
 			usage = l.estimateUsage(m)
-		} else if usage.ResponseTokens == 1 {
-			// unrealistic
+		} else if usage.ResponseTokens <= 1 {
+			// unrealistic; openrouter api responds with response tokens set to 1
 			estimatedUsage := l.estimateUsage(m)
 			usage.ResponseTokens = estimatedUsage.ResponseTokens
 		}
