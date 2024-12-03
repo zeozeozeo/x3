@@ -339,6 +339,7 @@ func (l *Llmer) RequestCompletion(m model.Model, rp bool) (res string, usage Usa
 		if res == "" {
 			slog.Warn("got an empty response from requestCompletionInternal", slog.String("provider", provider.Name))
 			retries++
+			provider.Errors++
 			goto retry
 		}
 

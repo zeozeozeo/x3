@@ -589,7 +589,7 @@ var (
 	modelByName = map[string]Model{}
 
 	// default errors are set for default order of trial
-	allProviders = []ScoredProvider{
+	allProviders = []*ScoredProvider{
 		{Name: ProviderGithub, Errors: 0},
 		{Name: ProviderGoogle, Errors: 1},
 		{Name: ProviderGroq, Errors: 2},
@@ -601,10 +601,7 @@ var (
 )
 
 func ScoreProviders() []*ScoredProvider {
-	var providers []*ScoredProvider
-	for i := range allProviders {
-		providers = append(providers, &allProviders[i])
-	}
+	providers := allProviders
 	sort.Slice(providers, func(i, j int) bool {
 		return providers[i].Errors < providers[j].Errors
 	})
