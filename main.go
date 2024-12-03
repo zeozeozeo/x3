@@ -1400,7 +1400,6 @@ func handlePersona(event *handler.CommandEvent) error {
 	}
 
 	var sb strings.Builder
-	sb.WriteString("Updated persona for this channel")
 	didWhat := []string{}
 	if cache.PersonaMeta.Name != prevMeta.Name && cache.PersonaMeta.Name != "" {
 		didWhat = append(didWhat, fmt.Sprintf("set persona to `%s`", cache.PersonaMeta.Name))
@@ -1423,9 +1422,12 @@ func handlePersona(event *handler.CommandEvent) error {
 	}
 
 	if len(didWhat) > 0 {
+		sb.WriteString("Updated persona for this channel")
 		sb.WriteString(" (")
 		sb.WriteString(strings.Join(didWhat, ", "))
 		sb.WriteString(")")
+	} else {
+		sb.WriteString("No changes made")
 	}
 
 	return event.CreateMessage(
