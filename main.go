@@ -793,7 +793,7 @@ outer:
 			llmer.AddMessage(llm.RoleUser, interaction)
 		}
 
-		if role == llm.RoleUser {
+		if role == llm.RoleUser || formatUsernames {
 			llmer.AddMessage(role, formatMsg(msg.Content, msg.Author.EffectiveName(), formatUsernames))
 		} else {
 			// don't prepend x3: to the start
