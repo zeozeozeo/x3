@@ -300,7 +300,9 @@ func (l *Llmer) requestCompletionInternal(m model.Model, provider string, rp boo
 	unescaped := html.UnescapeString(text.String())
 	unescaped = strings.TrimSpace(unescaped)
 	// if the model is dumb enough to respond with `x3: `, cut it off here
-	unescaped = strings.TrimPrefix(unescaped, "x3: ")
+	for strings.HasPrefix(unescaped, "x3: ") {
+		unescaped = strings.TrimPrefix(unescaped, "x3: ")
+	}
 	if m.Name == model.ModelLlama90b.Name {
 		// this model is so stupid that it often ignores the instruction to
 		// not put a space before the tilde
