@@ -793,7 +793,12 @@ outer:
 			llmer.AddMessage(llm.RoleUser, interaction)
 		}
 
-		llmer.AddMessage(role, formatMsg(msg.Content, msg.Author.EffectiveName(), formatUsernames))
+		if role == llm.RoleUser {
+			llmer.AddMessage(role, formatMsg(msg.Content, msg.Author.EffectiveName(), formatUsernames))
+		} else {
+			// don't prepend x3: to the start
+			llmer.AddMessage(role, msg.Content)
+		}
 
 		// if this is the last message with an image we add, check for images
 		if i == latestImageAttachmentIdx {
