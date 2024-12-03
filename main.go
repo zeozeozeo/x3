@@ -331,6 +331,8 @@ const (
 	// LLM interaction context surrounding messages
 	defaultContextMessages = 30
 	maxRedditAttempts      = 3
+	x3Icon                 = "https://i.imgur.com/ckpztZY.png"
+	x3ErrorIcon            = "https://i.imgur.com/hCF06SC.png"
 )
 
 type ChannelCache struct {
@@ -1308,7 +1310,7 @@ func handlePersonaInfo(event *handler.CommandEvent, ephemeral bool) error {
 		SetTitle("Persona").
 		SetColor(0x0085ff).
 		SetDescription("Current persona settings in channel. Use `/stats` to view usage stats.").
-		SetFooter("x3", "https://i.imgur.com/ckpztZY.png").
+		SetFooter("x3", x3Icon).
 		SetTimestamp(time.Now()).
 		AddField("Name", cache.PersonaMeta.Name, true).
 		AddField("Description", meta.Desc, true).
@@ -1400,13 +1402,13 @@ func handlePersona(event *handler.CommandEvent) error {
 	var sb strings.Builder
 	sb.WriteString("Updated persona for this channel")
 	didWhat := []string{}
-	if cache.PersonaMeta.Name != prevMeta.Name {
+	if cache.PersonaMeta.Name != prevMeta.Name && cache.PersonaMeta.Name != "" {
 		didWhat = append(didWhat, fmt.Sprintf("set persona to `%s`", cache.PersonaMeta.Name))
 	}
-	if cache.PersonaMeta.Model != prevMeta.Model {
+	if cache.PersonaMeta.Model != prevMeta.Model && cache.PersonaMeta.Model != "" {
 		didWhat = append(didWhat, fmt.Sprintf("set model to `%s`", cache.PersonaMeta.Model))
 	}
-	if cache.PersonaMeta.System != prevMeta.System {
+	if cache.PersonaMeta.System != prevMeta.System && cache.PersonaMeta.System != "" {
 		didWhat = append(didWhat, "updated the system prompt")
 	}
 	if cache.PersonaMeta.Roleplay != prevMeta.Roleplay {
@@ -1431,8 +1433,8 @@ func handlePersona(event *handler.CommandEvent) error {
 			AddEmbeds(
 				discord.NewEmbedBuilder().
 					SetColor(0x0085ff).
-					SetTitle("Persona").
-					SetFooter("x3", "https://i.imgur.com/ckpztZY.png").
+					SetTitle("Updated persona").
+					SetFooter("x3", x3Icon).
 					SetTimestamp(time.Now()).
 					SetDescription(sb.String()).
 					Build(),
@@ -1485,7 +1487,7 @@ func handleStats(event *handler.CommandEvent) error {
 					SetTitle("Stats").
 					SetColor(0x0085ff).
 					SetDescription("Per-channel and global bot stats").
-					SetFooter("x3", "https://i.imgur.com/ckpztZY.png").
+					SetFooter("x3", x3Icon).
 					SetTimestamp(time.Now()).
 					AddField("Prompt tokens (channel)", prompt, true).
 					AddField("Response tokens (channel)", response, true).
@@ -1526,7 +1528,7 @@ func sendPrettyError(client bot.Client, msg string, channelID, messageID snowfla
 				discord.NewEmbedBuilder().
 					SetColor(0xf54242).
 					SetTitle("❌ Error").
-					SetFooter("x3", "https://i.imgur.com/hCF06SC.png").
+					SetFooter("x3", x3ErrorIcon).
 					SetTimestamp(time.Now()).
 					SetDescription(toTitle(msg)).
 					Build(),
@@ -1546,7 +1548,7 @@ func sendInteractionError(event *handler.CommandEvent, msg string) error {
 				discord.NewEmbedBuilder().
 					SetColor(0xf54242).
 					SetTitle("❌ Error").
-					SetFooter("x3", "https://i.imgur.com/hCF06SC.png").
+					SetFooter("x3", x3ErrorIcon).
 					SetTimestamp(time.Now()).
 					SetDescription(toTitle(msg)).
 					Build(),
@@ -1562,7 +1564,7 @@ func updateInteractionError(event *handler.CommandEvent, msg string) error {
 				discord.NewEmbedBuilder().
 					SetColor(0xf54242).
 					SetTitle("❌ Error").
-					SetFooter("x3", "https://i.imgur.com/hCF06SC.png").
+					SetFooter("x3", x3ErrorIcon).
 					SetTimestamp(time.Now()).
 					SetDescription(toTitle(msg)).
 					Build(),
