@@ -324,20 +324,20 @@ func (l *Llmer) requestCompletionInternal(m model.Model, provider string, rp boo
 }
 
 func (l *Llmer) RequestCompletion(m model.Model, rp bool) (res string, usage Usage, err error) {
-	for _, provider := range model.AllProviders {
+	for _, provider := range model.ScoreProviders() {
 		retries := 0
 	retry:
 		if retries >= 3 {
 			continue
 		}
-		if _, ok := m.Providers[provider]; !ok {
+		if _, ok := m.Providers[provider.Name]; !ok {
 			continue
 		}
-		slog.Info("requesting completion", slog.String("provider", provider), slog.Int("retries", retries))
+		slog.Info("requesting completion", slog.String("provider", provider.Name), slog.Int("providerErrors", provider.Errors), slog.Int("retries", retries))
 
-		res, usage, err = l.requestCompletionInternal(m, provider, rp)
+		res, usage, err = l.requestCompletionInternal(m, provider.Name, rp)
 		if res == "" {
-			slog.Warn("got an empty response from requestCompletionInternal", slog.String("provider", provider))
+			slog.Warn("got an empty response from requestCompletionInternal", slog.String("provider", provider.Name))
 			retries++
 			goto retry
 		}
@@ -354,7 +354,8 @@ func (l *Llmer) RequestCompletion(m model.Model, rp bool) (res string, usage Usa
 		if err == nil {
 			return
 		}
-		slog.Warn("(provider tests) failed to request completion", slog.String("provider", provider), slog.Any("err", err))
+		slog.Warn("(provider tests) failed to request completion", slog.String("provider", provider.Name), slog.Any("err", err))
+		provider.Errors++
 	}
 
 	// If we're here, we're probably censored

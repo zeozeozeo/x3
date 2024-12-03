@@ -2,6 +2,7 @@ package model
 
 import (
 	"os"
+	"sort"
 
 	openai "github.com/sashabaranov/go-openai"
 	"github.com/tiktoken-go/tokenizer"
@@ -54,6 +55,11 @@ type Model struct {
 	Vision    bool
 	Encoding  tokenizer.Encoding
 	Providers map[string]ModelProvider
+}
+
+type ScoredProvider struct {
+	Name   string
+	Errors int
 }
 
 var (
@@ -582,17 +588,28 @@ var (
 
 	modelByName = map[string]Model{}
 
-	// In order of trial
-	AllProviders = []string{
-		ProviderGithub,
-		ProviderGoogle,
-		ProviderGroq,
-		ProviderOpenRouter,
-		ProviderZukijourney,
-		ProviderFresed,
-		ProviderHelixmind,
+	// default errors are set for default order of trial
+	allProviders = []ScoredProvider{
+		{Name: ProviderGithub, Errors: 0},
+		{Name: ProviderGoogle, Errors: 1},
+		{Name: ProviderGroq, Errors: 2},
+		{Name: ProviderOpenRouter, Errors: 3},
+		{Name: ProviderZukijourney, Errors: 4},
+		{Name: ProviderFresed, Errors: 5},
+		{Name: ProviderHelixmind, Errors: 6},
 	}
 )
+
+func ScoreProviders() []*ScoredProvider {
+	var providers []*ScoredProvider
+	for i := range allProviders {
+		providers = append(providers, &allProviders[i])
+	}
+	sort.Slice(providers, func(i, j int) bool {
+		return providers[i].Errors < providers[j].Errors
+	})
+	return providers
+}
 
 func init() {
 	for _, m := range AllModels {
