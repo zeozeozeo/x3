@@ -106,13 +106,13 @@ func (l *Llmer) AddMessage(role, content string) {
 }
 
 func (l *Llmer) SetPersona(persona persona.Persona) {
-	if len(persona.System) == 0 {
-		return
-	}
-
 	// remove system prompt if there is one
 	if len(l.Messages) > 0 && l.Messages[0].Role == RoleSystem {
 		l.Messages = l.Messages[1:]
+	}
+
+	if len(persona.System) == 0 {
+		return
 	}
 
 	// add new system prompt as the first message
