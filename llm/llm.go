@@ -242,13 +242,13 @@ func (l Llmer) estimateUsage(m model.Model) Usage {
 	return usage
 }
 
-func (l *Llmer) requestCompletionInternal(m model.Model, provider string, rp bool) (string, Usage, error) {
+func (l *Llmer) requestCompletionInternal(m model.Model, provider string) (string, Usage, error) {
 	slog.Info("request completion.. message history follows..", slog.String("model", m.Name))
 	for _, msg := range l.Messages {
 		slog.Info("    message", slog.String("role", msg.Role), slog.String("content", msg.Content), slog.Int("images", len(msg.Images)))
 	}
 
-	client, codename := m.Client(provider, rp)
+	client, codename := m.Client(provider)
 	req := openai.ChatCompletionRequest{
 		Model: codename,
 		// google api doesn't support image URIs, WTF google?
@@ -303,7 +303,7 @@ func (l *Llmer) requestCompletionInternal(m model.Model, provider string, rp boo
 	for strings.HasPrefix(unescaped, "x3: ") {
 		unescaped = strings.TrimPrefix(unescaped, "x3: ")
 	}
-	if m.Name == model.ModelLlama90b.Name {
+	if m.Name == model.ModelLlama90b.Name || m.Name == model.ModelLlama70b.Name {
 		// this model is so stupid that it often ignores the instruction to
 		// not put a space before the tilde
 		unescaped = strings.ReplaceAll(unescaped, " ~", "~")
@@ -325,7 +325,7 @@ func (l *Llmer) requestCompletionInternal(m model.Model, provider string, rp boo
 	return unescaped, usage, nil
 }
 
-func (l *Llmer) RequestCompletion(m model.Model, rp bool) (res string, usage Usage, err error) {
+func (l *Llmer) RequestCompletion(m model.Model) (res string, usage Usage, err error) {
 	for _, provider := range model.ScoreProviders() {
 		retries := 0
 	retry:
@@ -337,7 +337,7 @@ func (l *Llmer) RequestCompletion(m model.Model, rp bool) (res string, usage Usa
 		}
 		slog.Info("requesting completion", slog.String("provider", provider.Name), slog.Int("providerErrors", provider.Errors), slog.Int("retries", retries))
 
-		res, usage, err = l.requestCompletionInternal(m, provider.Name, rp)
+		res, usage, err = l.requestCompletionInternal(m, provider.Name)
 		if res == "" {
 			slog.Warn("got an empty response from requestCompletionInternal", slog.String("provider", provider.Name))
 			retries++

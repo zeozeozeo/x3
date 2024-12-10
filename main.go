@@ -216,15 +216,10 @@ var (
 					Required:    false,
 				},
 				discord.ApplicationCommandOptionString{
-					Name:        "model",
-					Description: "Set a model to use for this chat",
-					Choices:     makeModelOptionChoices(),
-					Required:    false,
-				},
-				discord.ApplicationCommandOptionBool{
-					Name:        "roleplay",
-					Description: "Set roleplay mode for this chat",
-					Required:    false,
+					Name:         "model",
+					Description:  "Set a model to use for this chat",
+					Autocomplete: true, // since discord limits us to 25 choices, we will hack it
+					Required:     false,
 				},
 				discord.ApplicationCommandOptionInt{
 					Name:        "context",
@@ -662,6 +657,7 @@ func main() {
 	r.Command("/whitelist", handleWhitelist)
 	r.Command("/lobotomy", handleLobotomy)
 	r.Command("/persona", handlePersona)
+	r.Autocomplete("/persona", handlePersonaModelAutocomplete)
 	r.Command("/stats", handleStats)
 
 	// quote
@@ -920,7 +916,7 @@ func handleLlm(event *handler.CommandEvent, m *model.Model) error {
 	// discord only gives us 3s to respond unless we do this (x3 is thinking...)
 	event.DeferCreateMessage(ephemeral)
 
-	response, usage, err := llmer.RequestCompletion(*m, cache.PersonaMeta.Roleplay)
+	response, usage, err := llmer.RequestCompletion(*m)
 	if err != nil {
 		slog.Error("failed to generate response", slog.Any("err", err))
 		return updateInteractionError(event, err.Error())
@@ -1015,7 +1011,7 @@ func handleLlmInteraction(event *events.MessageCreate, eraseX3 bool) error {
 	llmer.SetPersona(persona)
 
 	// now we generate the LLM response
-	response, usage, err := llmer.RequestCompletion(model.GetModelByName(cache.PersonaMeta.Model), cache.PersonaMeta.Roleplay)
+	response, usage, err := llmer.RequestCompletion(model.GetModelByName(cache.PersonaMeta.Model))
 	if err != nil {
 		slog.Error("failed to generate response", slog.Any("err", err))
 		return err
@@ -1340,11 +1336,10 @@ func handlePersona(event *handler.CommandEvent) error {
 	dataPersona := data.String("persona")
 	dataModel := data.String("model")
 	dataSystem := data.String("system")
-	dataRoleplay, hasRoleplay := data.OptBool("roleplay")
 	dataContext, hasContext := data.OptInt("context")
 	ephemeral := data.Bool("ephemeral")
 
-	if dataPersona == "" && dataModel == "" && dataSystem == "" && !hasRoleplay && !hasContext {
+	if dataPersona == "" && dataModel == "" && dataSystem == "" && !hasContext {
 		return handlePersonaInfo(event, ephemeral)
 	}
 
@@ -1391,7 +1386,6 @@ func handlePersona(event *handler.CommandEvent) error {
 	if dataModel != "" {
 		cache.PersonaMeta.Model = dataModel
 	}
-	cache.PersonaMeta.Roleplay = dataRoleplay
 	prevContextLen := cache.ContextLength
 	if hasContext {
 		if dataContext < 0 {
@@ -1414,13 +1408,6 @@ func handlePersona(event *handler.CommandEvent) error {
 	}
 	if cache.PersonaMeta.System != prevMeta.System && cache.PersonaMeta.System != "" {
 		didWhat = append(didWhat, "updated the system prompt")
-	}
-	if cache.PersonaMeta.Roleplay != prevMeta.Roleplay {
-		if cache.PersonaMeta.Roleplay {
-			didWhat = append(didWhat, "enabled roleplay mode")
-		} else {
-			didWhat = append(didWhat, "disabled roleplay mode")
-		}
 	}
 	if cache.ContextLength != prevContextLen {
 		didWhat = append(didWhat, fmt.Sprintf("updated context length %d → %d", prevContextLen, cache.ContextLength))
@@ -1449,6 +1436,31 @@ func handlePersona(event *handler.CommandEvent) error {
 			SetEphemeral(ephemeral).
 			Build(),
 	)
+}
+
+func handlePersonaModelAutocomplete(event *handler.AutocompleteEvent) error {
+	dataModel := event.Data.String("model")
+
+	models := []string{}
+	for _, m := range model.AllModels {
+		models = append(models, m.Name)
+	}
+
+	matches := fuzzy.RankFindNormalizedFold(dataModel, models)
+	sort.Sort(matches)
+
+	var choices []discord.AutocompleteChoice
+	for _, match := range matches {
+		if len(choices) >= 25 {
+			break
+		}
+		choices = append(choices, discord.AutocompleteChoiceString{
+			Name:  match.Target,
+			Value: match.Target,
+		})
+	}
+
+	return event.AutocompleteResult(choices)
 }
 
 func formatUsageStrings(usage llm.Usage) (string, string, string) {

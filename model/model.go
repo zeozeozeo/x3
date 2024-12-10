@@ -22,7 +22,6 @@ var (
 const (
 	azureBaseURL      = "https://models.inference.ai.azure.com"
 	zjBaseURL         = "https://api.zukijourney.com/v1"
-	zjRPBaseURL       = "https://api.zukijourney.com/unf"
 	hmBaseURL         = "https://helixmind.online/v1"
 	fresedBaseURL     = "https://fresedgpt.space/v1"
 	groqBaseURL       = "https://api.groq.com/openai/v1"
@@ -42,7 +41,6 @@ const (
 
 type ModelProvider struct {
 	API      string
-	RPApi    string // API for roleplay, if any
 	Codename string
 }
 
@@ -76,7 +74,6 @@ var (
 			},
 			ProviderZukijourney: {
 				API:      zjBaseURL,
-				RPApi:    zjRPBaseURL,
 				Codename: "gpt-4o-mini",
 			},
 			ProviderFresed: {
@@ -103,7 +100,6 @@ var (
 			},
 			ProviderZukijourney: {
 				API:      zjBaseURL,
-				RPApi:    zjRPBaseURL,
 				Codename: "gpt-4o",
 			},
 			ProviderFresed: {
@@ -132,7 +128,6 @@ var (
 			},
 			ProviderZukijourney: {
 				API:      zjBaseURL,
-				RPApi:    zjRPBaseURL,
 				Codename: "gemini-1.5-pro-latest",
 			},
 			ProviderFresed: {
@@ -161,7 +156,6 @@ var (
 		Providers: map[string]ModelProvider{
 			ProviderZukijourney: {
 				API:      zjBaseURL,
-				RPApi:    zjRPBaseURL,
 				Codename: "claude-3-haiku",
 			},
 			ProviderFresed: {
@@ -186,7 +180,6 @@ var (
 			},
 			ProviderZukijourney: {
 				API:      zjBaseURL,
-				RPApi:    zjRPBaseURL,
 				Codename: "gemini-1.5-flash-latest",
 			},
 			ProviderFresed: {
@@ -221,7 +214,6 @@ var (
 			},
 			ProviderZukijourney: {
 				API:      zjBaseURL,
-				RPApi:    zjRPBaseURL,
 				Codename: "mixtral-8x7b-instruct",
 			},
 		},
@@ -260,7 +252,6 @@ var (
 			},
 			ProviderZukijourney: {
 				API:      zjBaseURL,
-				RPApi:    zjRPBaseURL,
 				Codename: "mistral-large-2407",
 			},
 			ProviderFresed: {
@@ -280,7 +271,6 @@ var (
 			},
 			ProviderZukijourney: {
 				API:      zjBaseURL,
-				RPApi:    zjRPBaseURL,
 				Codename: "mistral-nemo",
 			},
 			ProviderFresed: {
@@ -301,7 +291,6 @@ var (
 			},
 			ProviderZukijourney: {
 				API:      zjBaseURL,
-				RPApi:    zjRPBaseURL,
 				Codename: "llama-3.1-405b-instruct",
 			},
 			ProviderFresed: {
@@ -363,13 +352,13 @@ var (
 	}
 
 	ModelLlama70b = Model{
-		Name:    "Meta Llama 3.1 70B Instruct",
+		Name:    "Meta Llama 3.3 70B Instruct",
 		Command: "llama70b",
 		IsLlama: true,
 		Providers: map[string]ModelProvider{
 			ProviderGroq: {
 				API:      groqBaseURL,
-				Codename: "llama-3.1-70b-versatile",
+				Codename: "llama-3.3-70b-specdec",
 			},
 			ProviderOpenRouter: {
 				API:      openRouterBaseURL,
@@ -377,12 +366,11 @@ var (
 			},
 			ProviderZukijourney: {
 				API:      zjBaseURL,
-				RPApi:    zjRPBaseURL,
-				Codename: "llama-3.1-70b-instruct",
+				Codename: "llama-3.3-70b-instruct",
 			},
 			ProviderFresed: {
 				API:      fresedBaseURL,
-				Codename: "llama-3.1-70b",
+				Codename: "llama-3.3-70b",
 			},
 		},
 	}
@@ -402,7 +390,6 @@ var (
 			},
 			ProviderZukijourney: {
 				API:      zjBaseURL,
-				RPApi:    zjRPBaseURL,
 				Codename: "llama-3.1-8b-instruct",
 			},
 			ProviderFresed: {
@@ -539,7 +526,6 @@ var (
 			},
 			ProviderZukijourney: {
 				API:      zjBaseURL,
-				RPApi:    zjRPBaseURL,
 				Codename: "gemma-2-9b",
 			},
 		},
@@ -551,7 +537,6 @@ var (
 		Providers: map[string]ModelProvider{
 			ProviderZukijourney: {
 				API:      zjBaseURL,
-				RPApi:    zjRPBaseURL,
 				Codename: "gemma-2-27b",
 			},
 		},
@@ -594,8 +579,8 @@ var (
 		{Name: ProviderGithub, Errors: 0},
 		{Name: ProviderGoogle, Errors: 1},
 		{Name: ProviderGroq, Errors: 2},
-		{Name: ProviderOpenRouter, Errors: 3},
-		{Name: ProviderZukijourney, Errors: 4},
+		{Name: ProviderZukijourney, Errors: 3},
+		{Name: ProviderOpenRouter, Errors: 4},
 		{Name: ProviderFresed, Errors: 5},
 		{Name: ProviderHelixmind, Errors: 6},
 	}
@@ -631,10 +616,10 @@ func GetModelByName(name string) Model {
 	if m, ok := modelByName[name]; ok {
 		return m
 	}
-	return ModelGpt4oMini
+	return ModelLlama70b
 }
 
-func (m Model) Client(provider string, rp bool) (*openai.Client, string) {
+func (m Model) Client(provider string) (*openai.Client, string) {
 	if provider == ProviderGithub {
 		// github marketplace requires special tweaks
 		config := openai.DefaultAzureConfig(githubToken, m.Providers[provider].API)
@@ -663,11 +648,7 @@ func (m Model) Client(provider string, rp bool) (*openai.Client, string) {
 	p := m.Providers[provider]
 
 	config := openai.DefaultConfig(token)
-	if rp && p.RPApi != "" {
-		config.BaseURL = p.RPApi
-	} else {
-		config.BaseURL = p.API
-	}
+	config.BaseURL = p.API
 	return openai.NewClientWithConfig(config), p.Codename
 }
 

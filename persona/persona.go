@@ -107,7 +107,6 @@ type PersonaMeta struct {
 	Desc     string `json:"-"`
 	Model    string `json:"model,omitempty"`
 	System   string `json:"system,omitempty"`
-	Roleplay bool   `json:"roleplay"`
 }
 
 func (meta PersonaMeta) String() string {
@@ -126,8 +125,7 @@ var (
 	PersonaProto   = PersonaMeta{
 		Name:     "x3 Protogen (Default)",
 		Desc:     "x3 as a furry protogen. Suitable for RP",
-		Roleplay: true,
-		Model:    model.ModelLlama90b.Name,
+		Model:    model.ModelLlama70b.Name,
 	}
 
 	AllPersonas = []PersonaMeta{
