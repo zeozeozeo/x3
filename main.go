@@ -98,19 +98,6 @@ func makePersonaOptionChoices() []discord.ApplicationCommandOptionChoiceString {
 	return choices
 }
 
-func makeModelOptionChoices() []discord.ApplicationCommandOptionChoiceString {
-	var choices []discord.ApplicationCommandOptionChoiceString
-	for _, m := range model.AllModels {
-		if len(choices) >= 25 {
-			// TODO: discord limits us to 25 choices...
-			break
-		}
-		name := formatModel(m)
-		choices = append(choices, discord.ApplicationCommandOptionChoiceString{Name: name, Value: m.Name})
-	}
-	return choices
-}
-
 var (
 	token    = os.Getenv("X3_DISCORD_TOKEN")
 	commands = []discord.ApplicationCommandCreate{
@@ -1443,11 +1430,24 @@ func handlePersonaModelAutocomplete(event *handler.AutocompleteEvent) error {
 
 	models := []string{}
 	for _, m := range model.AllModels {
-		models = append(models, m.Name)
+		models = append(models, formatModel(m))
 	}
 
-	matches := fuzzy.RankFindNormalizedFold(dataModel, models)
-	sort.Sort(matches)
+	var matches fuzzy.Ranks
+	if dataModel != "" {
+		matches = fuzzy.RankFindNormalizedFold(dataModel, models)
+		sort.Sort(matches)
+	} else {
+		// fake it to keep the order
+		matches = fuzzy.Ranks{}
+		for i, m := range models {
+			matches = append(matches, fuzzy.Rank{
+				Source:        "",
+				Target:        m,
+				OriginalIndex: i,
+			})
+		}
+	}
 
 	var choices []discord.AutocompleteChoice
 	for _, match := range matches {
@@ -1456,7 +1456,7 @@ func handlePersonaModelAutocomplete(event *handler.AutocompleteEvent) error {
 		}
 		choices = append(choices, discord.AutocompleteChoiceString{
 			Name:  match.Target,
-			Value: match.Target,
+			Value: model.AllModels[match.OriginalIndex].Name,
 		})
 	}
 
