@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"math/rand"
 	"net/http"
@@ -18,6 +19,7 @@ import (
 	"syscall"
 	"time"
 	"unicode"
+	"unicode/utf8"
 
 	// load .env before importing our modules
 	_ "github.com/joho/godotenv/autoload"
@@ -776,11 +778,12 @@ outer:
 			llmer.AddMessage(llm.RoleUser, interaction)
 		}
 
+		content := getMessageContentNoWhitelist(msg)
 		if role == llm.RoleUser || formatUsernames {
-			llmer.AddMessage(role, formatMsg(msg.Content, msg.Author.EffectiveName(), formatUsernames))
+			llmer.AddMessage(role, formatMsg(content, msg.Author.EffectiveName(), formatUsernames))
 		} else {
 			// don't prepend x3: to the start
-			llmer.AddMessage(role, msg.Content)
+			llmer.AddMessage(role, content)
 		}
 
 		// if this is the last message with an image we add, check for images
@@ -972,6 +975,76 @@ func stripX3(s string) string {
 	return strings.TrimSpace(containsX3Regex.ReplaceAllString(s, ""))
 }
 
+func writeTxtCache(attachmentID snowflake.ID, content []byte) error {
+	return os.WriteFile(fmt.Sprintf("x3-txt-cache/%s.txt", attachmentID), content, 0644)
+}
+
+func readTxtCache(attachmentID snowflake.ID) ([]byte, bool) {
+	content, err := os.ReadFile(fmt.Sprintf("x3-txt-cache/%s.txt", attachmentID))
+	return content, err == nil
+}
+
+func getMessageContent(message discord.Message, isWhitelisted bool) string {
+	content := message.Content
+	if !isWhitelisted {
+		return content
+	}
+	// fetch from txt attachments, some of them may be cached on disk
+	for i, attachment := range message.Attachments {
+		// more than 64k of text is not allowed
+		if attachment.Size > 64*1024 {
+			continue
+		}
+		if i == 0 && content != "" {
+			content += "\n"
+		}
+		if attachment.ContentType != nil && *attachment.ContentType == "text/plain" {
+			var body []byte
+			if b, ok := readTxtCache(attachment.ID); ok {
+				body = b
+			} else {
+				// fetch the file, append contents to content
+				resp, err := http.Get(attachment.URL)
+				if err != nil {
+					slog.Error("failed to fetch attachment", slog.Any("err", err))
+					continue
+				}
+				defer resp.Body.Close()
+				body, err := io.ReadAll(resp.Body)
+				if err != nil {
+					slog.Error("failed to read attachment body", slog.Any("err", err))
+					continue
+				}
+				if !utf8.Valid(body) {
+					slog.Error("attachment body is not valid utf8")
+					continue
+				}
+				// write it to txt cache, so we don't have to refetch that later
+				if err := writeTxtCache(attachment.ID, body); err != nil {
+					slog.Error("failed to write txt cache", slog.Any("err", err))
+					continue
+				}
+			}
+			content += string(body)
+		}
+	}
+	return content
+}
+
+func getMessageContentNoWhitelist(message discord.Message) string {
+	isWhitelisted := false
+	for _, attachment := range message.Attachments {
+		if attachment.Size > 64*1024 {
+			continue
+		}
+		if attachment.ContentType != nil && *attachment.ContentType == "text/plain" {
+			isWhitelisted = isInWhitelist(message.Author.ID)
+			break
+		}
+	}
+	return getMessageContent(message, isWhitelisted)
+}
+
 func handleLlmInteraction(event *events.MessageCreate, eraseX3 bool) error {
 	if err := event.Client().Rest().SendTyping(event.ChannelID); err != nil {
 		slog.Error("failed to SendTyping", slog.Any("err", err))
@@ -988,9 +1061,9 @@ func handleLlmInteraction(event *events.MessageCreate, eraseX3 bool) error {
 	// and we also want the event message
 	var content string
 	if eraseX3 {
-		content = stripX3(event.Message.Content)
+		content = stripX3(getMessageContentNoWhitelist(event.Message))
 	} else {
-		content = event.Message.Content
+		content = getMessageContentNoWhitelist(event.Message)
 	}
 	llmer.AddMessage(llm.RoleUser, formatMsg(content, event.Message.Author.EffectiveName(), persona.FormatUsernames))
 	addImageAttachments(llmer, event.Message)
@@ -1497,7 +1570,7 @@ func handleStats(event *handler.CommandEvent) error {
 	prompt, response, total := formatUsageStrings(cache.Usage)
 	promptLast, responseLast, totalLast := formatUsageStrings(cache.LastUsage)
 	promptTotal, responseTotal, totalTotal := formatUsageStrings(stats.Usage)
-	upSince := "since " + humanize.Time(startTime)
+	upSince := fmt.Sprintf("since <t:%d:R>", startTime.Unix())
 
 	return event.CreateMessage(
 		discord.NewMessageCreateBuilder().
