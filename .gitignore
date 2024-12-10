@@ -3,3 +3,4 @@ x3*.json
 *.exe
 x3.db
 .env
+x3-txt-cache/

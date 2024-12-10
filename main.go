@@ -976,6 +976,7 @@ func stripX3(s string) string {
 }
 
 func writeTxtCache(attachmentID snowflake.ID, content []byte) error {
+	os.Mkdir("x3-txt-cache", 0755)
 	return os.WriteFile(fmt.Sprintf("x3-txt-cache/%s.txt", attachmentID), content, 0644)
 }
 
@@ -986,19 +987,24 @@ func readTxtCache(attachmentID snowflake.ID) ([]byte, bool) {
 
 func getMessageContent(message discord.Message, isWhitelisted bool) string {
 	content := message.Content
-	if !isWhitelisted {
-		return content
-	}
+
 	// fetch from txt attachments, some of them may be cached on disk
 	for i, attachment := range message.Attachments {
-		// more than 64k of text is not allowed
-		if attachment.Size > 64*1024 {
-			continue
+		// whitelisted: 64k limit
+		// not whitelisted: 2.5k limit
+		if isWhitelisted {
+			if attachment.Size > 64*1024 {
+				continue
+			}
+		} else {
+			if attachment.Size > 2.5*1024 {
+				continue
+			}
 		}
 		if i == 0 && content != "" {
 			content += "\n"
 		}
-		if attachment.ContentType != nil && *attachment.ContentType == "text/plain" {
+		if attachment.ContentType != nil && strings.Contains(*attachment.ContentType, "text/plain") {
 			var body []byte
 			if b, ok := readTxtCache(attachment.ID); ok {
 				body = b
@@ -1010,7 +1016,7 @@ func getMessageContent(message discord.Message, isWhitelisted bool) string {
 					continue
 				}
 				defer resp.Body.Close()
-				body, err := io.ReadAll(resp.Body)
+				body, err = io.ReadAll(resp.Body)
 				if err != nil {
 					slog.Error("failed to read attachment body", slog.Any("err", err))
 					continue
@@ -1025,6 +1031,7 @@ func getMessageContent(message discord.Message, isWhitelisted bool) string {
 					continue
 				}
 			}
+			slog.Debug("got txt cache for attachment", slog.String("attachment_id", attachment.ID.String()))
 			content += string(body)
 		}
 	}
@@ -1034,9 +1041,6 @@ func getMessageContent(message discord.Message, isWhitelisted bool) string {
 func getMessageContentNoWhitelist(message discord.Message) string {
 	isWhitelisted := false
 	for _, attachment := range message.Attachments {
-		if attachment.Size > 64*1024 {
-			continue
-		}
 		if attachment.ContentType != nil && *attachment.ContentType == "text/plain" {
 			isWhitelisted = isInWhitelist(message.Author.ID)
 			break
@@ -1059,11 +1063,9 @@ func handleLlmInteraction(event *events.MessageCreate, eraseX3 bool) error {
 	slog.Debug("interaction; added context messages", slog.Int("count", llmer.NumMessages()))
 
 	// and we also want the event message
-	var content string
+	content := getMessageContentNoWhitelist(event.Message)
 	if eraseX3 {
-		content = stripX3(getMessageContentNoWhitelist(event.Message))
-	} else {
-		content = getMessageContentNoWhitelist(event.Message)
+		content = stripX3(content)
 	}
 	llmer.AddMessage(llm.RoleUser, formatMsg(content, event.Message.Author.EffectiveName(), persona.FormatUsernames))
 	addImageAttachments(llmer, event.Message)
