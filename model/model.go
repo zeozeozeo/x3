@@ -402,7 +402,7 @@ var (
 
 	ModelGrok2Mini = Model{
 		Name:    "xAI Grok-2 mini",
-		Command: "grok2",
+		Command: "grok",
 		Vision:  true,
 		Providers: map[string]ModelProvider{
 			ProviderZukijourney: {
