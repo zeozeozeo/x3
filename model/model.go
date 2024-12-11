@@ -137,18 +137,6 @@ var (
 		},
 	}
 
-	ModelGeminiExp1121 = Model{
-		Name:           "Google Gemini Experimental 1121",
-		Command:        "gemini_exp",
-		NeedsWhitelist: true,
-		Providers: map[string]ModelProvider{
-			ProviderOpenRouter: {
-				Codename: "google/gemini-exp-1121:free",
-				API:      openRouterBaseURL,
-			},
-		},
-	}
-
 	ModelClaude3Haiku = Model{
 		Name:    "Anthropic Claude 3 Haiku",
 		Command: "haiku",
@@ -166,25 +154,21 @@ var (
 	}
 
 	ModelGeminiFlash = Model{
-		Name:    "Google Gemini 1.5 Flash",
+		Name:    "Google Gemini 2.0 Flash",
 		Command: "gemini",
 		Vision:  true,
 		Providers: map[string]ModelProvider{
 			ProviderGoogle: {
 				API:      googleBaseURL,
-				Codename: "gemini-1.5-flash",
+				Codename: "gemini-2.0-flash-exp",
 			},
 			ProviderOpenRouter: {
 				API:      openRouterBaseURL,
-				Codename: "google/gemini-flash-1.5-exp",
-			},
-			ProviderZukijourney: {
-				API:      zjBaseURL,
-				Codename: "gemini-1.5-flash-latest",
+				Codename: "google/gemini-2.0-flash-exp:free",
 			},
 			ProviderFresed: {
 				API:      fresedBaseURL,
-				Codename: "gemini-1.5-flash-latest",
+				Codename: "gemini-2.0-flash-exp",
 			},
 		},
 	}
@@ -399,6 +383,35 @@ var (
 		},
 	}
 
+	ModelGrok2 = Model{
+		Name:           "xAI Grok-2",
+		Command:        "grok2",
+		Vision:         true,
+		NeedsWhitelist: true,
+		Providers: map[string]ModelProvider{
+			ProviderZukijourney: {
+				API:      zjBaseURL,
+				Codename: "grok-2",
+			},
+			ProviderFresed: {
+				API:      fresedBaseURL,
+				Codename: "grok-2",
+			},
+		},
+	}
+
+	ModelGrok2Mini = Model{
+		Name:    "xAI Grok-2 mini",
+		Command: "grok2",
+		Vision:  true,
+		Providers: map[string]ModelProvider{
+			ProviderZukijourney: {
+				API:      zjBaseURL,
+				Codename: "grok-2-mini",
+			},
+		},
+	}
+
 	ModelNousHermes405b = Model{
 		Name:    "Nous Hermes 3 405B Instruct",
 		Command: "hermes",
@@ -548,7 +561,6 @@ var (
 		ModelGeminiPro,
 		ModelClaude3Haiku,
 		ModelGeminiFlash,
-		ModelGeminiExp1121,
 		ModelCommandRplus,
 		ModelMixtral8x7b,
 		ModelMixtral8x22b,
@@ -560,6 +572,8 @@ var (
 		ModelLlama70b,
 		ModelLlama11b,
 		ModelLlama8b,
+		ModelGrok2,
+		ModelGrok2Mini,
 		ModelNousHermes405b,
 		ModelLiquidLFM40b,
 		ModelGigaChatPro,

@@ -72,13 +72,16 @@ func makeGptCommand(name, desc string) discord.SlashCommandCreate {
 	}
 }
 
-func formatModel(model model.Model) string {
+func formatModel(m model.Model) string {
 	var sb strings.Builder
-	sb.WriteString(model.Name)
-	if model.NeedsWhitelist {
+	sb.WriteString(m.Name)
+	if m.Name == model.ModelLlama70b.Name {
+		sb.WriteString(" (Default)")
+	}
+	if m.NeedsWhitelist {
 		sb.WriteString(" (Whitelist)")
 	}
-	if model.Vision {
+	if m.Vision {
 		sb.WriteString(" (Vision)")
 	}
 	return sb.String()
@@ -86,8 +89,8 @@ func formatModel(model model.Model) string {
 
 func makeGptCommands() []discord.SlashCommandCreate {
 	var commands []discord.SlashCommandCreate
-	for _, model := range model.AllModels {
-		commands = append(commands, makeGptCommand(model.Command, formatModel(model)))
+	for _, m := range model.AllModels {
+		commands = append(commands, makeGptCommand(m.Command, formatModel(m)))
 	}
 	return commands
 }
