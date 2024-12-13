@@ -305,13 +305,31 @@ var (
 				},
 			},
 		},
+		discord.SlashCommandCreate{
+			Name:        "random_dms",
+			Description: "Choose if the bot should DM you randomly",
+			IntegrationTypes: []discord.ApplicationIntegrationType{
+				discord.ApplicationIntegrationTypeUserInstall,
+			},
+			Contexts: []discord.InteractionContextType{
+				discord.InteractionContextTypeBotDM,
+			},
+			Options: []discord.ApplicationCommandOption{
+				discord.ApplicationCommandOptionBool{
+					Name:        "enable",
+					Description: "If the bot should DM you randomly",
+					Required:    true,
+				},
+			},
+		},
 		// gpt commands are added in init(), except for this one
 		makeGptCommand("chat", "Chat with the current persona"),
 	}
 
 	db *sql.DB
 
-	startTime = time.Now()
+	startTime                    = time.Now()
+	errTimeInteractionNoMessages = errors.New("empty dm channel for time interaction")
 )
 
 const (
@@ -324,11 +342,20 @@ const (
 
 type ChannelCache struct {
 	// in channels where the bot cannot read messages this is set for caching messages
-	Llmer         *llm.Llmer          `json:"llmer"`
-	PersonaMeta   persona.PersonaMeta `json:"persona_meta"`
-	Usage         llm.Usage           `json:"usage,omitempty"`
-	LastUsage     llm.Usage           `json:"last_usage,omitempty"`
-	ContextLength int                 `json:"context_length"`
+	Llmer           *llm.Llmer          `json:"llmer"`
+	PersonaMeta     persona.PersonaMeta `json:"persona_meta"`
+	Usage           llm.Usage           `json:"usage,omitempty"`
+	LastUsage       llm.Usage           `json:"last_usage,omitempty"`
+	ContextLength   int                 `json:"context_length"`
+	LastInteraction time.Time           `json:"last_interaction"`
+	KnownNonDM      bool                `json:"known_non_dm,omitempty"`
+	NoRandomDMs     bool                `json:"no_random_dms,omitempty"`
+	// whether the `/random_dms` command was ever used in this channel
+	EverUsedRandomDMs bool `json:"ever_used_random_dms,omitempty"`
+}
+
+func (cache *ChannelCache) updateInteractionTime() {
+	cache.LastInteraction = time.Now()
 }
 
 func newChannelCache() *ChannelCache {
@@ -356,7 +383,8 @@ func (cache ChannelCache) write(id snowflake.ID) error {
 type GlobalStats struct {
 	Usage llm.Usage `json:"usage"`
 	// total number of messages processed
-	MessageCount uint `json:"message_count"`
+	MessageCount    uint      `json:"message_count"`
+	LastMessageTime time.Time `json:"last_message_time"`
 }
 
 func unmarshalGlobalStats(data []byte) (GlobalStats, error) {
@@ -454,6 +482,7 @@ func updateGlobalStats(usage llm.Usage) error {
 	}
 	stats.Usage = stats.Usage.Add(usage)
 	stats.MessageCount++
+	stats.LastMessageTime = time.Now()
 	if err := stats.write(); err != nil {
 		slog.Error("updateGlobalStats: failed to write global stats", slog.Any("err", err))
 		return err
@@ -508,6 +537,25 @@ func getChannelCache(id snowflake.ID) *ChannelCache {
 		cache.write(id)
 	}
 	return cache
+}
+
+func getCachedChannelIDs() ([]snowflake.ID, error) {
+	rows, err := db.Query("SELECT channel_id FROM channel_cache")
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var ids []snowflake.ID
+	for rows.Next() {
+		var id snowflake.ID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		ids = append(ids, id)
+	}
+
+	return ids, nil
 }
 
 func writeMessageInteractionPrompt(id snowflake.ID, prompt string) error {
@@ -651,6 +699,7 @@ func main() {
 	r.Command("/persona", handlePersona)
 	r.Autocomplete("/persona", handlePersonaModelAutocomplete)
 	r.Command("/stats", handleStats)
+	r.Command("/random_dms", handleRandomDMs)
 
 	// quote
 	r.Route("/quote", func(r handler.Router) {
@@ -671,7 +720,7 @@ func main() {
 		bot.WithGatewayConfigOpts(gateway.WithIntents(
 			gateway.IntentGuildMessages,
 			gateway.IntentMessageContent,
-			gateway.IntentDirectMessages,
+			gateway.IntentsDirectMessage,
 		)),
 		bot.WithEventListeners(r),
 		bot.WithEventListenerFunc(onMessageCreate),
@@ -692,6 +741,14 @@ func main() {
 		slog.Error("error while opening gateway", slog.Any("err", err))
 		return
 	}
+
+	// dm interactor
+	go func() {
+		for {
+			initiateDMInteraction(client)
+			time.Sleep(5 * time.Minute)
+		}
+	}()
 
 	slog.Info("x3 is running. ctrl+c to stop")
 	s := make(chan os.Signal, 1)
@@ -714,8 +771,11 @@ func isImageAttachment(attachment discord.Attachment) bool {
 	return attachment.ContentType != nil && strings.HasPrefix(*attachment.ContentType, "image/")
 }
 
-func addImageAttachments(llmer *llm.Llmer, msg discord.Message) {
-	for _, attachment := range msg.Attachments {
+func addImageAttachments(llmer *llm.Llmer, attachments []discord.Attachment) {
+	if attachments == nil {
+		return
+	}
+	for _, attachment := range attachments {
 		if isImageAttachment(attachment) {
 			slog.Debug("adding image attachment", slog.String("url", attachment.URL))
 			llmer.AddImage(attachment.URL)
@@ -743,11 +803,11 @@ func getLobotomyAmountFromMessage(msg discord.Message) int {
 	return n
 }
 
-// returns whether a lobotomy was performed
-func addContextMessagesIfPossible(client bot.Client, llmer *llm.Llmer, channelID, messageID snowflake.ID, formatUsernames bool, contextLen int) bool {
+// returns amount of messages from GetMessages
+func addContextMessagesIfPossible(client bot.Client, llmer *llm.Llmer, channelID, messageID snowflake.ID, formatUsernames bool, contextLen int) int {
 	messages, err := client.Rest().GetMessages(channelID, 0, messageID, 0, contextLen)
 	if err != nil {
-		return false
+		return len(messages)
 	}
 
 	latestImageAttachmentIdx := -1
@@ -791,10 +851,11 @@ outer:
 
 		// if this is the last message with an image we add, check for images
 		if i == latestImageAttachmentIdx {
-			addImageAttachments(llmer, msg)
+			addImageAttachments(llmer, msg.Attachments)
 		}
 	}
-	return false
+
+	return len(messages)
 }
 
 func sendMessageSplits(client bot.Client, messageID snowflake.ID, event *handler.CommandEvent, flags discord.MessageFlags, channelID snowflake.ID, runes []rune) (*discord.Message, error) {
@@ -816,25 +877,29 @@ func sendMessageSplits(client bot.Client, messageID snowflake.ID, event *handler
 		var message *discord.Message
 		var err error
 		if i == 0 {
-			if messageID != 0 {
+			if event != nil {
+				message, err = event.UpdateInteractionResponse(discord.MessageUpdate{
+					Content: &segment,
+					Flags:   &flags,
+				})
+			} else {
+				var reference *discord.MessageReference
+				if messageID != 0 {
+					reference = &discord.MessageReference{
+						MessageID: &messageID,
+					}
+				}
 				message, err = client.Rest().CreateMessage(
 					channelID,
 					discord.MessageCreate{
-						Content: segment,
-						Flags:   flags,
-						MessageReference: &discord.MessageReference{
-							MessageID: &messageID,
-						},
+						Content:          segment,
+						Flags:            flags,
+						MessageReference: reference,
 						AllowedMentions: &discord.AllowedMentions{
 							RepliedUser: false,
 						},
 					},
 				)
-			} else if event != nil {
-				message, err = event.UpdateInteractionResponse(discord.MessageUpdate{
-					Content: &segment,
-					Flags:   &flags,
-				})
 			}
 		} else {
 			message, err = client.Rest().CreateMessage(channelID, discord.MessageCreate{Content: segment})
@@ -1053,25 +1118,26 @@ func getMessageContentNoWhitelist(message discord.Message) string {
 }
 
 func handleLlmInteraction(event *events.MessageCreate, eraseX3 bool) error {
-	if err := event.Client().Rest().SendTyping(event.ChannelID); err != nil {
-		slog.Error("failed to SendTyping", slog.Any("err", err))
-	}
-
-	cache := getChannelCache(event.ChannelID)
-	persona := persona.GetPersonaByMeta(cache.PersonaMeta)
-
-	// the interaction happened in a server or in a bot DM, so we can get the surrounding messages
-	llmer := llm.NewLlmer()
-	addContextMessagesIfPossible(event.Client(), llmer, event.ChannelID, event.MessageID, persona.FormatUsernames, cache.ContextLength)
-	slog.Debug("interaction; added context messages", slog.Int("count", llmer.NumMessages()))
-
-	// and we also want the event message
 	content := getMessageContentNoWhitelist(event.Message)
 	if eraseX3 {
 		content = stripX3(content)
 	}
-	llmer.AddMessage(llm.RoleUser, formatMsg(content, event.Message.Author.EffectiveName(), persona.FormatUsernames))
-	addImageAttachments(llmer, event.Message)
+	return handleLlmInteraction2(event.Client(), event.ChannelID, event.MessageID, content, event.Message.Author.EffectiveName(), event.Message.Attachments, false)
+}
+
+func handleLlmInteraction2(client bot.Client, channelID, messageID snowflake.ID, content string, username string, attachments []discord.Attachment, timeInteraction bool) error {
+	cache := getChannelCache(channelID)
+	persona := persona.GetPersonaByMeta(cache.PersonaMeta)
+
+	llmer := llm.NewLlmer()
+	numCtxMessages := addContextMessagesIfPossible(client, llmer, channelID, messageID, persona.FormatUsernames, cache.ContextLength)
+	if timeInteraction && numCtxMessages == 0 {
+		return errTimeInteractionNoMessages
+	}
+	slog.Debug("interaction; added context messages", slog.Int("added", numCtxMessages), slog.Int("count", llmer.NumMessages()))
+
+	llmer.AddMessage(llm.RoleUser, formatMsg(content, username, persona.FormatUsernames))
+	addImageAttachments(llmer, attachments)
 
 	llmer.SetPersona(persona)
 
@@ -1082,14 +1148,21 @@ func handleLlmInteraction(event *events.MessageCreate, eraseX3 bool) error {
 		return err
 	}
 
+	if timeInteraction && !cache.EverUsedRandomDMs {
+		response += "\n-# if you wish to disable this, use `/random_dms enable: false`"
+	}
+
 	cache.Usage = cache.Usage.Add(usage)
 	cache.LastUsage = usage
 
 	// and send the response
-	sendMessageSplits(event.Client(), event.MessageID, nil, 0, event.ChannelID, []rune(response))
+	if _, err := sendMessageSplits(client, messageID, nil, 0, channelID, []rune(response)); err != nil {
+		slog.Error("failed to send message splits", slog.Any("err", err))
+	}
 
-	// update cache incase we got token usage stats
-	cache.write(event.ChannelID)
+	// update cache
+	cache.updateInteractionTime()
+	cache.write(channelID)
 	updateGlobalStats(usage)
 
 	return nil
@@ -1441,6 +1514,9 @@ func handlePersona(event *handler.CommandEvent) error {
 
 	// update persona meta in channel cache
 	prevMeta := cache.PersonaMeta
+	if prevMeta.System == "" {
+		prevMeta.System = persona.GetPersonaByMeta(cache.PersonaMeta).System
+	}
 	cache.PersonaMeta = personaMeta
 	if dataPersona != "" {
 		cache.PersonaMeta.Name = dataPersona
@@ -1576,6 +1652,7 @@ func handleStats(event *handler.CommandEvent) error {
 	promptLast, responseLast, totalLast := formatUsageStrings(cache.LastUsage)
 	promptTotal, responseTotal, totalTotal := formatUsageStrings(stats.Usage)
 	upSince := fmt.Sprintf("since <t:%d:R>", startTime.Unix())
+	lastProcessed := fmt.Sprintf("<t:%d:R>", stats.LastMessageTime.Unix())
 
 	return event.CreateMessage(
 		discord.NewMessageCreateBuilder().
@@ -1597,6 +1674,7 @@ func handleStats(event *handler.CommandEvent) error {
 					AddField("Total tokens (global)", totalTotal, true).
 					AddField("Bot uptime", upSince, true).
 					AddField("Messages processed", humanize.Comma(int64(stats.MessageCount)), true).
+					AddField("Last message processed", lastProcessed, true).
 					Build(),
 			).
 			SetEphemeral(ephemeral).
@@ -1910,4 +1988,83 @@ func handleQuoteNew(event *handler.CommandEvent) error {
 	}
 
 	return sendQuote(event, event.Client(), 0, 0, quote, nr)
+}
+
+func handleRandomDMs(event *handler.CommandEvent) error {
+	enable := event.SlashCommandInteractionData().Bool("enable")
+	cache := getChannelCache(event.Channel().ID())
+	cache.NoRandomDMs = !enable
+	cache.EverUsedRandomDMs = true
+	cache.write(event.Channel().ID())
+	var content string
+	if enable {
+		content = "Random DMs enabled. The bot may DM you at times (max 1 message per day)."
+	} else {
+		content = "Random DMs disabled. Use `/random_dms` if you wish to opt-in again."
+	}
+	return event.CreateMessage(discord.NewMessageCreateBuilder().SetContent(content).Build())
+}
+
+func initiateDMInteraction(client bot.Client) {
+	channels, err := getCachedChannelIDs()
+	if err != nil {
+		slog.Error("failed to get cached channel IDs", slog.Any("err", err))
+		return
+	}
+	slog.Debug("initiateDMInteraction", slog.Int("channels", len(channels)))
+
+	// iterate through channels randomly
+	rand.Shuffle(len(channels), func(i, j int) {
+		channels[i], channels[j] = channels[j], channels[i]
+	})
+
+	for _, id := range channels {
+		cache := getChannelCache(id)
+		if cache.Llmer != nil || cache.KnownNonDM {
+			continue
+		}
+		if !cache.LastInteraction.IsZero() {
+			// wait until 24 - rand(4) hours after last interaction
+			respondTime := cache.LastInteraction.Add(24*time.Hour - (time.Duration(rand.Intn(4)) * time.Hour))
+			if !time.Now().After(respondTime) {
+				slog.Debug("skipping recent channel", slog.String("channel", id.String()))
+				continue
+			}
+		}
+
+		channel, err := client.Rest().GetChannel(id)
+		if err != nil {
+			slog.Warn("failed to create dm channel", slog.Any("err", err))
+			cache.KnownNonDM = true
+			cache.write(id)
+			continue
+		}
+		if channel.Type() != discord.ChannelTypeDM {
+			slog.Info("marking non-dm channel", slog.String("channel", id.String()))
+			cache.KnownNonDM = true
+			cache.write(id)
+			continue
+		}
+
+		// interact
+		slog.Info("initiating dm interaction", slog.String("channel", id.String()))
+		err = handleLlmInteraction2(
+			client,
+			id,
+			0,
+			"<you are encouraged to interact with the user after some inactivity>",
+			"system message",
+			nil,
+			true, // timeInteraction
+		)
+		if errors.Is(err, errTimeInteractionNoMessages) {
+			continue // GetMessages returned 0, no messages in channel (we passed `true` the line before)
+		}
+		if err != nil {
+			slog.Error("failed to handle llm interaction", slog.Any("err", err))
+		}
+		return // wait until next call to this function, to prevent being ratelimited
+	}
+
+	slog.Info("did not initiate dm interaction; no suitable channels")
 }
