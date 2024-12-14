@@ -242,7 +242,7 @@ func (l Llmer) estimateUsage(m model.Model) Usage {
 	return usage
 }
 
-func (l *Llmer) requestCompletionInternal(m model.Model, provider string) (string, Usage, error) {
+func (l *Llmer) requestCompletionInternal(m model.Model, provider string, usernames map[string]bool) (string, Usage, error) {
 	slog.Info("request completion.. message history follows..", slog.String("model", m.Name))
 	for _, msg := range l.Messages {
 		slog.Info("    message", slog.String("role", msg.Role), slog.String("content", msg.Content), slog.Int("images", len(msg.Images)))
@@ -299,10 +299,19 @@ func (l *Llmer) requestCompletionInternal(m model.Model, provider string) (strin
 	// strip the fuckers off
 	unescaped := html.UnescapeString(text.String())
 	unescaped = strings.TrimSpace(unescaped)
-	// if the model is dumb enough to respond with `x3: `, cut it off here
-	for strings.HasPrefix(unescaped, "x3: ") {
-		unescaped = strings.TrimPrefix(unescaped, "x3: ")
+
+	// if the model is dumb enough to prepend usernames, cut them off
+	if usernames == nil {
+		usernames = map[string]bool{}
 	}
+	usernames["x3"] = true
+	for username := range usernames {
+		prefix := username + ": "
+		for strings.HasPrefix(unescaped, prefix) {
+			unescaped = strings.TrimPrefix(unescaped, prefix)
+		}
+	}
+
 	if m.Name == model.ModelLlama90b.Name || m.Name == model.ModelLlama70b.Name {
 		// this model is so stupid that it often ignores the instruction to
 		// not put a space before the tilde
@@ -325,7 +334,7 @@ func (l *Llmer) requestCompletionInternal(m model.Model, provider string) (strin
 	return unescaped, usage, nil
 }
 
-func (l *Llmer) RequestCompletion(m model.Model) (res string, usage Usage, err error) {
+func (l *Llmer) RequestCompletion(m model.Model, usernames map[string]bool) (res string, usage Usage, err error) {
 	for _, provider := range model.ScoreProviders() {
 		retries := 0
 	retry:
@@ -337,7 +346,7 @@ func (l *Llmer) RequestCompletion(m model.Model) (res string, usage Usage, err e
 		}
 		slog.Info("requesting completion", slog.String("provider", provider.Name), slog.Int("providerErrors", provider.Errors), slog.Int("retries", retries))
 
-		res, usage, err = l.requestCompletionInternal(m, provider.Name)
+		res, usage, err = l.requestCompletionInternal(m, provider.Name, usernames)
 		if res == "" {
 			slog.Warn("got an empty response from requestCompletionInternal", slog.String("provider", provider.Name))
 			retries++

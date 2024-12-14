@@ -805,10 +805,10 @@ func getLobotomyAmountFromMessage(msg discord.Message) int {
 }
 
 // returns amount of messages from GetMessages
-func addContextMessagesIfPossible(client bot.Client, llmer *llm.Llmer, channelID, messageID snowflake.ID, contextLen int) int {
+func addContextMessagesIfPossible(client bot.Client, llmer *llm.Llmer, channelID, messageID snowflake.ID, contextLen int) (int, map[string]bool) {
 	messages, err := client.Rest().GetMessages(channelID, 0, messageID, 0, contextLen)
 	if err != nil {
-		return len(messages)
+		return len(messages), nil
 	}
 
 	latestImageAttachmentIdx := -1
@@ -823,6 +823,8 @@ outer:
 			}
 		}
 	}
+
+	usernames := map[string]bool{}
 
 	// discord returns surrounding message history from newest to oldest, but we want oldest to newest
 	for i := len(messages) - 1; i >= 0; i-- {
@@ -851,9 +853,11 @@ outer:
 		if i == latestImageAttachmentIdx {
 			addImageAttachments(llmer, msg.Attachments)
 		}
+
+		usernames[msg.Author.EffectiveName()] = true
 	}
 
-	return len(messages)
+	return len(messages), usernames
 }
 
 func sendMessageSplits(client bot.Client, messageID snowflake.ID, event *handler.CommandEvent, flags discord.MessageFlags, channelID snowflake.ID, runes []rune) (*discord.Message, error) {
@@ -950,8 +954,9 @@ func handleLlm(event *handler.CommandEvent, m *model.Model) error {
 
 	// add context if possible
 	lastMessage := event.Channel().MessageChannel.LastMessageID()
+	var usernames map[string]bool
 	if !useCache && lastMessage != nil {
-		addContextMessagesIfPossible(event.Client(), llmer, event.Channel().ID(), *lastMessage, cache.ContextLength)
+		_, usernames = addContextMessagesIfPossible(event.Client(), llmer, event.Channel().ID(), *lastMessage, cache.ContextLength)
 
 		// and we also want the last message in the channel
 		msg, err := event.Client().Rest().GetMessage(event.Channel().ID(), *lastMessage)
@@ -972,7 +977,7 @@ func handleLlm(event *handler.CommandEvent, m *model.Model) error {
 	// discord only gives us 3s to respond unless we do this (x3 is thinking...)
 	event.DeferCreateMessage(ephemeral)
 
-	response, usage, err := llmer.RequestCompletion(*m)
+	response, usage, err := llmer.RequestCompletion(*m, usernames)
 	if err != nil {
 		slog.Error("failed to generate response", slog.Any("err", err))
 		return updateInteractionError(event, err.Error())
@@ -1128,7 +1133,7 @@ func handleLlmInteraction2(client bot.Client, channelID, messageID snowflake.ID,
 	persona := persona.GetPersonaByMeta(cache.PersonaMeta)
 
 	llmer := llm.NewLlmer()
-	numCtxMessages := addContextMessagesIfPossible(client, llmer, channelID, messageID, cache.ContextLength)
+	numCtxMessages, usernames := addContextMessagesIfPossible(client, llmer, channelID, messageID, cache.ContextLength)
 	if timeInteraction && numCtxMessages == 0 {
 		return errTimeInteractionNoMessages
 	}
@@ -1140,7 +1145,7 @@ func handleLlmInteraction2(client bot.Client, channelID, messageID snowflake.ID,
 	llmer.SetPersona(persona)
 
 	// now we generate the LLM response
-	response, usage, err := llmer.RequestCompletion(model.GetModelByName(cache.PersonaMeta.Model))
+	response, usage, err := llmer.RequestCompletion(model.GetModelByName(cache.PersonaMeta.Model), usernames)
 	if err != nil {
 		slog.Error("failed to generate response", slog.Any("err", err))
 		return err
