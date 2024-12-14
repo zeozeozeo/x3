@@ -845,9 +845,7 @@ outer:
 		}
 
 		content := getMessageContentNoWhitelist(msg)
-		if role == llm.RoleUser {
-			llmer.AddMessage(role, formatMsg(content, msg.Author.EffectiveName(), true))
-		}
+		llmer.AddMessage(role, formatMsg(content, msg.Author.EffectiveName(), true))
 
 		// if this is the last message with an image we add, check for images
 		if i == latestImageAttachmentIdx {
