@@ -352,6 +352,7 @@ type ChannelCache struct {
 	NoRandomDMs     bool                `json:"no_random_dms,omitempty"`
 	// whether the `/random_dms` command was ever used in this channel
 	EverUsedRandomDMs bool `json:"ever_used_random_dms,omitempty"`
+	IsLastRandomDM    bool `json:"is_last_random_dm,omitempty"`
 }
 
 func (cache *ChannelCache) updateInteractionTime() {
@@ -1161,6 +1162,7 @@ func handleLlmInteraction2(client bot.Client, channelID, messageID snowflake.ID,
 	}
 
 	// update cache
+	cache.IsLastRandomDM = timeInteraction
 	cache.updateInteractionTime()
 	cache.write(channelID)
 	updateGlobalStats(usage)
@@ -2020,7 +2022,7 @@ func initiateDMInteraction(client bot.Client) {
 
 	for _, id := range channels {
 		cache := getChannelCache(id)
-		if cache.Llmer != nil || cache.KnownNonDM {
+		if cache.Llmer != nil || cache.KnownNonDM || cache.IsLastRandomDM {
 			continue
 		}
 		if !cache.LastInteraction.IsZero() {
@@ -2034,7 +2036,7 @@ func initiateDMInteraction(client bot.Client) {
 
 		channel, err := client.Rest().GetChannel(id)
 		if err != nil {
-			slog.Warn("failed to create dm channel", slog.Any("err", err))
+			slog.Warn("failed to get channel; marking as nondm", slog.Any("err", err))
 			cache.KnownNonDM = true
 			cache.write(id)
 			continue
