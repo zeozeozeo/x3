@@ -17,6 +17,7 @@ var (
 	groqToken       = os.Getenv("X3_GROQ_TOKEN")
 	googleToken     = os.Getenv("X3_GOOGLE_AISTUDIO_TOKEN")
 	openRouterToken = os.Getenv("X3_OPENROUTER_TOKEN")
+	g4fToken        = os.Getenv("X3_G4F_TOKEN")
 )
 
 const (
@@ -27,6 +28,7 @@ const (
 	groqBaseURL       = "https://api.groq.com/openai/v1"
 	googleBaseURL     = "https://generativelanguage.googleapis.com/v1beta/openai"
 	openRouterBaseURL = "https://openrouter.ai/api/v1"
+	g4fBaseURL        = "http://192.168.230.44:1337/v1"
 )
 
 const (
@@ -37,6 +39,7 @@ const (
 	ProviderGroq        = "groq"
 	ProviderGoogle      = "google"
 	ProviderOpenRouter  = "openrouter"
+	ProviderG4F         = "g4f"
 )
 
 type ModelProvider struct {
@@ -84,6 +87,10 @@ var (
 				API:      hmBaseURL,
 				Codename: "gpt-4o-mini",
 			},
+			ProviderG4F: {
+				API:      g4fBaseURL,
+				Codename: "gpt-4o-mini",
+			},
 		},
 	}
 
@@ -108,6 +115,10 @@ var (
 			},
 			ProviderHelixmind: {
 				API:      hmBaseURL,
+				Codename: "gpt-4o",
+			},
+			ProviderG4F: {
+				API:      g4fBaseURL,
 				Codename: "gpt-4o",
 			},
 		},
@@ -150,6 +161,23 @@ var (
 				API:      fresedBaseURL,
 				Codename: "claude-3-haiku-20240307",
 			},
+			ProviderG4F: {
+				API:      g4fBaseURL,
+				Codename: "claude-3-haiku",
+			},
+		},
+	}
+
+	ModelClaude35Sonnet = Model{
+		Name:           "Anthropic Claude 3.5 Sonnet",
+		Command:        "sonnet",
+		Vision:         true,
+		NeedsWhitelist: true,
+		Providers: map[string]ModelProvider{
+			ProviderG4F: {
+				API:      g4fBaseURL,
+				Codename: "claude-3.5-sonnet",
+			},
 		},
 	}
 
@@ -183,6 +211,10 @@ var (
 			},
 			ProviderFresed: {
 				API:      fresedBaseURL,
+				Codename: "command-r-plus",
+			},
+			ProviderG4F: {
+				API:      g4fBaseURL,
 				Codename: "command-r-plus",
 			},
 		},
@@ -281,6 +313,10 @@ var (
 				API:      fresedBaseURL,
 				Codename: "llama-3.1-405b",
 			},
+			ProviderG4F: {
+				API:      g4fBaseURL,
+				Codename: "llama-3.1-405b",
+			},
 			// github doesn't work for some reason
 		},
 	}
@@ -307,6 +343,10 @@ var (
 				API:      fresedBaseURL,
 				Codename: "llama-3.2-90b",
 			},
+			ProviderG4F: {
+				API:      g4fBaseURL,
+				Codename: "llama-3.2-90b",
+			},
 		},
 	}
 
@@ -330,6 +370,10 @@ var (
 			},
 			ProviderFresed: {
 				API:      fresedBaseURL,
+				Codename: "llama-3.2-11b",
+			},
+			ProviderG4F: {
+				API:      g4fBaseURL,
 				Codename: "llama-3.2-11b",
 			},
 		},
@@ -380,6 +424,10 @@ var (
 				API:      fresedBaseURL,
 				Codename: "llama-3.1-8b",
 			},
+			ProviderG4F: {
+				API:      g4fBaseURL,
+				Codename: "llama-3.1-8b",
+			},
 		},
 	}
 
@@ -397,6 +445,10 @@ var (
 				API:      fresedBaseURL,
 				Codename: "grok-2",
 			},
+			ProviderG4F: {
+				API:      g4fBaseURL,
+				Codename: "grok-2",
+			},
 		},
 	}
 
@@ -407,6 +459,10 @@ var (
 		Providers: map[string]ModelProvider{
 			ProviderZukijourney: {
 				API:      zjBaseURL,
+				Codename: "grok-2-mini",
+			},
+			ProviderG4F: {
+				API:      g4fBaseURL,
 				Codename: "grok-2-mini",
 			},
 		},
@@ -434,6 +490,10 @@ var (
 			ProviderZukijourney: {
 				API:      zjBaseURL,
 				Codename: "liquid-40b",
+			},
+			ProviderG4F: {
+				API:      g4fBaseURL,
+				Codename: "lfm-40b-moe",
 			},
 		},
 	}
@@ -555,11 +615,36 @@ var (
 		},
 	}
 
+	ModelO1Preview = Model{
+		Name:           "OpenAI o1-preview",
+		Command:        "o1_preview",
+		NeedsWhitelist: true,
+		Providers: map[string]ModelProvider{
+			ProviderG4F: {
+				API:      g4fBaseURL,
+				Codename: "o1-preview",
+			},
+		},
+	}
+
+	ModelO1Mini = Model{
+		Name:           "OpenAI o1-mini",
+		Command:        "o1_mini",
+		NeedsWhitelist: true,
+		Providers: map[string]ModelProvider{
+			ProviderG4F: {
+				API:      g4fBaseURL,
+				Codename: "o1-mini",
+			},
+		},
+	}
+
 	AllModels = []Model{
 		ModelGpt4oMini,
 		ModelGpt4o,
 		ModelGeminiPro,
 		ModelClaude3Haiku,
+		//ModelClaude35Sonnet,
 		ModelGeminiFlash,
 		ModelCommandRplus,
 		ModelMixtral8x7b,
@@ -584,19 +669,22 @@ var (
 		ModelJambaMini,
 		ModelGemma9b,
 		ModelGemma27b,
+		//ModelO1Preview,
+		//ModelO1Mini,
 	}
 
 	modelByName = map[string]Model{}
 
 	// default errors are set for default order of trial
 	allProviders = []*ScoredProvider{
-		{Name: ProviderGithub, Errors: 0},
-		{Name: ProviderGoogle, Errors: 1},
-		{Name: ProviderGroq, Errors: 2},
-		{Name: ProviderZukijourney, Errors: 3},
-		{Name: ProviderOpenRouter, Errors: 4},
-		{Name: ProviderFresed, Errors: 5},
-		{Name: ProviderHelixmind, Errors: 6},
+		{Name: ProviderGithub},
+		{Name: ProviderGoogle},
+		{Name: ProviderGroq},
+		{Name: ProviderZukijourney},
+		{Name: ProviderOpenRouter},
+		{Name: ProviderFresed},
+		{Name: ProviderHelixmind},
+		//{Name: ProviderG4F},
 	}
 
 	lastScoreReset = time.Now()
@@ -621,6 +709,7 @@ func ScoreProviders() []*ScoredProvider {
 }
 
 func init() {
+	resetProviderScore()
 	for _, m := range AllModels {
 		modelByName[m.Name] = m
 	}
@@ -655,6 +744,8 @@ func (m Model) Client(provider string) (*openai.Client, string) {
 		token = googleToken
 	case ProviderOpenRouter:
 		token = openRouterToken
+	case ProviderG4F:
+		token = g4fToken
 	default:
 		token = githubToken
 	}

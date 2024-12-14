@@ -1578,7 +1578,11 @@ func handlePersonaModelAutocomplete(event *handler.AutocompleteEvent) error {
 	dataModel := event.Data.String("model")
 
 	models := []string{}
+	inWhitelist := isInWhitelist(event.User().ID)
 	for _, m := range model.AllModels {
+		if m.NeedsWhitelist && !inWhitelist {
+			continue
+		}
 		models = append(models, formatModel(m))
 	}
 
