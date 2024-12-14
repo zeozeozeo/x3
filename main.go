@@ -805,7 +805,7 @@ func getLobotomyAmountFromMessage(msg discord.Message) int {
 }
 
 // returns amount of messages from GetMessages
-func addContextMessagesIfPossible(client bot.Client, llmer *llm.Llmer, channelID, messageID snowflake.ID, formatUsernames bool, contextLen int) int {
+func addContextMessagesIfPossible(client bot.Client, llmer *llm.Llmer, channelID, messageID snowflake.ID, contextLen int) int {
 	messages, err := client.Rest().GetMessages(channelID, 0, messageID, 0, contextLen)
 	if err != nil {
 		return len(messages)
@@ -843,11 +843,8 @@ outer:
 		}
 
 		content := getMessageContentNoWhitelist(msg)
-		if role == llm.RoleUser || formatUsernames {
-			llmer.AddMessage(role, formatMsg(content, msg.Author.EffectiveName(), formatUsernames))
-		} else {
-			// don't prepend x3: to the start
-			llmer.AddMessage(role, content)
+		if role == llm.RoleUser {
+			llmer.AddMessage(role, formatMsg(content, msg.Author.EffectiveName(), true))
 		}
 
 		// if this is the last message with an image we add, check for images
@@ -954,7 +951,7 @@ func handleLlm(event *handler.CommandEvent, m *model.Model) error {
 	// add context if possible
 	lastMessage := event.Channel().MessageChannel.LastMessageID()
 	if !useCache && lastMessage != nil {
-		addContextMessagesIfPossible(event.Client(), llmer, event.Channel().ID(), *lastMessage, persona.FormatUsernames, cache.ContextLength)
+		addContextMessagesIfPossible(event.Client(), llmer, event.Channel().ID(), *lastMessage, cache.ContextLength)
 
 		// and we also want the last message in the channel
 		msg, err := event.Client().Rest().GetMessage(event.Channel().ID(), *lastMessage)
@@ -962,7 +959,7 @@ func handleLlm(event *handler.CommandEvent, m *model.Model) error {
 			if isLobotomyMessage(*msg) {
 				llmer.Lobotomize(getLobotomyAmountFromMessage(*msg))
 			} else {
-				llmer.AddMessage(llm.RoleUser, formatMsg(msg.Content, msg.Author.EffectiveName(), persona.FormatUsernames))
+				llmer.AddMessage(llm.RoleUser, formatMsg(msg.Content, msg.Author.EffectiveName(), true))
 			}
 		}
 	}
@@ -970,7 +967,7 @@ func handleLlm(event *handler.CommandEvent, m *model.Model) error {
 	slog.Debug("handleLlm: got context messages", slog.Int("count", llmer.NumMessages()))
 
 	// and we also want the actual slash command prompt
-	llmer.AddMessage(llm.RoleUser, formatMsg(prompt, event.User().EffectiveName(), persona.FormatUsernames))
+	llmer.AddMessage(llm.RoleUser, formatMsg(prompt, event.User().EffectiveName(), true))
 
 	// discord only gives us 3s to respond unless we do this (x3 is thinking...)
 	event.DeferCreateMessage(ephemeral)
@@ -1131,13 +1128,13 @@ func handleLlmInteraction2(client bot.Client, channelID, messageID snowflake.ID,
 	persona := persona.GetPersonaByMeta(cache.PersonaMeta)
 
 	llmer := llm.NewLlmer()
-	numCtxMessages := addContextMessagesIfPossible(client, llmer, channelID, messageID, persona.FormatUsernames, cache.ContextLength)
+	numCtxMessages := addContextMessagesIfPossible(client, llmer, channelID, messageID, cache.ContextLength)
 	if timeInteraction && numCtxMessages == 0 {
 		return errTimeInteractionNoMessages
 	}
 	slog.Debug("interaction; added context messages", slog.Int("added", numCtxMessages), slog.Int("count", llmer.NumMessages()))
 
-	llmer.AddMessage(llm.RoleUser, formatMsg(content, username, persona.FormatUsernames))
+	llmer.AddMessage(llm.RoleUser, formatMsg(content, username, true))
 	addImageAttachments(llmer, attachments)
 
 	llmer.SetPersona(persona)

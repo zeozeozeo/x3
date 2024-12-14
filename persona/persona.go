@@ -60,7 +60,6 @@ x3 is now being connected to an online chat room. Messages may come from differe
 
 type Persona struct {
 	System          string // System prompt
-	FormatUsernames bool
 }
 
 type templateData struct {
@@ -86,7 +85,6 @@ func newX3Persona() Persona {
 
 	return Persona{
 		System:          tpl.String(),
-		FormatUsernames: true,
 	}
 }
 
@@ -98,15 +96,14 @@ func newX3ProtogenPersona() Persona {
 
 	return Persona{
 		System:          tpl.String(),
-		FormatUsernames: true,
 	}
 }
 
 type PersonaMeta struct {
-	Name     string `json:"name,omitempty"`
-	Desc     string `json:"-"`
-	Model    string `json:"model,omitempty"`
-	System   string `json:"system,omitempty"`
+	Name   string `json:"name,omitempty"`
+	Desc   string `json:"-"`
+	Model  string `json:"model,omitempty"`
+	System string `json:"system,omitempty"`
 }
 
 func (meta PersonaMeta) String() string {
@@ -123,9 +120,9 @@ var (
 	PersonaDefault = PersonaMeta{Name: "Default", Desc: "Use the default system prompt of a model"}
 	PersonaX3      = PersonaMeta{Name: "x3 Assistant", Desc: "Helpful, but boring. Not suitable for RP"}
 	PersonaProto   = PersonaMeta{
-		Name:     "x3 Protogen (Default)",
-		Desc:     "x3 as a furry protogen. Suitable for RP",
-		Model:    model.ModelLlama70b.Name,
+		Name:  "x3 Protogen (Default)",
+		Desc:  "x3 as a furry protogen. Suitable for RP",
+		Model: model.ModelLlama70b.Name,
 	}
 
 	AllPersonas = []PersonaMeta{
