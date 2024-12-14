@@ -1110,14 +1110,7 @@ func getMessageContent(message discord.Message, isWhitelisted bool) string {
 }
 
 func getMessageContentNoWhitelist(message discord.Message) string {
-	isWhitelisted := false
-	for _, attachment := range message.Attachments {
-		if attachment.ContentType != nil && *attachment.ContentType == "text/plain" {
-			isWhitelisted = isInWhitelist(message.Author.ID)
-			break
-		}
-	}
-	return getMessageContent(message, isWhitelisted)
+	return getMessageContent(message, isInWhitelist(message.Author.ID))
 }
 
 func handleLlmInteraction(event *events.MessageCreate, eraseX3 bool) error {
