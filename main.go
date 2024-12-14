@@ -1062,13 +1062,13 @@ func getMessageContent(message discord.Message, isWhitelisted bool) string {
 	// fetch from txt attachments, some of them may be cached on disk
 	for i, attachment := range message.Attachments {
 		// whitelisted: 64k limit
-		// not whitelisted: 2.5k limit
+		// not whitelisted: 4k limit
 		if isWhitelisted {
 			if attachment.Size > 64*1024 {
 				continue
 			}
 		} else {
-			if attachment.Size > 2.5*1024 {
+			if attachment.Size > 4*1024 {
 				continue
 			}
 		}

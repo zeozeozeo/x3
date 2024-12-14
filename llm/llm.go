@@ -307,8 +307,8 @@ func (l *Llmer) requestCompletionInternal(m model.Model, provider string, userna
 	usernames["x3"] = true
 	for username := range usernames {
 		prefix := username + ": "
-		for strings.HasPrefix(unescaped, prefix) {
-			unescaped = strings.TrimPrefix(unescaped, prefix)
+		for strings.HasPrefix(strings.ToLower(unescaped), strings.ToLower(prefix)) {
+			unescaped = unescaped[len(prefix):]
 		}
 	}
 
