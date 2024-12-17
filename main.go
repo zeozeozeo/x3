@@ -16,6 +16,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 	"unicode"
@@ -1111,15 +1112,46 @@ func getMessageContentNoWhitelist(message discord.Message) string {
 	return getMessageContent(message, isInWhitelist(message.Author.ID))
 }
 
+func sendTypingWithLog(client bot.Client, channelID snowflake.ID, wg *sync.WaitGroup) {
+	defer wg.Done()
+	if err := client.Rest().SendTyping(channelID); err != nil {
+		slog.Error("failed to SendTyping", slog.Any("err", err))
+	}
+}
+
 func handleLlmInteraction(event *events.MessageCreate, eraseX3 bool) error {
+	// while we wait on the message, send a typing indicator
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go sendTypingWithLog(event.Client(), event.ChannelID, &wg)
+
 	content := getMessageContentNoWhitelist(event.Message)
 	if eraseX3 {
 		content = stripX3(content)
 	}
-	return handleLlmInteraction2(event.Client(), event.ChannelID, event.MessageID, content, event.Message.Author.EffectiveName(), event.Message.Attachments, false)
+	return handleLlmInteraction2(
+		event.Client(),
+		event.ChannelID,
+		event.MessageID,
+		content,
+		event.Message.Author.EffectiveName(),
+		event.Message.Attachments,
+		false,
+		&wg,
+	)
 }
 
-func handleLlmInteraction2(client bot.Client, channelID, messageID snowflake.ID, content string, username string, attachments []discord.Attachment, timeInteraction bool) error {
+// doesn't call SendTyping!
+func handleLlmInteraction2(
+	client bot.Client,
+	channelID,
+	messageID snowflake.ID,
+	content string,
+	username string,
+	attachments []discord.Attachment,
+	timeInteraction bool,
+	preMsgWg *sync.WaitGroup, // what to wait on before sending the message
+) error {
 	cache := getChannelCache(channelID)
 	persona := persona.GetPersonaByMeta(cache.PersonaMeta)
 
@@ -1150,6 +1182,9 @@ func handleLlmInteraction2(client bot.Client, channelID, messageID snowflake.ID,
 	cache.LastUsage = usage
 
 	// and send the response
+	if preMsgWg != nil {
+		preMsgWg.Wait()
+	}
 	if _, err := sendMessageSplits(client, messageID, nil, 0, channelID, []rune(response)); err != nil {
 		slog.Error("failed to send message splits", slog.Any("err", err))
 	}
@@ -2024,7 +2059,7 @@ func initiateDMInteraction(client bot.Client) {
 		}
 		if !cache.LastInteraction.IsZero() {
 			// wait until 24 - rand(4) hours after last interaction
-			respondTime := cache.LastInteraction.Add(24*time.Hour - (time.Duration(rand.Intn(4)) * time.Hour))
+			respondTime := cache.LastInteraction.Add(24*time.Hour - (time.Duration(rand.Intn(5)) * time.Hour))
 			if !time.Now().After(respondTime) {
 				slog.Debug("skipping recent channel", slog.String("channel", id.String()))
 				continue
@@ -2047,6 +2082,11 @@ func initiateDMInteraction(client bot.Client) {
 
 		// interact
 		slog.Info("initiating dm interaction", slog.String("channel", id.String()))
+
+		var wg sync.WaitGroup
+		wg.Add(1)
+		go sendTypingWithLog(client, id, &wg)
+
 		err = handleLlmInteraction2(
 			client,
 			id,
@@ -2055,6 +2095,7 @@ func initiateDMInteraction(client bot.Client) {
 			"system message",
 			nil,
 			true, // timeInteraction
+			&wg,
 		)
 		if errors.Is(err, errTimeInteractionNoMessages) {
 			continue // GetMessages returned 0, no messages in channel (we passed `true` the line before)
