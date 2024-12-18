@@ -1110,6 +1110,9 @@ func getMessageContent(message discord.Message, isWhitelisted bool) string {
 	for _, mention := range message.Mentions {
 		content = strings.ReplaceAll(content, mention.Mention(), "@"+mention.EffectiveName())
 	}
+	for _, channel := range message.MentionChannels {
+		content = strings.ReplaceAll(content, fmt.Sprintf("<#%d>", channel.ID), "#"+channel.Name)
+	}
 
 	return content
 }
