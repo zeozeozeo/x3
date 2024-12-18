@@ -1057,6 +1057,9 @@ func readTxtCache(attachmentID snowflake.ID) ([]byte, bool) {
 
 func getMessageContent(message discord.Message, isWhitelisted bool) string {
 	content := message.Content
+	for _, mention := range message.Mentions {
+		content = strings.ReplaceAll(content, mention.Mention(), "@"+mention.EffectiveName())
+	}
 
 	// fetch from txt attachments, some of them may be cached on disk
 	for i, attachment := range message.Attachments {
