@@ -143,6 +143,7 @@ func MakeRedditImageCommand(
 				Build())
 			return err
 		},
+		refreshID:  "refresh_" + name,
 		name:       name,
 		subreddits: subreddits,
 	}
