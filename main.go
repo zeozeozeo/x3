@@ -325,8 +325,8 @@ var (
 			[]string{
 				"furry_irl",
 				"furry",
-				"furrymemes",
-				"wholesome_furry",
+				//"furrymemes",
+				//"wholesome_furry",
 			},
 			updateInteractionError,
 		),
