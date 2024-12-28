@@ -339,6 +339,7 @@ const (
 	maxRedditAttempts      = 3
 	x3Icon                 = "https://i.imgur.com/ckpztZY.png"
 	x3ErrorIcon            = "https://i.imgur.com/hCF06SC.png"
+	interactionReminder    = "\n-# if you wish to disable this, use `/random_dms enable: false`"
 )
 
 type ChannelCache struct {
@@ -846,6 +847,10 @@ outer:
 		}
 
 		content := getMessageContentNoWhitelist(msg)
+		if role == llm.RoleAssistant {
+			// in case of random dm, remove the interaction reminder
+			content = strings.TrimSuffix(content, interactionReminder)
+		}
 		llmer.AddMessage(role, formatMsg(content, msg.Author.EffectiveName(), true))
 
 		// if this is the last message with an image we add, check for images
@@ -1184,7 +1189,7 @@ func handleLlmInteraction2(
 	}
 
 	if timeInteraction && !cache.EverUsedRandomDMs {
-		response += "\n-# if you wish to disable this, use `/random_dms enable: false`"
+		response += interactionReminder
 	}
 
 	cache.Usage = cache.Usage.Add(usage)
