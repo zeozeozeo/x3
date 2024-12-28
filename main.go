@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -41,6 +42,8 @@ import (
 	"github.com/zeozeozeo/x3/reddit"
 
 	"database/sql"
+
+	_ "embed"
 
 	_ "github.com/mattn/go-sqlite3"
 )
@@ -341,6 +344,9 @@ const (
 	x3ErrorIcon            = "https://i.imgur.com/hCF06SC.png"
 	interactionReminder    = "\n-# if you wish to disable this, use `/random_dms enable: false`"
 )
+
+//go:embed media/sigma-boy.mp4
+var sigmaBoyMp4 []byte
 
 type ChannelCache struct {
 	// in channels where the bot cannot read messages this is set for caching messages
@@ -1213,6 +1219,7 @@ func handleLlmInteraction2(
 }
 
 var containsProtogenRegex = regexp.MustCompile(`(?i)(^|\W)(protogen|протоген)($|\W)`)
+var containsSigmaRegex = regexp.MustCompile(`(?i)(^|\W)(sigma)($|\W)`)
 
 func onMessageCreate(event *events.MessageCreate) {
 	if event.Message.Author.Bot {
@@ -1283,6 +1290,24 @@ func onMessageCreate(event *events.MessageCreate) {
 		)
 		if err != nil {
 			slog.Error("failed to send protogen response", slog.Any("err", err))
+		}
+		return
+	}
+
+	// check if "sigma" is mentioned
+	if containsSigmaRegex.MatchString(event.Message.Content) {
+		_, err := event.Client().Rest().CreateMessage(
+			event.ChannelID,
+			discord.NewMessageCreateBuilder().
+				SetMessageReferenceByID(event.MessageID).
+				SetAllowedMentions(&discord.AllowedMentions{
+					RepliedUser: false,
+				}).
+				AddFile("sigma-boy.mp4", "", bytes.NewReader(sigmaBoyMp4)).
+				Build(),
+		)
+		if err != nil {
+			slog.Error("failed to send sigma response", slog.Any("err", err))
 		}
 		return
 	}
