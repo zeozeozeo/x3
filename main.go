@@ -1388,7 +1388,12 @@ func fetchBoykisser(attempts int) (*http.Response, reddit.Post, error) {
 	//	time.Sleep(500 * time.Millisecond)
 	//}
 
-	post, err := reddit.GetRandomImageFromSubreddits("boykisser", "boykisser2", "boykissermemes", "wholesomeboykissers")
+	post, err := reddit.GetRandomImageFromSubreddits(
+		"boykisser",
+		"boykisser2",
+		"girlkisser",
+		"wholesomeboykissers",
+	)
 	if err != nil {
 		if attempts < maxRedditAttempts {
 			return fetchBoykisser(attempts + 1)
