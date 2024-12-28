@@ -12,7 +12,6 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
-	"path"
 	"regexp"
 	"sort"
 	"strconv"
@@ -36,10 +35,10 @@ import (
 	"github.com/disgoorg/snowflake/v2"
 	"github.com/dustin/go-humanize"
 	"github.com/lithammer/fuzzysearch/fuzzy"
+	"github.com/zeozeozeo/x3/imagecmd"
 	"github.com/zeozeozeo/x3/llm"
 	"github.com/zeozeozeo/x3/model"
 	"github.com/zeozeozeo/x3/persona"
-	"github.com/zeozeozeo/x3/reddit"
 
 	"database/sql"
 
@@ -163,26 +162,6 @@ var (
 				discord.ApplicationCommandOptionBool{
 					Name:        "reset_persona",
 					Description: "Also set the persona to the default one",
-					Required:    false,
-				},
-			},
-		},
-		discord.SlashCommandCreate{
-			Name:        "boykisser",
-			Description: "Send boykisser image",
-			IntegrationTypes: []discord.ApplicationIntegrationType{
-				discord.ApplicationIntegrationTypeGuildInstall,
-				discord.ApplicationIntegrationTypeUserInstall,
-			},
-			Contexts: []discord.InteractionContextType{
-				discord.InteractionContextTypeGuild,
-				discord.InteractionContextTypeBotDM,
-				discord.InteractionContextTypePrivateChannel,
-			},
-			Options: []discord.ApplicationCommandOption{
-				discord.ApplicationCommandOptionBool{
-					Name:        "ephemeral",
-					Description: "If the response should only be visible to you",
 					Required:    false,
 				},
 			},
@@ -328,6 +307,37 @@ var (
 		},
 		// gpt commands are added in init(), except for this one
 		makeGptCommand("chat", "Chat with the current persona"),
+		// imagecmd
+		imagecmd.MakeRedditImageCommand(
+			"boykisser",
+			"Send boykisser image",
+			[]string{
+				"boykisser",
+				"boykisser2",
+				"girlkisser",
+				"wholesomeboykissers",
+			},
+			updateInteractionError,
+		),
+		imagecmd.MakeRedditImageCommand(
+			"furry",
+			"Send a cute and relatable furry image",
+			[]string{
+				"furry_irl",
+				"furry",
+				"furrymemes",
+				"wholesome_furry",
+			},
+			updateInteractionError,
+		),
+		imagecmd.MakeRedditImageCommand(
+			"changed",
+			"Send a meme about the game Changed",
+			[]string{
+				"ChangedFurry",
+			},
+			updateInteractionError,
+		),
 	}
 
 	db *sql.DB
@@ -712,6 +722,7 @@ func main() {
 
 	// quote
 	r.Route("/quote", func(r handler.Router) {
+		r.Use()
 		r.Autocomplete("/get", handleQuoteGetAutocomplete)
 		r.Command("/get", handleQuoteGet)
 		r.Command("/random", handleQuoteRandom)
@@ -719,9 +730,7 @@ func main() {
 	})
 
 	// image
-	r.Command("/boykisser", handleBoykisser)
-
-	r.ButtonComponent("/refresh_boykisser", handleBoykisserRefresh)
+	imagecmd.RegisterCommands(r)
 
 	r.NotFound(handleNotFound)
 
@@ -1379,139 +1388,6 @@ func handleLobotomy(event *handler.CommandEvent) error {
 		Content: "Lobotomized for this channel",
 		Flags:   flags,
 	})
-}
-
-func fetchBoykisser(attempts int) (*http.Response, reddit.Post, error) {
-	slog.Info("fetchBoykisser", slog.Int("attempts", attempts))
-	//if attempts > 1 {
-	//	// perhaps reddit ratelimits us
-	//	time.Sleep(500 * time.Millisecond)
-	//}
-
-	post, err := reddit.GetRandomImageFromSubreddits(
-		"boykisser",
-		"boykisser2",
-		"girlkisser",
-		"wholesomeboykissers",
-	)
-	if err != nil {
-		if attempts < maxRedditAttempts {
-			return fetchBoykisser(attempts + 1)
-		}
-		return nil, post, err
-	}
-
-	url := post.Data.GetRandomImage()
-
-	// silly discord thing: we can't make image attachments using the URL;
-	// we actually have to fetch the file and upload it as an octet stream
-	client := &http.Client{}
-	req, err := http.NewRequest("GET", url, nil)
-	if err != nil {
-		if attempts < maxRedditAttempts {
-			return fetchBoykisser(attempts + 1)
-		}
-		return nil, post, err
-	}
-	req.Header.Set("User-Agent", reddit.UserAgent)
-
-	resp, err := client.Do(req)
-	if err != nil {
-		if attempts < maxRedditAttempts {
-			return fetchBoykisser(attempts + 1)
-		}
-		return nil, post, err
-	}
-
-	return resp, post, nil
-}
-
-func handleBoykisser(event *handler.CommandEvent) error {
-	data := event.SlashCommandInteractionData()
-	ephemeral := data.Bool("ephemeral")
-
-	event.DeferCreateMessage(ephemeral)
-
-	resp, post, err := fetchBoykisser(1)
-	if err != nil {
-		return updateInteractionError(event, err.Error())
-	}
-	defer resp.Body.Close()
-
-	var flags discord.MessageFlags
-	if ephemeral {
-		flags = discord.MessageFlagEphemeral
-	}
-
-	url := post.Data.GetRandomImage()
-
-	_, err = event.UpdateInteractionResponse(discord.MessageUpdate{
-		Files: []*discord.File{
-			{
-				Name:   path.Base(url),
-				Reader: resp.Body,
-			},
-		},
-		Components: &[]discord.ContainerComponent{
-			discord.ActionRowComponent{
-				discord.ButtonComponent{
-					Style: discord.ButtonStyleLink,
-					Emoji: &discord.ComponentEmoji{
-						Name: "💦",
-					},
-					URL: post.Data.GetPostLink(),
-				},
-				discord.ButtonComponent{
-					Style: discord.ButtonStyleSecondary,
-					Emoji: &discord.ComponentEmoji{
-						Name: "🔄",
-					},
-					CustomID: "refresh_boykisser",
-				},
-			},
-		},
-		Flags: &flags,
-	})
-	return err
-}
-
-func handleBoykisserRefresh(data discord.ButtonInteractionData, event *handler.ComponentEvent) error {
-	event.DeferUpdateMessage()
-	resp, post, err := fetchBoykisser(1)
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
-
-	url := post.Data.GetRandomImage()
-
-	_, err = event.UpdateInteractionResponse(discord.MessageUpdate{
-		Files: []*discord.File{
-			{
-				Name:   path.Base(url),
-				Reader: resp.Body,
-			},
-		},
-		Components: &[]discord.ContainerComponent{
-			discord.ActionRowComponent{
-				discord.ButtonComponent{
-					Style: discord.ButtonStyleLink,
-					Emoji: &discord.ComponentEmoji{
-						Name: "💦",
-					},
-					URL: post.Data.GetPostLink(),
-				},
-				discord.ButtonComponent{
-					Style: discord.ButtonStyleSecondary,
-					Emoji: &discord.ComponentEmoji{
-						Name: "🔄",
-					},
-					CustomID: "refresh_boykisser",
-				},
-			},
-		},
-	})
-	return err
 }
 
 func handlePersonaInfo(event *handler.CommandEvent, ephemeral bool) error {
