@@ -1435,10 +1435,10 @@ func handlePersonaInfo(event *handler.CommandEvent, ephemeral bool) error {
 		SetTimestamp(time.Now()).
 		AddField("Name", cache.PersonaMeta.Name, true).
 		AddField("Description", meta.Desc, true).
-		AddField("Model", model.GetModelByName(cache.PersonaMeta.Model).Name, false).
-		AddField("Temperature", ftoa(settings.Temperature), false).
-		AddField("Top P", ftoa(settings.TopP), false).
-		AddField("Frequency Penalty", ftoa(settings.FrequencyPenalty), false)
+		AddField("Temperature", ftoa(settings.Temperature), true).
+		AddField("Top P", ftoa(settings.TopP), true).
+		AddField("Frequency Penalty", ftoa(settings.FrequencyPenalty), true).
+		AddField("Model", model.GetModelByName(cache.PersonaMeta.Model).Name, false)
 
 	if cache.PersonaMeta.System != "" {
 		builder.AddField("System prompt", cache.PersonaMeta.System, false)
