@@ -157,6 +157,9 @@ func (l Llmer) convertMessages(hasVision bool, isLlama bool) []openai.ChatComple
 
 	var messages []openai.ChatCompletionMessage
 	for i, msg := range l.Messages {
+		if msg.Content == "" && len(msg.Images) == 0 {
+			continue // skip empty messages. HACK: they seem to appear after lobotomy, this is a hack
+		}
 		if len(msg.Images) == 0 || !hasVision || i != imageIdx {
 			role := msg.Role
 			if msg.Role == RoleSystem && imageIdx != -1 && isLlama && hasVision {
