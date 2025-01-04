@@ -1425,6 +1425,8 @@ func handlePersonaInfo(event *handler.CommandEvent, ephemeral bool) error {
 
 	meta, _ := persona.GetMetaByName(cache.PersonaMeta.Name)
 
+	settings := cache.PersonaMeta.Settings.Fixup()
+
 	builder := discord.NewEmbedBuilder().
 		SetTitle("Persona").
 		SetColor(0x0085ff).
@@ -1433,7 +1435,11 @@ func handlePersonaInfo(event *handler.CommandEvent, ephemeral bool) error {
 		SetTimestamp(time.Now()).
 		AddField("Name", cache.PersonaMeta.Name, true).
 		AddField("Description", meta.Desc, true).
-		AddField("Model", model.GetModelByName(cache.PersonaMeta.Model).Name, false)
+		AddField("Model", model.GetModelByName(cache.PersonaMeta.Model).Name, false).
+		AddField("Temperature", ftoa(settings.Temperature), false).
+		AddField("Top P", ftoa(settings.TopP), false).
+		AddField("Frequency Penalty", ftoa(settings.FrequencyPenalty), false)
+
 	if cache.PersonaMeta.System != "" {
 		builder.AddField("System prompt", cache.PersonaMeta.System, false)
 	}
@@ -1538,7 +1544,7 @@ func handlePersona(event *handler.CommandEvent) error {
 		TopP:             float32(dataTopP),
 		FrequencyPenalty: float32(dataFreqPenalty),
 		Seed:             seed,
-	}
+	}.Fixup()
 
 	if err := cache.write(event.Channel().ID()); err != nil {
 		return sendInteractionError(event, err.Error())
