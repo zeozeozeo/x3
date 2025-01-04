@@ -106,6 +106,10 @@ func makePersonaOptionChoices() []discord.ApplicationCommandOptionChoiceString {
 	return choices
 }
 
+func ftoheap(v float64) *float64 {
+	return &v
+}
+
 var (
 	token    = os.Getenv("X3_DISCORD_TOKEN")
 	commands = []discord.ApplicationCommandCreate{
@@ -199,6 +203,32 @@ var (
 				discord.ApplicationCommandOptionInt{
 					Name:        "context",
 					Description: "Amount of surrounding messages to use as context. Pass a negative number to reset",
+					Required:    false,
+				},
+				discord.ApplicationCommandOptionFloat{
+					Name:        "temperature",
+					Description: "Controls randomness in LLM predictions; 0 or 1 to reset",
+					Required:    false,
+					MinValue:    ftoheap(0.0),
+					MaxValue:    ftoheap(2.0),
+				},
+				discord.ApplicationCommandOptionFloat{
+					Name:        "top_p",
+					Description: "Controls cumulative probability of token selection; 0 or 1 to reset",
+					Required:    false,
+					MinValue:    ftoheap(0.0),
+					MaxValue:    ftoheap(1.0),
+				},
+				discord.ApplicationCommandOptionFloat{
+					Name:        "frequency_penalty",
+					Description: "Penalizes frequent tokens to reduce repetition; 0 to reset",
+					Required:    false,
+					MinValue:    ftoheap(-2.0),
+					MaxValue:    ftoheap(2.0),
+				},
+				discord.ApplicationCommandOptionInt{
+					Name:        "seed",
+					Description: "Set a seed for LLM predictions; 0 to reset",
 					Required:    false,
 				},
 				discord.ApplicationCommandOptionBool{
@@ -996,7 +1026,7 @@ func handleLlm(event *handler.CommandEvent, m *model.Model) error {
 	// discord only gives us 3s to respond unless we do this (x3 is thinking...)
 	event.DeferCreateMessage(ephemeral)
 
-	response, usage, err := llmer.RequestCompletion(*m, usernames)
+	response, usage, err := llmer.RequestCompletion(*m, usernames, cache.PersonaMeta.Settings)
 	if err != nil {
 		slog.Error("failed to generate response", slog.Any("err", err))
 		return updateInteractionError(event, err.Error())
@@ -1197,7 +1227,7 @@ func handleLlmInteraction2(
 	llmer.SetPersona(persona)
 
 	// now we generate the LLM response
-	response, usage, err := llmer.RequestCompletion(model.GetModelByName(cache.PersonaMeta.Model), usernames)
+	response, usage, err := llmer.RequestCompletion(model.GetModelByName(cache.PersonaMeta.Model), usernames, cache.PersonaMeta.Settings)
 	if err != nil {
 		slog.Error("failed to generate response", slog.Any("err", err))
 		return err
@@ -1403,7 +1433,7 @@ func handlePersonaInfo(event *handler.CommandEvent, ephemeral bool) error {
 		SetTimestamp(time.Now()).
 		AddField("Name", cache.PersonaMeta.Name, true).
 		AddField("Description", meta.Desc, true).
-		AddField("Model", cache.PersonaMeta.Model, false)
+		AddField("Model", model.GetModelByName(cache.PersonaMeta.Model).Name, false)
 	if cache.PersonaMeta.System != "" {
 		builder.AddField("System prompt", cache.PersonaMeta.System, false)
 	}
@@ -1419,15 +1449,30 @@ func handlePersonaInfo(event *handler.CommandEvent, ephemeral bool) error {
 	)
 }
 
+func ftoa(f float32) string {
+	return strconv.FormatFloat(float64(f), 'f', -1, 32)
+}
+
+func zifnil(val *int) int {
+	if val == nil {
+		return 0
+	}
+	return *val
+}
+
 func handlePersona(event *handler.CommandEvent) error {
 	data := event.SlashCommandInteractionData()
 	dataPersona := data.String("persona")
 	dataModel := data.String("model")
 	dataSystem := data.String("system")
 	dataContext, hasContext := data.OptInt("context")
+	dataTemperature, hasTemperature := data.OptFloat("temperature")
+	dataTopP, hasTopP := data.OptFloat("top_p")
+	dataFreqPenalty, hasFreqPenalty := data.OptFloat("frequency_penalty")
+	dataSeed, hasDataSeed := data.OptInt("seed")
 	ephemeral := data.Bool("ephemeral")
 
-	if dataPersona == "" && dataModel == "" && dataSystem == "" && !hasContext {
+	if dataPersona == "" && dataModel == "" && dataSystem == "" && !hasContext && !hasTemperature && !hasTopP && !hasFreqPenalty && !hasDataSeed {
 		return handlePersonaInfo(event, ephemeral)
 	}
 
@@ -1484,6 +1529,16 @@ func handlePersona(event *handler.CommandEvent) error {
 		}
 		cache.ContextLength = dataContext
 	}
+	var seed *int
+	if dataSeed != 0 {
+		seed = &dataSeed
+	}
+	cache.PersonaMeta.Settings = persona.InferenceSettings{
+		Temperature:      float32(dataTemperature),
+		TopP:             float32(dataTopP),
+		FrequencyPenalty: float32(dataFreqPenalty),
+		Seed:             seed,
+	}
 
 	if err := cache.write(event.Channel().ID()); err != nil {
 		return sendInteractionError(event, err.Error())
@@ -1502,6 +1557,26 @@ func handlePersona(event *handler.CommandEvent) error {
 	}
 	if cache.ContextLength != prevContextLen {
 		didWhat = append(didWhat, fmt.Sprintf("updated context length %d → %d", prevContextLen, cache.ContextLength))
+	}
+	if cache.PersonaMeta.Settings.Temperature != prevMeta.Settings.Temperature {
+		didWhat = append(didWhat, fmt.Sprintf("updated temperature %s → %s", ftoa(prevMeta.Settings.Temperature), ftoa(cache.PersonaMeta.Settings.Temperature)))
+	}
+	if cache.PersonaMeta.Settings.TopP != prevMeta.Settings.TopP {
+		didWhat = append(didWhat, fmt.Sprintf("updated top_p %s → %s", ftoa(prevMeta.Settings.TopP), ftoa(cache.PersonaMeta.Settings.TopP)))
+	}
+	if cache.PersonaMeta.Settings.FrequencyPenalty != prevMeta.Settings.FrequencyPenalty {
+		didWhat = append(didWhat, fmt.Sprintf("updated frequency_penalty %s → %s", ftoa(prevMeta.Settings.FrequencyPenalty), ftoa(cache.PersonaMeta.Settings.FrequencyPenalty)))
+	}
+	if zifnil(cache.PersonaMeta.Settings.Seed) != zifnil(prevMeta.Settings.Seed) {
+		prevSeed := "`<random>`"
+		if prevMeta.Settings.Seed != nil {
+			prevSeed = strconv.Itoa(*prevMeta.Settings.Seed)
+		}
+		newSeed := "`<random>`"
+		if cache.PersonaMeta.Settings.Seed != nil {
+			newSeed = strconv.Itoa(*cache.PersonaMeta.Settings.Seed)
+		}
+		didWhat = append(didWhat, fmt.Sprintf("updated seed %s → %s", prevSeed, newSeed))
 	}
 
 	if len(didWhat) > 0 {

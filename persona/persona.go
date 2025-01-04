@@ -59,7 +59,7 @@ x3 is now being connected to an online chat room. Messages may come from differe
 )
 
 type Persona struct {
-	System          string // System prompt
+	System string // System prompt
 }
 
 type templateData struct {
@@ -84,7 +84,7 @@ func newX3Persona() Persona {
 	}
 
 	return Persona{
-		System:          tpl.String(),
+		System: tpl.String(),
 	}
 }
 
@@ -95,15 +95,36 @@ func newX3ProtogenPersona() Persona {
 	}
 
 	return Persona{
-		System:          tpl.String(),
+		System: tpl.String(),
 	}
 }
 
+type InferenceSettings struct {
+	Temperature      float32 `json:"temperature,omitempty"`
+	TopP             float32 `json:"top_p,omitempty"`
+	FrequencyPenalty float32 `json:"frequency_penalty,omitempty"`
+	Seed             *int    `json:"seed,omitempty"`
+}
+
+func (s InferenceSettings) Fixup() InferenceSettings {
+	if s.Seed != nil && *s.Seed == 0 {
+		s.Seed = nil
+	}
+	if s.Temperature == 0.0 {
+		s.Temperature = 1.0
+	}
+	if s.TopP == 0.0 {
+		s.TopP = 1.0
+	}
+	return s
+}
+
 type PersonaMeta struct {
-	Name   string `json:"name,omitempty"`
-	Desc   string `json:"-"`
-	Model  string `json:"model,omitempty"`
-	System string `json:"system,omitempty"`
+	Name     string            `json:"name,omitempty"`
+	Desc     string            `json:"-"`
+	Model    string            `json:"model,omitempty"`
+	System   string            `json:"system,omitempty"`
+	Settings InferenceSettings `json:"settings,omitempty"`
 }
 
 func (meta PersonaMeta) String() string {

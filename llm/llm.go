@@ -245,8 +245,20 @@ func (l Llmer) estimateUsage(m model.Model) Usage {
 	return usage
 }
 
-func (l *Llmer) requestCompletionInternal(m model.Model, provider string, usernames map[string]bool) (string, Usage, error) {
-	slog.Info("request completion.. message history follows..", slog.String("model", m.Name))
+func (l *Llmer) requestCompletionInternal(
+	m model.Model,
+	provider string,
+	usernames map[string]bool,
+	settings persona.InferenceSettings,
+) (string, Usage, error) {
+	slog.Info(
+		"request completion.. message history follows..",
+		slog.String("model", m.Name),
+		slog.String("provider", provider),
+		slog.Float64("temperature", float64(settings.Temperature)),
+		slog.Float64("top_p", float64(settings.TopP)),
+		slog.Float64("frequency_penalty", float64(settings.FrequencyPenalty)),
+	)
 	for _, msg := range l.Messages {
 		slog.Info("    message", slog.String("role", msg.Role), slog.String("content", msg.Content), slog.Int("images", len(msg.Images)))
 	}
@@ -260,6 +272,10 @@ func (l *Llmer) requestCompletionInternal(m model.Model, provider string, userna
 		StreamOptions: &openai.StreamOptions{
 			IncludeUsage: true,
 		},
+		Temperature:      settings.Temperature,
+		TopP:             settings.TopP,
+		FrequencyPenalty: settings.FrequencyPenalty,
+		Seed:             settings.Seed,
 	}
 
 	completionStart := time.Now()
@@ -337,7 +353,7 @@ func (l *Llmer) requestCompletionInternal(m model.Model, provider string, userna
 	return unescaped, usage, nil
 }
 
-func (l *Llmer) RequestCompletion(m model.Model, usernames map[string]bool) (res string, usage Usage, err error) {
+func (l *Llmer) RequestCompletion(m model.Model, usernames map[string]bool, settings persona.InferenceSettings) (res string, usage Usage, err error) {
 	for _, provider := range model.ScoreProviders() {
 		retries := 0
 	retry:
@@ -349,7 +365,7 @@ func (l *Llmer) RequestCompletion(m model.Model, usernames map[string]bool) (res
 		}
 		slog.Info("requesting completion", slog.String("provider", provider.Name), slog.Int("providerErrors", provider.Errors), slog.Int("retries", retries))
 
-		res, usage, err = l.requestCompletionInternal(m, provider.Name, usernames)
+		res, usage, err = l.requestCompletionInternal(m, provider.Name, usernames, settings.Fixup())
 		if res == "" {
 			slog.Warn("got an empty response from requestCompletionInternal", slog.String("provider", provider.Name))
 			retries++
