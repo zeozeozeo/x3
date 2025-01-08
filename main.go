@@ -316,6 +316,19 @@ var (
 						},
 					},
 				},
+				discord.ApplicationCommandOptionSubCommand{
+					Name:        "remove",
+					Description: "Remove a quote. Only available to server moderators",
+					Options: []discord.ApplicationCommandOption{
+						discord.ApplicationCommandOptionString{
+							// autocompleted
+							Name:         "name",
+							Description:  "Name of the quote",
+							Required:     true,
+							Autocomplete: true,
+						},
+					},
+				},
 			},
 		},
 		discord.SlashCommandCreate{
@@ -482,6 +495,10 @@ func (s ServerStats) QuoteExists(quote Quote) (bool, int) {
 func (s *ServerStats) AddQuote(quote Quote) int {
 	s.Quotes = append(s.Quotes, quote)
 	return len(s.Quotes)
+}
+
+func (s *ServerStats) RemoveQuote(index int) {
+	s.Quotes = append(s.Quotes[:index], s.Quotes[index+1:]...)
 }
 
 func unmarshalServerStats(data []byte) (ServerStats, error) {
@@ -757,6 +774,8 @@ func main() {
 		r.Command("/get", handleQuoteGet)
 		r.Command("/random", handleQuoteRandom)
 		r.Command("/new", handleQuoteNew)
+		r.Autocomplete("/remove", handleQuoteGetAutocomplete)
+		r.Command("/remove", handleQuoteRemove)
 	})
 
 	// image
@@ -1399,7 +1418,7 @@ func handleLobotomy(event *handler.CommandEvent) error {
 	}
 	if writeCache {
 		if err := cache.write(event.Channel().ID()); err != nil {
-			return sendInteractionError(event, err.Error())
+			return sendInteractionError(event, err.Error(), true)
 		}
 	}
 
@@ -1547,7 +1566,7 @@ func handlePersona(event *handler.CommandEvent) error {
 	}.Fixup()
 
 	if err := cache.write(event.Channel().ID()); err != nil {
-		return sendInteractionError(event, err.Error())
+		return sendInteractionError(event, err.Error(), true)
 	}
 
 	var sb strings.Builder
@@ -1679,7 +1698,7 @@ func handleStats(event *handler.CommandEvent) error {
 	stats, err := getGlobalStats()
 	if err != nil {
 		slog.Error("failed to get global stats", slog.Any("err", err))
-		return sendInteractionError(event, err.Error())
+		return sendInteractionError(event, err.Error(), true)
 	}
 	cache := getChannelCache(event.Channel().ID())
 
@@ -1748,12 +1767,13 @@ func sendPrettyError(client bot.Client, msg string, channelID, messageID snowfla
 	return err
 }
 
-func sendInteractionError(event *handler.CommandEvent, msg string) error {
+func sendInteractionError(event *handler.CommandEvent, msg string, ephemeral bool) error {
 	return event.CreateMessage(
 		discord.NewMessageCreateBuilder().
 			SetAllowedMentions(&discord.AllowedMentions{
 				RepliedUser: false,
 			}).
+			SetEphemeral(ephemeral).
 			AddEmbeds(
 				discord.NewEmbedBuilder().
 					SetColor(0xf54242).
@@ -1849,9 +1869,12 @@ func handleQuote(event *events.MessageCreate) error {
 	}
 
 	var attachmentURL string
+	content := event.Message.ReferencedMessage.Content
 	if len(event.Message.ReferencedMessage.Attachments) > 0 {
 		attachmentURL = event.Message.ReferencedMessage.Attachments[0].URL
+		content += fmt.Sprintf(" (attached %s)", event.Message.ReferencedMessage.Attachments[0].Filename)
 	}
+	content = strings.TrimSpace(content)
 
 	quote := Quote{
 		MessageID:     event.Message.ReferencedMessage.ID,
@@ -1859,7 +1882,7 @@ func handleQuote(event *events.MessageCreate) error {
 		AuthorID:      event.Message.ReferencedMessage.Author.ID,
 		AuthorUser:    event.Message.ReferencedMessage.Author.Username,
 		Channel:       event.Message.ReferencedMessage.ChannelID,
-		Text:          event.Message.ReferencedMessage.Content,
+		Text:          content,
 		AttachmentURL: attachmentURL,
 		Timestamp:     event.Message.ReferencedMessage.CreatedAt,
 	}
@@ -1969,7 +1992,7 @@ func handleQuoteGet(event *handler.CommandEvent) error {
 	}
 
 	if idx > len(server.Quotes)-1 || idx < 0 {
-		return sendInteractionError(event, fmt.Sprintf("quote #%d does not exist", idx+1))
+		return sendInteractionError(event, fmt.Sprintf("quote #%d does not exist", idx+1), true)
 	}
 
 	return sendQuote(event, event.Client(), 0, 0, server.Quotes[idx], idx+1)
@@ -1982,7 +2005,7 @@ func handleQuoteRandom(event *handler.CommandEvent) error {
 	}
 
 	if len(server.Quotes) == 0 {
-		return sendInteractionError(event, "no quotes in this server")
+		return sendInteractionError(event, "no quotes in this server", true)
 	}
 
 	nr := rand.Intn(len(server.Quotes))
@@ -1990,10 +2013,10 @@ func handleQuoteRandom(event *handler.CommandEvent) error {
 }
 
 func handleQuoteNew(event *handler.CommandEvent) error {
-	text := event.SlashCommandInteractionData().String("text")
+	text := strings.TrimSpace(event.SlashCommandInteractionData().String("text"))
 
-	if len(strings.TrimSpace(text)) == 0 {
-		sendInteractionError(event, "can't make a quote with no text")
+	if len(text) == 0 {
+		sendInteractionError(event, "can't make a quote with no text", true)
 		return nil
 	}
 
@@ -2012,17 +2035,68 @@ func handleQuoteNew(event *handler.CommandEvent) error {
 	}
 
 	if exists, nr := server.QuoteExists(quote); exists {
-		return sendInteractionError(event, fmt.Sprintf("quote #%d already exists", nr+1))
+		return sendInteractionError(event, fmt.Sprintf("quote #%d already exists", nr+1), true)
 	}
 
 	nr := server.AddQuote(quote)
 
 	if err := server.write(serverID); err != nil {
 		slog.Error("failed to save server stats", slog.Any("err", err))
-		return sendInteractionError(event, err.Error())
+		return sendInteractionError(event, err.Error(), true)
 	}
 
 	return sendQuote(event, event.Client(), 0, 0, quote, nr)
+}
+
+func isModerator(p discord.Permissions) bool {
+	return p.Has(discord.PermissionManageRoles) ||
+		p.Has(discord.PermissionAdministrator) ||
+		p.Has(discord.PermissionModerateMembers)
+}
+
+func handleQuoteRemove(event *handler.CommandEvent) error {
+	if event.Member() != nil && !isModerator(event.Member().Permissions) {
+		return sendInteractionError(event, "only moderators can remove quotes", true)
+	}
+
+	idx, err := strconv.Atoi(event.SlashCommandInteractionData().String("name"))
+	if err != nil {
+		return err
+	}
+
+	// 1-indexed
+	idx--
+
+	server, serverID, err := getServerFromEvent(event)
+	if err != nil {
+		return err
+	}
+
+	if idx > len(server.Quotes)-1 || idx < 0 {
+		return sendInteractionError(event, fmt.Sprintf("quote #%d does not exist", idx+1), true)
+	}
+
+	server.RemoveQuote(idx)
+
+	if err := server.write(serverID); err != nil {
+		slog.Error("failed to save server stats", slog.Any("err", err))
+		return sendInteractionError(event, err.Error(), true)
+	}
+
+	return event.CreateMessage(
+		discord.NewMessageCreateBuilder().
+			SetEphemeral(true).
+			AddEmbeds(
+				discord.NewEmbedBuilder().
+					SetTitle("Quote removed").
+					SetColor(0x0085ff).
+					SetDescription(fmt.Sprintf("Removed quote #%d", idx+1)).
+					SetFooter("x3", x3Icon).
+					SetTimestamp(time.Now()).
+					Build(),
+			).
+			Build(),
+	)
 }
 
 func handleRandomDMs(event *handler.CommandEvent) error {
