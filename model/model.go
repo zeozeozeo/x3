@@ -439,7 +439,7 @@ var (
 		Providers: map[string]ModelProvider{
 			ProviderZukijourney: {
 				API:      zjBaseURL,
-				Codename: "grok-2",
+				Codename: "grok-2-larp",
 			},
 			ProviderFresed: {
 				API:      fresedBaseURL,
@@ -452,29 +452,13 @@ var (
 		},
 	}
 
-	ModelGrok2Mini = Model{
-		Name:    "xAI Grok-2 mini",
-		Command: "grok",
-		Vision:  true,
-		Providers: map[string]ModelProvider{
-			ProviderZukijourney: {
-				API:      zjBaseURL,
-				Codename: "grok-2-mini",
-			},
-			ProviderG4F: {
-				API:      g4fBaseURL,
-				Codename: "grok-2-mini",
-			},
-		},
-	}
-
 	ModelNousHermes405b = Model{
 		Name:    "Nous Hermes 3 405B Instruct",
 		Command: "hermes",
 		Providers: map[string]ModelProvider{
-			ProviderOpenRouter: {
-				API:      openRouterBaseURL,
-				Codename: "nousresearch/hermes-3-llama-3.1-405b:free",
+			ProviderFresed: {
+				API:      fresedBaseURL,
+				Codename: "hermes-3-llama-3.1-405b",
 			},
 		},
 	}
@@ -615,26 +599,43 @@ var (
 		},
 	}
 
-	ModelO1Preview = Model{
-		Name:           "OpenAI o1-preview",
-		Command:        "o1_preview",
-		NeedsWhitelist: true,
+	ModelDeepSeekV3 = Model{
+		Name:    "DeepSeek-V3 671B",
+		Command: "deepseek",
 		Providers: map[string]ModelProvider{
-			ProviderG4F: {
-				API:      g4fBaseURL,
-				Codename: "o1-preview",
+			ProviderZukijourney: {
+				API:      zjBaseURL,
+				Codename: "deepseek-chat",
+			},
+			ProviderFresed: {
+				API:      fresedBaseURL,
+				Codename: "deepseek-v3",
 			},
 		},
 	}
 
-	ModelO1Mini = Model{
-		Name:           "OpenAI o1-mini",
-		Command:        "o1_mini",
-		NeedsWhitelist: true,
+	ModelQwQ = Model{
+		Name:    "QwQ 32B",
+		Command: "qwq",
 		Providers: map[string]ModelProvider{
-			ProviderG4F: {
-				API:      g4fBaseURL,
-				Codename: "o1-mini",
+			ProviderZukijourney: {
+				API:      zjBaseURL,
+				Codename: "qwq-32b-preview",
+			},
+			ProviderFresed: {
+				API:      fresedBaseURL,
+				Codename: "qwq-32b",
+			},
+		},
+	}
+
+	ModelKimiK = Model{
+		Name:    "Kimi k1.5",
+		Command: "kimi",
+		Providers: map[string]ModelProvider{
+			ProviderZukijourney: {
+				API:      zjBaseURL,
+				Codename: "kimi-1.5",
 			},
 		},
 	}
@@ -658,7 +659,6 @@ var (
 		ModelLlama11b,
 		ModelLlama8b,
 		ModelGrok2,
-		ModelGrok2Mini,
 		ModelNousHermes405b,
 		ModelLiquidLFM40b,
 		ModelGigaChatPro,
@@ -669,8 +669,9 @@ var (
 		ModelJambaMini,
 		ModelGemma9b,
 		ModelGemma27b,
-		//ModelO1Preview,
-		//ModelO1Mini,
+		ModelDeepSeekV3,
+		ModelQwQ,
+		ModelKimiK,
 	}
 
 	modelByName = map[string]Model{}
