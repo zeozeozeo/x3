@@ -439,7 +439,7 @@ var (
 		Providers: map[string]ModelProvider{
 			ProviderZukijourney: {
 				API:      zjBaseURL,
-				Codename: "grok-2-larp",
+				Codename: "grok-2",
 			},
 			ProviderFresed: {
 				API:      fresedBaseURL,
