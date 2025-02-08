@@ -245,25 +245,14 @@ func (l Llmer) estimateUsage(m model.Model) Usage {
 	return usage
 }
 
-func (l *Llmer) requestCompletionInternal(
+func (l *Llmer) requestCompletionInternal2(
 	m model.Model,
+	codename,
 	provider string,
 	usernames map[string]bool,
 	settings persona.InferenceSettings,
+	client *openai.Client,
 ) (string, Usage, error) {
-	slog.Info(
-		"request completion.. message history follows..",
-		slog.String("model", m.Name),
-		slog.String("provider", provider),
-		slog.Float64("temperature", float64(settings.Temperature)),
-		slog.Float64("top_p", float64(settings.TopP)),
-		slog.Float64("frequency_penalty", float64(settings.FrequencyPenalty)),
-	)
-	for _, msg := range l.Messages {
-		slog.Info("    message", slog.String("role", msg.Role), slog.String("content", msg.Content), slog.Int("images", len(msg.Images)))
-	}
-
-	client, codename := m.Client(provider)
 	req := openai.ChatCompletionRequest{
 		Model: codename,
 		// google api doesn't support image URIs, WTF google?
@@ -351,6 +340,39 @@ func (l *Llmer) requestCompletionInternal(
 	})
 
 	return unescaped, usage, nil
+}
+
+func (l *Llmer) requestCompletionInternal(
+	m model.Model,
+	provider string,
+	usernames map[string]bool,
+	settings persona.InferenceSettings,
+) (string, Usage, error) {
+	slog.Info(
+		"request completion.. message history follows..",
+		slog.String("model", m.Name),
+		slog.String("provider", provider),
+		slog.Float64("temperature", float64(settings.Temperature)),
+		slog.Float64("top_p", float64(settings.TopP)),
+		slog.Float64("frequency_penalty", float64(settings.FrequencyPenalty)),
+	)
+	for _, msg := range l.Messages {
+		slog.Info("    message", slog.String("role", msg.Role), slog.String("content", msg.Content), slog.Int("images", len(msg.Images)))
+	}
+
+	client, codenames := m.Client(provider)
+	if client == nil {
+		return "", Usage{}, errors.New("no client")
+	}
+
+	for _, codename := range codenames {
+		res, usage, err := l.requestCompletionInternal2(m, codename, provider, usernames, settings, client)
+		if err == nil {
+			return res, usage, nil
+		}
+	}
+
+	return "", Usage{}, nil // all codenames errored, retry
 }
 
 func (l *Llmer) RequestCompletion(m model.Model, usernames map[string]bool, settings persona.InferenceSettings) (res string, usage Usage, err error) {
