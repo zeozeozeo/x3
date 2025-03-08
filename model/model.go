@@ -124,30 +124,6 @@ var (
 		},
 	}
 
-	ModelGeminiPro = Model{
-		Name:    "Google Gemini 1.5 Pro",
-		Command: "geminipro",
-		Vision:  true,
-		Providers: map[string]ModelProvider{
-			ProviderGoogle: {
-				API:       googleBaseURL,
-				Codenames: []string{"gemini-1.5-pro"},
-			},
-			ProviderOpenRouter: {
-				API:       openRouterBaseURL,
-				Codenames: []string{"google/gemini-pro-1.5-exp"},
-			},
-			ProviderZukijourney: {
-				API:       zjBaseURL,
-				Codenames: []string{"gemini-1.5-pro-latest"},
-			},
-			ProviderFresed: {
-				API:       fresedBaseURL,
-				Codenames: []string{"gemini-1.5-pro-latest"},
-			},
-		},
-	}
-
 	ModelClaude3Haiku = Model{
 		Name:    "Anthropic Claude 3 Haiku",
 		Command: "haiku",
@@ -168,19 +144,6 @@ var (
 		},
 	}
 
-	ModelClaude35Sonnet = Model{
-		Name:           "Anthropic Claude 3.5 Sonnet",
-		Command:        "sonnet",
-		Vision:         true,
-		NeedsWhitelist: true,
-		Providers: map[string]ModelProvider{
-			ProviderG4F: {
-				API:       g4fBaseURL,
-				Codenames: []string{"claude-3.5-sonnet"},
-			},
-		},
-	}
-
 	ModelGeminiFlash = Model{
 		Name:    "Google Gemini 2.0 Flash",
 		Command: "gemini",
@@ -188,15 +151,15 @@ var (
 		Providers: map[string]ModelProvider{
 			ProviderGoogle: {
 				API:       googleBaseURL,
-				Codenames: []string{"gemini-2.0-flash-exp"},
+				Codenames: []string{"gemini-2.0-flash"},
 			},
 			ProviderOpenRouter: {
 				API:       openRouterBaseURL,
-				Codenames: []string{"google/gemini-2.0-flash-exp:free"},
+				Codenames: []string{"google/gemini-2.0-flash:free"},
 			},
 			ProviderFresed: {
 				API:       fresedBaseURL,
-				Codenames: []string{"gemini-2.0-flash-exp"},
+				Codenames: []string{"gemini-2.0-flash"},
 			},
 		},
 	}
@@ -242,17 +205,6 @@ var (
 			ProviderZukijourney: {
 				API:       zjBaseURL,
 				Codenames: []string{"caramelldansen-1"},
-			},
-		},
-	}
-
-	ModelMinistral3b = Model{
-		Name:    "Mistral Ministral 3B",
-		Command: "ministral",
-		Providers: map[string]ModelProvider{
-			ProviderGithub: {
-				API:       azureBaseURL,
-				Codenames: []string{"Ministral-3B"},
 			},
 		},
 	}
@@ -431,57 +383,6 @@ var (
 		},
 	}
 
-	ModelGrok2 = Model{
-		Name:           "xAI Grok-2",
-		Command:        "grok2",
-		Vision:         true,
-		NeedsWhitelist: true,
-		Providers: map[string]ModelProvider{
-			ProviderZukijourney: {
-				API:       zjBaseURL,
-				Codenames: []string{"grok-2", "grok-2-larp"},
-			},
-			ProviderFresed: {
-				API:       fresedBaseURL,
-				Codenames: []string{"grok-2"},
-			},
-			ProviderG4F: {
-				API:       g4fBaseURL,
-				Codenames: []string{"grok-2"},
-			},
-		},
-	}
-
-	ModelNousHermes405b = Model{
-		Name:    "Nous Hermes 3 405B Instruct",
-		Command: "hermes",
-		Providers: map[string]ModelProvider{
-			ProviderFresed: {
-				API:       fresedBaseURL,
-				Codenames: []string{"hermes-3-llama-3.1-405b"},
-			},
-		},
-	}
-
-	ModelLiquidLFM40b = Model{
-		Name:    "Liquid LFM 40B MoE",
-		Command: "liquid",
-		Providers: map[string]ModelProvider{
-			ProviderOpenRouter: {
-				API:       openRouterBaseURL,
-				Codenames: []string{"liquid/lfm-40b:free"},
-			},
-			ProviderZukijourney: {
-				API:       zjBaseURL,
-				Codenames: []string{"liquid-40b"},
-			},
-			ProviderG4F: {
-				API:       g4fBaseURL,
-				Codenames: []string{"lfm-40b-moe"},
-			},
-		},
-	}
-
 	ModelGigaChatPro = Model{
 		Name:    "Sberbank GigaChat Pro (Russian)",
 		Command: "gigachatpro",
@@ -489,82 +390,6 @@ var (
 			ProviderZukijourney: {
 				API:       zjBaseURL,
 				Codenames: []string{"GigaChat-Pro"},
-			},
-		},
-	}
-
-	ModelPhi35MoE = Model{
-		Name:    "Microsoft Phi-3.5-MoE Instruct 6.6B",
-		Command: "phi35moe",
-		Providers: map[string]ModelProvider{
-			ProviderGithub: {
-				API:       azureBaseURL,
-				Codenames: []string{"Phi-3.5-MoE-instruct"},
-			},
-			ProviderFresed: {
-				API:       fresedBaseURL,
-				Codenames: []string{"phi-3.5-moe"},
-			},
-		},
-	}
-
-	ModelPhi35Vision = Model{
-		Name:    "Microsoft Phi-3.5-Vision 4.2B",
-		Command: "phi35vision",
-		Vision:  true,
-		Providers: map[string]ModelProvider{
-			ProviderGithub: {
-				API:       azureBaseURL,
-				Codenames: []string{"Phi-3.5-vision-instruct"},
-			},
-		},
-	}
-
-	ModelPhi35Mini = Model{
-		Name:    "Microsoft Phi-3.5-Mini 3.8B",
-		Command: "phi35mini",
-		Providers: map[string]ModelProvider{
-			ProviderGithub: {
-				API:       azureBaseURL,
-				Codenames: []string{"Phi-3.5-mini-instruct"},
-			},
-			ProviderFresed: {
-				API:       fresedBaseURL,
-				Codenames: []string{"phi-3.5-mini"},
-			},
-		},
-	}
-
-	ModelJambaLarge = Model{
-		Name:    "AI21 Jamba 1.5 Large 94B active/398B total",
-		Command: "jambalarge",
-		Providers: map[string]ModelProvider{
-			ProviderGithub: {
-				API:       azureBaseURL,
-				Codenames: []string{"AI21-Jamba-1.5-Large"},
-			},
-			ProviderFresed: {
-				API:       fresedBaseURL,
-				Codenames: []string{"jamba-1.5-large"},
-			},
-			ProviderZukijourney: {
-				API:       zjBaseURL,
-				Codenames: []string{"jamba-1.5-large"},
-			},
-		},
-	}
-
-	ModelJambaMini = Model{
-		Name:    "AI21 Jamba 1.5 Mini 12B active/52B total",
-		Command: "jamba",
-		Providers: map[string]ModelProvider{
-			ProviderGithub: {
-				API:       azureBaseURL,
-				Codenames: []string{"AI21-Jamba-1.5-Mini"},
-			},
-			ProviderFresed: {
-				API:       fresedBaseURL,
-				Codenames: []string{"jamba-1.5-mini"},
 			},
 		},
 	}
@@ -615,12 +440,17 @@ var (
 	}
 
 	ModelQwQ = Model{
-		Name:    "QwQ 32B",
-		Command: "qwq",
+		Name:           "QwQ 32B",
+		Command:        "qwq",
+		NeedsWhitelist: true,
 		Providers: map[string]ModelProvider{
 			ProviderZukijourney: {
 				API:       zjBaseURL,
-				Codenames: []string{"qwq-32b-preview"},
+				Codenames: []string{"qwq-32b"},
+			},
+			ProviderGroq: {
+				API:       groqBaseURL,
+				Codenames: []string{"qwen-qwq-32b"},
 			},
 			ProviderFresed: {
 				API:       fresedBaseURL,
@@ -629,13 +459,24 @@ var (
 		},
 	}
 
-	ModelKimiK = Model{
-		Name:    "Kimi k1.5",
-		Command: "kimi",
+	ModelQwen = Model{
+		Name:    "Qwen 2.5 32B",
+		Command: "qwen",
 		Providers: map[string]ModelProvider{
-			ProviderZukijourney: {
-				API:       zjBaseURL,
-				Codenames: []string{"kimi-1.5"},
+			ProviderGroq: {
+				API:       groqBaseURL,
+				Codenames: []string{"qwen-2.5-32b"},
+			},
+		},
+	}
+
+	ModelQwenCoder = Model{
+		Name:    "Qwen 2.5 Coder 32B",
+		Command: "coder",
+		Providers: map[string]ModelProvider{
+			ProviderGroq: {
+				API:       groqBaseURL,
+				Codenames: []string{"qwen-2.5-coder-32b"},
 			},
 		},
 	}
@@ -643,14 +484,11 @@ var (
 	AllModels = []Model{
 		ModelGpt4oMini,
 		ModelGpt4o,
-		ModelGeminiPro,
 		ModelClaude3Haiku,
-		//ModelClaude35Sonnet,
 		ModelGeminiFlash,
 		ModelCommandRplus,
 		ModelMixtral8x7b,
 		ModelMixtral8x22b,
-		ModelMinistral3b,
 		ModelMistralLarge,
 		ModelMistralNemo,
 		ModelLlama405b,
@@ -658,20 +496,12 @@ var (
 		ModelLlama70b,
 		ModelLlama11b,
 		ModelLlama8b,
-		ModelGrok2,
-		ModelNousHermes405b,
-		ModelLiquidLFM40b,
 		ModelGigaChatPro,
-		ModelPhi35MoE,
-		ModelPhi35Vision,
-		ModelPhi35Mini,
-		ModelJambaLarge,
-		ModelJambaMini,
 		ModelGemma9b,
 		ModelGemma27b,
 		ModelDeepSeekV3,
 		ModelQwQ,
-		ModelKimiK,
+		ModelQwen,
 	}
 
 	modelByName = map[string]Model{}
