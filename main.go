@@ -87,6 +87,9 @@ func formatModel(m model.Model) string {
 	if m.Vision {
 		sb.WriteString(" (Vision)")
 	}
+	if m.Reasoning {
+		sb.WriteString(" (Reasoning)")
+	}
 	return sb.String()
 }
 

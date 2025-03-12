@@ -457,13 +457,17 @@ var (
 	}
 
 	ModelDeepSeekR1 = Model{
-		Name:      "DeepSeek-R1 671B",
+		Name:      "DeepSeek R1 671B",
 		Command:   "r1",
 		Reasoning: true,
 		Providers: map[string]ModelProvider{
 			ProviderCrof: {
 				API:       crofBaseURL,
 				Codenames: []string{"deepseek-r1"},
+			},
+			ProviderOpenRouter: {
+				API:       openRouterBaseURL,
+				Codenames: []string{"deepseek/deepseek-r1:free"},
 			},
 		},
 	}
@@ -488,6 +492,10 @@ var (
 			ProviderCrof: {
 				API:       crofBaseURL,
 				Codenames: []string{"qwen-qwq-32b"},
+			},
+			ProviderOpenRouter: {
+				API:       openRouterBaseURL,
+				Codenames: []string{"qwen/qwq-32b:free"},
 			},
 		},
 	}
@@ -514,6 +522,48 @@ var (
 		},
 	}
 
+	ModelRogueRose = Model{
+		Name:    "Rogue Rose 103B v0.2 (RP)",
+		Command: "rose",
+		Providers: map[string]ModelProvider{
+			ProviderOpenRouter: {
+				API:       openRouterBaseURL,
+				Codenames: []string{"sophosympatheia/rogue-rose-103b-v0.2:free"},
+			},
+		},
+	}
+
+	ModelDolphin3Mistral = Model{
+		Name:    "Dolphin3.0 Mistral 24B (RP)",
+		Command: "dolphin",
+		Providers: map[string]ModelProvider{
+			ProviderOpenRouter: {
+				API:       openRouterBaseURL,
+				Codenames: []string{"cognitivecomputations/dolphin3.0-mistral-24b:free"},
+			},
+		},
+	}
+
+	ModelDeepSeekR1DistillLlama70b = Model{
+		Name:      "DeepSeek R1 Distill Llama 70B",
+		Command:   "r1d",
+		Reasoning: true,
+		Providers: map[string]ModelProvider{
+			ProviderOpenRouter: {
+				API:       openRouterBaseURL,
+				Codenames: []string{"deepseek/deepseek-r1-distill-llama-70b:free"},
+			},
+			ProviderCrof: {
+				API:       crofBaseURL,
+				Codenames: []string{"deepseek-r1-distill-llama-70b"},
+			},
+			ProviderGroq: {
+				API:       groqBaseURL,
+				Codenames: []string{"deepseek-r1-distill-llama-70b"},
+			},
+		},
+	}
+
 	AllModels = []Model{
 		ModelGpt4oMini,
 		ModelGpt4o,
@@ -529,6 +579,7 @@ var (
 		ModelLlama70b,
 		ModelLlama11b,
 		ModelLlama8b,
+		ModelRogueRose,
 		ModelGigaChatPro,
 		ModelGemma9b,
 		ModelGemma27b,
@@ -536,6 +587,8 @@ var (
 		ModelDeepSeekV3,
 		ModelQwQ,
 		ModelQwen,
+		ModelDeepSeekR1DistillLlama70b,
+		ModelDolphin3Mistral,
 	}
 
 	modelByName = map[string]Model{}
