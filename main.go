@@ -944,10 +944,15 @@ func sendMessageSplits(client bot.Client, messageID snowflake.ID, event *handler
 		var message *discord.Message
 		var err error
 		if i == 0 {
+			var referenceFiles []*discord.File
+			if numMessages == 1 && len(files) > 0 {
+				referenceFiles = files
+			}
 			if event != nil {
 				message, err = event.UpdateInteractionResponse(discord.MessageUpdate{
 					Content: &segment,
 					Flags:   &flags,
+					Files:   referenceFiles,
 				})
 			} else {
 				var reference *discord.MessageReference
@@ -965,6 +970,7 @@ func sendMessageSplits(client bot.Client, messageID snowflake.ID, event *handler
 						AllowedMentions: &discord.AllowedMentions{
 							RepliedUser: false,
 						},
+						Files: referenceFiles,
 					},
 				)
 			}
