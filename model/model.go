@@ -567,7 +567,7 @@ func getErrors(p *ScoredProvider, reasoning bool) int {
 		return 0
 	}
 	if reasoning && p.PreferReasoning {
-		return p.Errors - 2
+		return -1
 	}
 	return p.Errors
 }
