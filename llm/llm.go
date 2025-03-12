@@ -376,7 +376,7 @@ func (l *Llmer) requestCompletionInternal(
 }
 
 func (l *Llmer) RequestCompletion(m model.Model, usernames map[string]bool, settings persona.InferenceSettings) (res string, usage Usage, err error) {
-	for _, provider := range model.ScoreProviders() {
+	for _, provider := range model.ScoreProviders(m.Reasoning) {
 		retries := 0
 	retry:
 		if retries >= 3 {

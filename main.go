@@ -852,7 +852,7 @@ func addImageAttachments(llmer *llm.Llmer, attachments []discord.Attachment) {
 
 func isLobotomyMessage(msg discord.Message) bool {
 	return msg.Interaction != nil &&
-		(msg.Interaction.Name == "lobotomy" || msg.Interaction.Name == "persona")
+		(msg.Interaction.Name == "lobotomy" || msg.Interaction.Name == "persona" || msg.Interaction.Name == "random_dms")
 }
 
 var lobotomyMessagesRegex = regexp.MustCompile(`Removed last (\d+) messages from the context`)
@@ -928,7 +928,7 @@ outer:
 	return len(messages), usernames
 }
 
-func sendMessageSplits(client bot.Client, messageID snowflake.ID, event *handler.CommandEvent, flags discord.MessageFlags, channelID snowflake.ID, runes []rune) (*discord.Message, error) {
+func sendMessageSplits(client bot.Client, messageID snowflake.ID, event *handler.CommandEvent, flags discord.MessageFlags, channelID snowflake.ID, runes []rune, files []*discord.File) (*discord.Message, error) {
 	// if messageID != 0, first respond to the message with the first 2000 characters, then
 	// send the remaining 2000character-splits as regular messages.
 	// if messageID == 0, send the 2000character-splits as separate messages.
@@ -936,12 +936,9 @@ func sendMessageSplits(client bot.Client, messageID snowflake.ID, event *handler
 	numMessages := (messageLen + 2000 - 1) / 2000
 	var botMessage *discord.Message
 
-	for i := 0; i < numMessages; i++ {
+	for i := range numMessages {
 		start := i * 2000
-		end := start + 2000
-		if end > messageLen {
-			end = messageLen
-		}
+		end := min(start+2000, messageLen)
 		segment := string(runes[start:end])
 
 		var message *discord.Message
@@ -971,6 +968,9 @@ func sendMessageSplits(client bot.Client, messageID snowflake.ID, event *handler
 					},
 				)
 			}
+		} else if i == numMessages-1 {
+			// last message, attach reasoning.txt
+			message, err = client.Rest().CreateMessage(channelID, discord.MessageCreate{Content: segment, Files: files})
 		} else {
 			message, err = client.Rest().CreateMessage(channelID, discord.MessageCreate{Content: segment})
 		}
@@ -1055,8 +1055,8 @@ func handleLlm(event *handler.CommandEvent, m *model.Model) error {
 	cache.LastUsage = usage
 	slog.Debug("usage stats", slog.String("usage", usage.String()))
 
-	if len(strings.TrimSpace(response)) == 0 {
-		response = "<empty response>\n-# If this is unexpected, try changing the model and/or system prompt?"
+	if len(response) == 0 {
+		response = "<empty response>\n-# If this is unexpected, try changing the model and/or system prompt"
 	}
 
 	var flags discord.MessageFlags
@@ -1064,25 +1064,43 @@ func handleLlm(event *handler.CommandEvent, m *model.Model) error {
 		flags = discord.MessageFlagEphemeral
 	}
 
+	// to attach text inside <think> tags as a file, we must extract it
+	var thinking string
+	if m.Reasoning {
+		var answer string
+		thinking, answer = llm.ExtractThinking(response)
+		if thinking != "" && answer != "" {
+			response = answer
+		}
+	}
+
+	var files []*discord.File
+	if thinking != "" {
+		files = append(files, &discord.File{
+			Name:   "reasoning.txt",
+			Reader: strings.NewReader(thinking),
+		})
+	}
+
 	var botMessage *discord.Message
 	responseRunes := []rune(response)
 	if !useCache && !ephemeral {
-		botMessage, err = sendMessageSplits(event.Client(), 0, event, flags, event.Channel().ID(), responseRunes)
+		botMessage, err = sendMessageSplits(event.Client(), 0, event, flags, event.Channel().ID(), responseRunes, files)
 	} else if len(responseRunes) > 2000 {
 		// send as file
+		files = append(files, &discord.File{
+			Name:   fmt.Sprintf("response-%v.txt", event.ID()),
+			Reader: strings.NewReader(response),
+		})
 		botMessage, err = event.UpdateInteractionResponse(discord.MessageUpdate{
-			Files: []*discord.File{
-				{
-					Name:   fmt.Sprintf("response-%v.txt", event.ID()),
-					Reader: strings.NewReader(response),
-				},
-			},
+			Files: files,
 		})
 	} else {
 		// less or equal to 2000, no need to split/txt
 		botMessage, err = event.UpdateInteractionResponse(discord.MessageUpdate{
 			Content: &response,
 			Flags:   &flags,
+			Files:   files,
 		})
 	}
 
@@ -1246,7 +1264,8 @@ func handleLlmInteraction2(
 	llmer.SetPersona(persona)
 
 	// now we generate the LLM response
-	response, usage, err := llmer.RequestCompletion(model.GetModelByName(cache.PersonaMeta.Model), usernames, cache.PersonaMeta.Settings)
+	m := model.GetModelByName(cache.PersonaMeta.Model)
+	response, usage, err := llmer.RequestCompletion(m, usernames, cache.PersonaMeta.Settings)
 	if err != nil {
 		slog.Error("failed to generate response", slog.Any("err", err))
 		return err
@@ -1259,11 +1278,29 @@ func handleLlmInteraction2(
 	cache.Usage = cache.Usage.Add(usage)
 	cache.LastUsage = usage
 
+	// to attach text inside <think> tags as a file, we must extract it
+	var thinking string
+	if m.Reasoning {
+		var answer string
+		thinking, answer = llm.ExtractThinking(response)
+		if thinking != "" && answer != "" {
+			response = answer
+		}
+	}
+
+	var files []*discord.File
+	if thinking != "" {
+		files = append(files, &discord.File{
+			Name:   "reasoning.txt",
+			Reader: strings.NewReader(thinking),
+		})
+	}
+
 	// and send the response
 	if preMsgWg != nil {
 		preMsgWg.Wait()
 	}
-	if _, err := sendMessageSplits(client, messageID, nil, 0, channelID, []rune(response)); err != nil {
+	if _, err := sendMessageSplits(client, messageID, nil, 0, channelID, []rune(response), files); err != nil {
 		slog.Error("failed to send message splits", slog.Any("err", err))
 	}
 

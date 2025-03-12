@@ -18,6 +18,7 @@ var (
 	googleToken     = os.Getenv("X3_GOOGLE_AISTUDIO_TOKEN")
 	openRouterToken = os.Getenv("X3_OPENROUTER_TOKEN")
 	g4fToken        = os.Getenv("X3_G4F_TOKEN")
+	crofToken       = os.Getenv("X3_CROF_TOKEN")
 )
 
 const (
@@ -29,6 +30,7 @@ const (
 	googleBaseURL     = "https://generativelanguage.googleapis.com/v1beta/openai"
 	openRouterBaseURL = "https://openrouter.ai/api/v1"
 	g4fBaseURL        = "http://192.168.230.44:1337/v1"
+	crofBaseURL       = "https://ai.nahcrof.com/v2"
 )
 
 const (
@@ -40,6 +42,7 @@ const (
 	ProviderGoogle      = "google"
 	ProviderOpenRouter  = "openrouter"
 	ProviderG4F         = "g4f"
+	ProviderCrof        = "crof"
 )
 
 type ModelProvider struct {
@@ -55,13 +58,15 @@ type Model struct {
 	// have to detect it :/
 	IsLlama   bool
 	Vision    bool
+	Reasoning bool
 	Encoding  tokenizer.Encoding
 	Providers map[string]ModelProvider
 }
 
 type ScoredProvider struct {
-	Name   string
-	Errors int
+	Name            string
+	PreferReasoning bool
+	Errors          int
 }
 
 var (
@@ -269,6 +274,10 @@ var (
 				API:       g4fBaseURL,
 				Codenames: []string{"llama-3.1-405b"},
 			},
+			ProviderCrof: {
+				API:       crofBaseURL,
+				Codenames: []string{"llama3.1-405b", "llama3.1-tulu3-405b"},
+			},
 			// github doesn't work for some reason
 		},
 	}
@@ -351,6 +360,10 @@ var (
 			ProviderFresed: {
 				API:       fresedBaseURL,
 				Codenames: []string{"llama-3.3-70b"},
+			},
+			ProviderCrof: {
+				API:       crofBaseURL,
+				Codenames: []string{"llama3.3-70b"},
 			},
 		},
 	}
@@ -436,13 +449,29 @@ var (
 				API:       fresedBaseURL,
 				Codenames: []string{"deepseek-v3"},
 			},
+			ProviderCrof: {
+				API:       crofBaseURL,
+				Codenames: []string{"deepseek-v3"},
+			},
+		},
+	}
+
+	ModelDeepSeekR1 = Model{
+		Name:      "DeepSeek-R1 671B",
+		Command:   "r1",
+		Reasoning: true,
+		Providers: map[string]ModelProvider{
+			ProviderCrof: {
+				API:       crofBaseURL,
+				Codenames: []string{"deepseek-r1"},
+			},
 		},
 	}
 
 	ModelQwQ = Model{
-		Name:           "QwQ 32B",
-		Command:        "qwq",
-		NeedsWhitelist: true,
+		Name:      "QwQ 32B",
+		Command:   "qwq",
+		Reasoning: true,
 		Providers: map[string]ModelProvider{
 			ProviderZukijourney: {
 				API:       zjBaseURL,
@@ -455,6 +484,10 @@ var (
 			ProviderFresed: {
 				API:       fresedBaseURL,
 				Codenames: []string{"qwq-32b"},
+			},
+			ProviderCrof: {
+				API:       crofBaseURL,
+				Codenames: []string{"qwen-qwq-32b"},
 			},
 		},
 	}
@@ -499,6 +532,7 @@ var (
 		ModelGigaChatPro,
 		ModelGemma9b,
 		ModelGemma27b,
+		ModelDeepSeekR1,
 		ModelDeepSeekV3,
 		ModelQwQ,
 		ModelQwen,
@@ -511,6 +545,7 @@ var (
 		{Name: ProviderGithub},
 		{Name: ProviderGoogle},
 		{Name: ProviderGroq},
+		{Name: ProviderCrof, PreferReasoning: true}, // above groq when reasoning
 		{Name: ProviderZukijourney},
 		{Name: ProviderOpenRouter},
 		{Name: ProviderFresed},
@@ -527,14 +562,24 @@ func resetProviderScore() {
 	}
 }
 
-func ScoreProviders() []*ScoredProvider {
+func getErrors(p *ScoredProvider, reasoning bool) int {
+	if p == nil {
+		return 0
+	}
+	if reasoning && p.PreferReasoning {
+		return p.Errors - 2
+	}
+	return p.Errors
+}
+
+func ScoreProviders(reasoning bool) []*ScoredProvider {
 	if time.Since(lastScoreReset) > 5*time.Minute {
 		resetProviderScore()
 		lastScoreReset = time.Now()
 	}
 	providers := allProviders
 	sort.Slice(providers, func(i, j int) bool {
-		return providers[i].Errors < providers[j].Errors
+		return getErrors(providers[i], reasoning) < getErrors(providers[j], reasoning)
 	})
 	return providers
 }
@@ -577,6 +622,8 @@ func (m Model) Client(provider string) (*openai.Client, []string) {
 		token = openRouterToken
 	case ProviderG4F:
 		token = g4fToken
+	case ProviderCrof:
+		token = crofToken
 	default:
 		token = githubToken
 	}
