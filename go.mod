@@ -10,9 +10,11 @@ require (
 )
 
 require (
+	github.com/barasher/go-exiftool v1.10.0
 	github.com/disgoorg/json v1.2.0 // indirect
 	github.com/disgoorg/snowflake/v2 v2.0.3
 	github.com/dustin/go-humanize v1.0.1
+	github.com/google/uuid v1.6.0
 	github.com/gorilla/websocket v1.5.3 // indirect
 	github.com/joho/godotenv v1.5.1
 	github.com/lithammer/fuzzysearch v1.1.8

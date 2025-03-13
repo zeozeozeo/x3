@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"path"
 	"regexp"
 	"sort"
 	"strconv"
@@ -202,6 +203,11 @@ var (
 					Description:  "Set a model to use for this chat",
 					Autocomplete: true, // since discord limits us to 25 choices, we will hack it
 					Required:     false,
+				},
+				discord.ApplicationCommandOptionString{
+					Name:        "card",
+					Description: "SillyTavern character card URL (image or json)",
+					Required:    false,
 				},
 				discord.ApplicationCommandOptionInt{
 					Name:        "context",
@@ -903,6 +909,10 @@ outer:
 			llmer.Lobotomize(amount)
 			slog.Debug("handled lobotomy history", slog.Int("amount", amount), slog.Int("num_messages", llmer.NumMessages()))
 			continue
+		} else if isCardMessage(msg) {
+			// message like "<card message %d out of %d>\n", remove the first line
+			_, msg.Content, _ = strings.Cut(msg.Content, "\n\n")
+			llmer.Lobotomize(1) // remove trigger message
 		}
 
 		role := llm.RoleUser
@@ -1246,6 +1256,12 @@ func handleLlmInteraction(event *events.MessageCreate, eraseX3 bool) error {
 	)
 }
 
+var cardMessageRegex = regexp.MustCompile(`(?i)^<card message \d+ out of \d+>`)
+
+func isCardMessage(msg discord.Message) bool {
+	return cardMessageRegex.MatchString(msg.Content)
+}
+
 // doesn't call SendTyping!
 func handleLlmInteraction2(
 	client bot.Client,
@@ -1258,6 +1274,23 @@ func handleLlmInteraction2(
 	preMsgWg *sync.WaitGroup, // what to wait on before sending the message
 ) error {
 	cache := getChannelCache(channelID)
+	if cache.PersonaMeta.IsFirstMes && len(cache.PersonaMeta.FirstMes) > 0 {
+		cache.PersonaMeta.IsFirstMes = false
+		// send random first message
+		idx := rand.Intn(len(cache.PersonaMeta.FirstMes))
+		firstMes := fmt.Sprintf("<card message %d out of %d>\n\n%s", idx+1, len(cache.PersonaMeta.FirstMes), cache.PersonaMeta.FirstMes[idx])
+		if preMsgWg != nil {
+			preMsgWg.Wait()
+		}
+		_, err := sendMessageSplits(client, messageID, nil, 0, channelID, []rune(firstMes), nil)
+		if err != nil {
+			return err
+		}
+		// update cache
+		cache.write(channelID)
+		return nil
+	}
+
 	persona := persona.GetPersonaByMeta(cache.PersonaMeta)
 
 	llmer := llm.NewLlmer()
@@ -1462,6 +1495,11 @@ func handleLobotomy(event *handler.CommandEvent) error {
 		cache.Llmer.Lobotomize(amount)
 		writeCache = true
 	}
+	// in card mode, resend the card preset message
+	if len(cache.PersonaMeta.FirstMes) > 0 {
+		cache.PersonaMeta.IsFirstMes = true
+		writeCache = true
+	}
 	if writeCache {
 		if err := cache.write(event.Channel().ID()); err != nil {
 			return sendInteractionError(event, err.Error(), true)
@@ -1536,6 +1574,7 @@ func handlePersona(event *handler.CommandEvent) error {
 	dataPersona := data.String("persona")
 	dataModel := data.String("model")
 	dataSystem := data.String("system")
+	dataCard := data.String("card")
 	dataContext, hasContext := data.OptInt("context")
 	dataTemperature, hasTemperature := data.OptFloat("temperature")
 	dataTopP, hasTopP := data.OptFloat("top_p")
@@ -1543,8 +1582,16 @@ func handlePersona(event *handler.CommandEvent) error {
 	dataSeed, hasDataSeed := data.OptInt("seed")
 	ephemeral := data.Bool("ephemeral")
 
-	if dataPersona == "" && dataModel == "" && dataSystem == "" && !hasContext && !hasTemperature && !hasTopP && !hasFreqPenalty && !hasDataSeed {
+	if dataPersona == "" && dataModel == "" && dataSystem == "" && dataCard == "" && !hasContext && !hasTemperature && !hasTopP && !hasFreqPenalty && !hasDataSeed {
 		return handlePersonaInfo(event, ephemeral)
+	}
+
+	if dataCard != "" {
+		// might take some time to fetch the character card
+		err := event.DeferCreateMessage(ephemeral)
+		if err != nil {
+			return err
+		}
 	}
 
 	m := model.GetModelByName(dataModel)
@@ -1611,12 +1658,40 @@ func handlePersona(event *handler.CommandEvent) error {
 		Seed:             seed,
 	}.Fixup()
 
+	// apply character card
+	didWhat := []string{}
+	if dataCard != "" {
+		// fetch from url (this is pretty scary)
+		slog.Debug("fetching character card", slog.String("url", dataCard))
+		resp, err := http.Get(dataCard)
+		if err != nil {
+			slog.Error("failed to fetch character card", slog.Any("err", err))
+			return updateInteractionError(event, err.Error())
+		}
+		defer resp.Body.Close()
+		body, err := io.ReadAll(resp.Body)
+		if err != nil {
+			slog.Error("failed to read character card resp body", slog.Any("err", err))
+			return updateInteractionError(event, err.Error())
+		}
+		err = cache.PersonaMeta.ApplyChara(body, event.User().EffectiveName())
+		if err != nil {
+			slog.Error("failed to apply character card", slog.Any("err", err))
+			return updateInteractionError(event, err.Error())
+		}
+		filename := path.Base(dataCard)
+		filename, _, _ = strings.Cut(filename, "?")
+		didWhat = append(didWhat, fmt.Sprintf("set character card to `%s`", filename))
+	}
+
 	if err := cache.write(event.Channel().ID()); err != nil {
+		if dataCard != "" {
+			return updateInteractionError(event, err.Error())
+		}
 		return sendInteractionError(event, err.Error(), true)
 	}
 
 	var sb strings.Builder
-	didWhat := []string{}
 	if cache.PersonaMeta.Name != prevMeta.Name && cache.PersonaMeta.Name != "" {
 		didWhat = append(didWhat, fmt.Sprintf("set persona to `%s`", cache.PersonaMeta.Name))
 	}
@@ -1659,20 +1734,37 @@ func handlePersona(event *handler.CommandEvent) error {
 		sb.WriteString("No changes made")
 	}
 
-	return event.CreateMessage(
-		discord.NewMessageCreateBuilder().
-			AddEmbeds(
-				discord.NewEmbedBuilder().
-					SetColor(0x0085ff).
-					SetTitle("Updated persona").
-					SetFooter("x3", x3Icon).
-					SetTimestamp(time.Now()).
-					SetDescription(sb.String()).
-					Build(),
-			).
-			SetEphemeral(ephemeral).
-			Build(),
-	)
+	if dataCard == "" {
+		return event.CreateMessage(
+			discord.NewMessageCreateBuilder().
+				AddEmbeds(
+					discord.NewEmbedBuilder().
+						SetColor(0x0085ff).
+						SetTitle("Updated persona").
+						SetFooter("x3", x3Icon).
+						SetTimestamp(time.Now()).
+						SetDescription(sb.String()).
+						Build(),
+				).
+				SetEphemeral(ephemeral).
+				Build(),
+		)
+	} else {
+		_, err := event.UpdateInteractionResponse(
+			discord.NewMessageUpdateBuilder().
+				AddEmbeds(
+					discord.NewEmbedBuilder().
+						SetColor(0x0085ff).
+						SetTitle("Updated persona").
+						SetFooter("x3", x3Icon).
+						SetTimestamp(time.Now()).
+						SetDescription(sb.String()).
+						Build(),
+				).
+				Build(),
+		)
+		return err
+	}
 }
 
 func handlePersonaModelAutocomplete(event *handler.AutocompleteEvent) error {

@@ -1,6 +1,6 @@
 FROM docker.io/library/golang:1.23.3-alpine3.20
 
-RUN apk add build-base
+RUN apk add build-base exiftool
 
 WORKDIR /bot
 

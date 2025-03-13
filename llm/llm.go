@@ -78,10 +78,7 @@ func (l *Llmer) Lobotomize(removeN int) {
 	}
 
 	if removeN > 0 {
-		endIdx := len(l.Messages) - removeN
-		if endIdx < startIdx {
-			endIdx = startIdx
-		}
+		endIdx := max(len(l.Messages)-removeN, startIdx)
 		l.Messages = l.Messages[startIdx:endIdx]
 	} else {
 		// if amount <= 0, remove all messages except the system prompt

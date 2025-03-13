@@ -1,0 +1,162 @@
+package persona
+
+import (
+	"bytes"
+	"encoding/base64"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"log/slog"
+	"os"
+	"path/filepath"
+	"strings"
+	"text/template"
+
+	"github.com/barasher/go-exiftool"
+	"github.com/google/uuid"
+)
+
+// https://github.com/malfoyslastname/character-card-spec-v2
+type TavernCardV2 struct {
+	Spec        string `json:"spec,omitempty"`
+	SpecVersion string `json:"spec_version,omitempty"`
+	Data        struct {
+		Name               string   `json:"name,omitempty"`
+		Description        string   `json:"description,omitempty"`
+		Personality        string   `json:"personality,omitempty"`
+		FirstMes           string   `json:"first_mes,omitempty"`
+		Avatar             string   `json:"avatar,omitempty"`
+		MesExample         string   `json:"mes_example,omitempty"`
+		Scenario           string   `json:"scenario,omitempty"`
+		CreatorNotes       string   `json:"creator_notes,omitempty"`
+		SystemPrompt       string   `json:"system_prompt,omitempty"`
+		Tags               []string `json:"tags,omitempty"`
+		AlternateGreetings []string `json:"alternate_greetings,omitempty"`
+	}
+}
+
+func (c TavernCardV2) formatField(field string, user string) string {
+	field = strings.ReplaceAll(field, "\r\n", "\n")
+	field = strings.ReplaceAll(field, "{{char}}", c.Data.Name)
+	field = strings.ReplaceAll(field, "{{user}}", user)
+	return field
+}
+
+var (
+	systemPromptTemplate = template.Must(template.New("").Parse(`You are roleplaying as {{ .Char }}, a character with the following attributes:
+{{ if .Description }}- Description: {{ .Description }}{{ end }}
+{{ if .Personality }}- Personality: {{ .Personality }}{{ end }}
+{{ if .Scenario }}- Scenario: {{ .Scenario }}{{ end }}
+
+Write character dialogue in quotation marks. Write {{ .Char }}'s thoughts in asterisks.
+Write {{ .Char }}'s next replies in a fictional chat between {{ .Char }} and {{ .User }}.`))
+
+	errCharaExifNotFound = errors.New("character card not found in image exif")
+)
+
+// Apply json character card
+func (meta *PersonaMeta) ApplyJsonChara(data []byte, user string) error {
+	if len(data) < 8192 {
+		slog.Debug("ApplyChara: chara", slog.String("data", string(data)))
+	} else {
+		slog.Debug("ApplyChara: chara", slog.Int("len", len(data)))
+	}
+
+	var card TavernCardV2
+	err := json.Unmarshal(data, &card)
+	if err != nil {
+		return err
+	}
+
+	// execute template
+	var b bytes.Buffer
+	err = systemPromptTemplate.Execute(&b, struct {
+		Char        string
+		User        string
+		Description string
+		Personality string
+		Scenario    string
+	}{
+		Char:        card.Data.Name,
+		User:        user,
+		Description: card.formatField(card.Data.Description, user),
+		Personality: card.formatField(card.Data.Personality, user),
+		Scenario:    card.formatField(card.Data.Scenario, user),
+	})
+	if err != nil {
+		return err
+	}
+
+	firstMessages := map[string]struct{}{
+		card.Data.FirstMes: {},
+	}
+	for _, greeting := range card.Data.AlternateGreetings {
+		firstMessages[greeting] = struct{}{}
+	}
+
+	firstMessagesArr := make([]string, 0, len(firstMessages))
+	for greeting := range firstMessages {
+		firstMessagesArr = append(firstMessagesArr, card.formatField(greeting, user))
+	}
+
+	meta.System = b.String()
+	meta.FirstMes = firstMessagesArr
+	meta.IsFirstMes = len(firstMessagesArr) > 0
+	slog.Debug("ApplyChara: generated system prompt", slog.String("system", meta.System))
+	return nil
+}
+
+func writeTempFile(data []byte) (string, error) {
+	err := os.MkdirAll(filepath.Join(".", "x3-temp"), 0755)
+	if err != nil {
+		return "", err
+	}
+	filepath := filepath.Join("x3-temp", fmt.Sprintf("%s.png", uuid.NewString()))
+	err = os.WriteFile(filepath, data, 0644)
+	if err != nil {
+		return "", err
+	}
+	return filepath, nil
+}
+
+func (meta *PersonaMeta) ApplyChara(data []byte, user string) error {
+	// try json first
+	err := meta.ApplyJsonChara(data, user)
+	if err == nil {
+		return nil
+	}
+	slog.Warn("ApplyChara: failed to parse json chara, trying exif", slog.Any("err", err))
+
+	// not json, try extracting the "chara" field from exif
+	et, err := exiftool.NewExiftool()
+	if err != nil {
+		return err
+	}
+	defer et.Close()
+
+	filePath, err := writeTempFile(data)
+	if err != nil {
+		return err
+	}
+	defer os.Remove(filePath)
+
+	metadata := et.ExtractMetadata(filePath)
+	if len(metadata) == 0 {
+		return errCharaExifNotFound
+	}
+
+	for _, data := range metadata {
+		if charaValue, found := data.Fields["Chara"]; found {
+			// decode b64
+			decodedData, err := base64.StdEncoding.DecodeString(charaValue.(string))
+			if err != nil {
+				return err
+			}
+
+			err = meta.ApplyJsonChara(decodedData, user)
+			return err
+		}
+	}
+
+	return errCharaExifNotFound
+}
