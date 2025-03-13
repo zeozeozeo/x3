@@ -1496,7 +1496,7 @@ func handleLobotomy(event *handler.CommandEvent) error {
 		writeCache = true
 	}
 	// in card mode, resend the card preset message
-	if len(cache.PersonaMeta.FirstMes) > 0 {
+	if len(cache.PersonaMeta.FirstMes) > 0 && amount == 0 {
 		cache.PersonaMeta.IsFirstMes = true
 		writeCache = true
 	}
