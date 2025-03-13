@@ -1544,7 +1544,7 @@ func handlePersonaInfo(event *handler.CommandEvent, ephemeral bool) error {
 		AddField("Model", model.GetModelByName(cache.PersonaMeta.Model).Name, false)
 
 	if cache.PersonaMeta.System != "" {
-		builder.AddField("System prompt", cache.PersonaMeta.System, false)
+		builder.AddField("System prompt", ellipsisTrim(cache.PersonaMeta.System, 1024), false)
 	}
 	builder.AddField("Context length", fmt.Sprintf("%d", cache.ContextLength), false)
 	if cache.Llmer != nil {
