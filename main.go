@@ -206,7 +206,7 @@ var (
 				},
 				discord.ApplicationCommandOptionString{
 					Name:        "card",
-					Description: "SillyTavern character card URL (image or json)",
+					Description: "SillyTavern character card URL (image or json, get them from chub.ai)",
 					Required:    false,
 				},
 				discord.ApplicationCommandOptionInt{
