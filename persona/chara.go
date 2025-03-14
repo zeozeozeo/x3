@@ -49,11 +49,17 @@ func (c TavernCardV2) formatExamples(user string) string {
 	}
 
 	var sb strings.Builder
-	for i, example := range strings.Split(c.Data.MesExample, "<START>") {
+	i := 0
+	for _, example := range strings.Split(c.Data.MesExample, "<START>") {
+		example = strings.TrimSpace(c.formatField(example, user))
+		if example == "" {
+			continue
+		}
+		i++
 		sb.WriteString("### Example ")
 		sb.WriteString(strconv.Itoa(i + 1))
 		sb.WriteString(":\n")
-		sb.WriteString(strings.TrimSpace(c.formatField(example, user)))
+		sb.WriteString(example)
 		sb.WriteRune('\n')
 	}
 
