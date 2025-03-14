@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"text/template"
 
@@ -42,11 +43,32 @@ func (c TavernCardV2) formatField(field string, user string) string {
 	return field
 }
 
+func (c TavernCardV2) formatExamples(user string) string {
+	if c.Data.MesExample == "" {
+		return ""
+	}
+
+	var sb strings.Builder
+	for i, example := range strings.Split(c.Data.MesExample, "<START>") {
+		sb.WriteString("### Example ")
+		sb.WriteString(strconv.Itoa(i + 1))
+		sb.WriteString(":\n")
+		sb.WriteString(strings.TrimSpace(c.formatField(example, user)))
+		sb.WriteRune('\n')
+	}
+
+	return sb.String()
+}
+
 var (
 	systemPromptTemplate = template.Must(template.New("").Parse(`You are roleplaying as {{ .Char }}, a character with the following attributes:
 {{ if .Description }}- Description: {{ .Description }}{{ end }}
 {{ if .Personality }}- Personality: {{ .Personality }}{{ end }}
 {{ if .Scenario }}- Scenario: {{ .Scenario }}{{ end }}
+{{ if .Examples }}The following examples are unrelated to the context of the roleplay and represent the desired output formatting and dynamics of {{ .Char }}'s output in a roleplay session:
+"""
+{{ .Examples }}
+"""{{ end }}
 
 Write character dialogue in quotation marks. Write {{ .Char }}'s thoughts in asterisks.
 Write {{ .Char }}'s next replies in a fictional chat between {{ .Char }} and {{ .User }}.`))
@@ -76,12 +98,14 @@ func (meta *PersonaMeta) ApplyJsonChara(data []byte, user string) error {
 		Description string
 		Personality string
 		Scenario    string
+		Examples    string
 	}{
 		Char:        card.Data.Name,
 		User:        user,
 		Description: card.formatField(card.Data.Description, user),
 		Personality: card.formatField(card.Data.Personality, user),
 		Scenario:    card.formatField(card.Data.Scenario, user),
+		Examples:    card.formatExamples(user),
 	})
 	if err != nil {
 		return err
