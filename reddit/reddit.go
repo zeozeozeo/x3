@@ -8,6 +8,7 @@ import (
 	"math/rand"
 	"net/http"
 	"path"
+	"slices"
 	"strings"
 )
 
@@ -22,12 +23,7 @@ const (
 
 func isImage(url string) bool {
 	filename := path.Ext(url)
-	for _, ext := range allowedImageExtensions {
-		if ext == filename {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(allowedImageExtensions, filename)
 }
 
 type MetadataProp struct {

@@ -46,6 +46,7 @@ import (
 	_ "embed"
 
 	_ "github.com/mattn/go-sqlite3"
+	"slices"
 )
 
 func makeGptCommand(name, desc string) discord.SlashCommandCreate {
@@ -419,8 +420,8 @@ type ChannelCache struct {
 	// in channels where the bot cannot read messages this is set for caching messages
 	Llmer           *llm.Llmer          `json:"llmer"`
 	PersonaMeta     persona.PersonaMeta `json:"persona_meta"`
-	Usage           llm.Usage           `json:"usage,omitempty"`
-	LastUsage       llm.Usage           `json:"last_usage,omitempty"`
+	Usage           llm.Usage           `json:"usage"`
+	LastUsage       llm.Usage           `json:"last_usage"`
 	ContextLength   int                 `json:"context_length"`
 	LastInteraction time.Time           `json:"last_interaction"`
 	KnownNonDM      bool                `json:"known_non_dm,omitempty"`
@@ -512,7 +513,7 @@ func (s *ServerStats) AddQuote(quote Quote) int {
 }
 
 func (s *ServerStats) RemoveQuote(index int) {
-	s.Quotes = append(s.Quotes[:index], s.Quotes[index+1:]...)
+	s.Quotes = slices.Delete(s.Quotes, index, index+1)
 }
 
 func unmarshalServerStats(data []byte) (ServerStats, error) {
