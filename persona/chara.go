@@ -57,7 +57,7 @@ func (c TavernCardV2) formatExamples(user string) string {
 		}
 		i++
 		sb.WriteString("### Example ")
-		sb.WriteString(strconv.Itoa(i + 1))
+		sb.WriteString(strconv.Itoa(i))
 		sb.WriteString(":\n")
 		sb.WriteString(example)
 		sb.WriteRune('\n')
