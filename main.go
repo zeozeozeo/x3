@@ -172,6 +172,11 @@ var (
 					Description: "Also set the persona to the default one",
 					Required:    false,
 				},
+				discord.ApplicationCommandOptionInt{
+					Name:        "next_card",
+					Description: "Index of the first message in the card for the next response",
+					Required:    false,
+				},
 			},
 		},
 		discord.SlashCommandCreate{
@@ -1262,6 +1267,30 @@ func isCardMessage(msg discord.Message) bool {
 	return cardMessageRegex.MatchString(msg.Content)
 }
 
+func handleCard(client bot.Client, channelID, messageID snowflake.ID, cache *ChannelCache, preMsgWg *sync.WaitGroup) (bool, error) {
+	if cache.PersonaMeta.IsFirstMes && len(cache.PersonaMeta.FirstMes) > 0 {
+		cache.PersonaMeta.IsFirstMes = false
+		// send first message from card
+		idx := rand.Intn(len(cache.PersonaMeta.FirstMes))
+		if cache.PersonaMeta.NextMes != nil {
+			idx = *cache.PersonaMeta.NextMes
+			cache.PersonaMeta.NextMes = nil
+		}
+		firstMes := fmt.Sprintf("<card message %d out of %d>\n\n%s", idx+1, len(cache.PersonaMeta.FirstMes), cache.PersonaMeta.FirstMes[idx])
+		if preMsgWg != nil {
+			preMsgWg.Wait()
+		}
+		_, err := sendMessageSplits(client, messageID, nil, 0, channelID, []rune(firstMes), nil)
+		if err != nil {
+			return true, err
+		}
+		// update cache
+		cache.write(channelID)
+		return true, nil
+	}
+	return false, nil
+}
+
 // doesn't call SendTyping!
 func handleLlmInteraction2(
 	client bot.Client,
@@ -1274,20 +1303,11 @@ func handleLlmInteraction2(
 	preMsgWg *sync.WaitGroup, // what to wait on before sending the message
 ) error {
 	cache := getChannelCache(channelID)
-	if cache.PersonaMeta.IsFirstMes && len(cache.PersonaMeta.FirstMes) > 0 {
-		cache.PersonaMeta.IsFirstMes = false
-		// send random first message
-		idx := rand.Intn(len(cache.PersonaMeta.FirstMes))
-		firstMes := fmt.Sprintf("<card message %d out of %d>\n\n%s", idx+1, len(cache.PersonaMeta.FirstMes), cache.PersonaMeta.FirstMes[idx])
-		if preMsgWg != nil {
-			preMsgWg.Wait()
-		}
-		_, err := sendMessageSplits(client, messageID, nil, 0, channelID, []rune(firstMes), nil)
-		if err != nil {
-			return err
-		}
-		// update cache
-		cache.write(channelID)
+	exit, err := handleCard(client, channelID, messageID, cache, preMsgWg)
+	if err != nil {
+		return err
+	}
+	if exit {
 		return nil
 	}
 
@@ -1482,6 +1502,7 @@ func handleLobotomy(event *handler.CommandEvent) error {
 	data := event.SlashCommandInteractionData()
 	ephemeral := data.Bool("ephemeral")
 	amount := data.Int("amount")
+	nextCard, hasNextCard := data.OptInt("next_card")
 	resetPersona := data.Bool("reset_persona")
 
 	cache := getChannelCache(event.Channel().ID())
@@ -1499,6 +1520,14 @@ func handleLobotomy(event *handler.CommandEvent) error {
 	if len(cache.PersonaMeta.FirstMes) > 0 && amount == 0 {
 		cache.PersonaMeta.IsFirstMes = true
 		writeCache = true
+		if hasNextCard && nextCard > 0 {
+			idx := nextCard - 1
+			if idx < len(cache.PersonaMeta.FirstMes) {
+				cache.PersonaMeta.NextMes = &idx
+			} else {
+				sendInteractionError(event, fmt.Sprintf("next card index out of range (1..=%d)", len(cache.PersonaMeta.FirstMes)), true)
+			}
+		}
 	}
 	if writeCache {
 		if err := cache.write(event.Channel().ID()); err != nil {

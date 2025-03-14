@@ -125,6 +125,7 @@ type PersonaMeta struct {
 	Model      string            `json:"model,omitempty"`
 	System     string            `json:"system,omitempty"`
 	FirstMes   []string          `json:"first_mes,omitempty"`
+	NextMes    *int              `json:"next_mes,omitempty"`
 	IsFirstMes bool              `json:"is_first_mes,omitempty"`
 	Settings   InferenceSettings `json:"settings,omitempty"`
 }
