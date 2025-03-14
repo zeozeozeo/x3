@@ -1,6 +1,6 @@
 module github.com/zeozeozeo/x3
 
-go 1.22.5
+go 1.24.1
 
 require github.com/disgoorg/disgo v0.18.13
 
