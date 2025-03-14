@@ -50,7 +50,7 @@ func (c TavernCardV2) formatExamples(user string) string {
 
 	var sb strings.Builder
 	i := 0
-	for _, example := range strings.Split(c.Data.MesExample, "<START>") {
+	for example := range strings.SplitSeq(c.Data.MesExample, "<START>") {
 		example = strings.TrimSpace(c.formatField(example, user))
 		if example == "" {
 			continue
