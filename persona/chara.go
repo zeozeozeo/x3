@@ -40,6 +40,8 @@ func (c TavernCardV2) formatField(field string, user string) string {
 	field = strings.ReplaceAll(field, "\r\n", "\n")
 	field = strings.ReplaceAll(field, "{{char}}", c.Data.Name)
 	field = strings.ReplaceAll(field, "{{user}}", user)
+	field = strings.ReplaceAll(field, "(char)", c.Data.Name)
+	field = strings.ReplaceAll(field, "(user)", user)
 	return field
 }
 
