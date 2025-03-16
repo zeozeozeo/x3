@@ -371,8 +371,9 @@ var (
 			"boykisser",
 			"Send boykisser image",
 			[]string{
-				"boykisser",
-				"boykisser2",
+				//"boykisser",
+				//"boykisser2",
+				"Boykisser3",
 				"girlkisser",
 				"wholesomeboykissers",
 			},
