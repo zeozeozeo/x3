@@ -17,31 +17,40 @@ import (
 	"github.com/google/uuid"
 )
 
+type TavernCardV1 struct {
+	Name               string   `json:"name,omitempty"`
+	Description        string   `json:"description,omitempty"`
+	Personality        string   `json:"personality,omitempty"`
+	FirstMes           string   `json:"first_mes,omitempty"`
+	Avatar             string   `json:"avatar,omitempty"`
+	MesExample         string   `json:"mes_example,omitempty"`
+	Scenario           string   `json:"scenario,omitempty"`
+	CreatorNotes       string   `json:"creator_notes,omitempty"`
+	SystemPrompt       string   `json:"system_prompt,omitempty"`
+	Tags               []string `json:"tags,omitempty"`
+	AlternateGreetings []string `json:"alternate_greetings,omitempty"`
+}
+
 // https://github.com/malfoyslastname/character-card-spec-v2
 type TavernCardV2 struct {
-	Spec        string `json:"spec,omitempty"`
-	SpecVersion string `json:"spec_version,omitempty"`
-	Data        struct {
-		Name               string   `json:"name,omitempty"`
-		Description        string   `json:"description,omitempty"`
-		Personality        string   `json:"personality,omitempty"`
-		FirstMes           string   `json:"first_mes,omitempty"`
-		Avatar             string   `json:"avatar,omitempty"`
-		MesExample         string   `json:"mes_example,omitempty"`
-		Scenario           string   `json:"scenario,omitempty"`
-		CreatorNotes       string   `json:"creator_notes,omitempty"`
-		SystemPrompt       string   `json:"system_prompt,omitempty"`
-		Tags               []string `json:"tags,omitempty"`
-		AlternateGreetings []string `json:"alternate_greetings,omitempty"`
-	}
+	Spec        string        `json:"spec,omitempty"`
+	SpecVersion string        `json:"spec_version,omitempty"`
+	Data        *TavernCardV1 `json:"data"`
 }
 
 func (c TavernCardV2) formatField(field string, user string) string {
-	field = strings.ReplaceAll(field, "\r\n", "\n")
-	field = strings.ReplaceAll(field, "{{char}}", c.Data.Name)
-	field = strings.ReplaceAll(field, "{{user}}", user)
-	field = strings.ReplaceAll(field, "(char)", c.Data.Name)
-	field = strings.ReplaceAll(field, "(user)", user)
+	field = strings.NewReplacer(
+		"\r\n", "\n",
+		"{{char}}", c.Data.Name,
+		"{{bot}}", c.Data.Name, // bad
+		"{{user}}", user,
+		"(char)", c.Data.Name, // bad
+		"(bot)", c.Data.Name, // bad
+		"(user)", user, // bad
+		"<char>", c.Data.Name, // bad
+		"<bot>", c.Data.Name, // bad
+		"<user>", user, // bad
+	).Replace(field)
 	return field
 }
 
@@ -73,7 +82,8 @@ var (
 {{ if .Description }}- Description: {{ .Description }}{{ end }}
 {{ if .Personality }}- Personality: {{ .Personality }}{{ end }}
 {{ if .Scenario }}- Scenario: {{ .Scenario }}{{ end }}
-{{ if .Examples }}The following examples are unrelated to the context of the roleplay and represent the desired output formatting and dynamics of {{ .Char }}'s output in a roleplay session:
+{{ if .Examples }}
+- The following examples are unrelated to the context of the roleplay and represent the desired output formatting and dynamics of {{ .Char }}'s output in a roleplay session:
 """
 {{ .Examples }}
 """{{ end }}
@@ -85,17 +95,23 @@ Write {{ .Char }}'s next replies in a fictional chat between {{ .Char }} and {{ 
 )
 
 // Apply json character card
-func (meta *PersonaMeta) ApplyJsonChara(data []byte, user string) error {
-	if len(data) < 8192 {
-		slog.Debug("ApplyChara: chara", slog.String("data", string(data)))
-	} else {
-		slog.Debug("ApplyChara: chara", slog.Int("len", len(data)))
-	}
+func (meta *PersonaMeta) ApplyJsonChara(data []byte, user string) (TavernCardV2, error) {
+	slog.Debug("ApplyChara: chara", slog.Int("len", len(data)))
 
 	var card TavernCardV2
 	err := json.Unmarshal(data, &card)
 	if err != nil {
-		return err
+		return card, err
+	}
+
+	if card.Data == nil {
+		// might be a v1 card
+		var cardV1 TavernCardV1
+		err = json.Unmarshal(data, &cardV1)
+		if err != nil {
+			return card, err
+		}
+		card.Data = &cardV1
 	}
 
 	// execute template
@@ -116,7 +132,7 @@ func (meta *PersonaMeta) ApplyJsonChara(data []byte, user string) error {
 		Examples:    card.formatExamples(user),
 	})
 	if err != nil {
-		return err
+		return card, err
 	}
 
 	firstMessages := map[string]struct{}{
@@ -134,8 +150,8 @@ func (meta *PersonaMeta) ApplyJsonChara(data []byte, user string) error {
 	meta.System = b.String()
 	meta.FirstMes = firstMessagesArr
 	meta.IsFirstMes = len(firstMessagesArr) > 0
-	slog.Debug("ApplyChara: generated system prompt", slog.String("system", meta.System))
-	return nil
+	slog.Info("ApplyChara: generated system prompt", slog.String("system", meta.System))
+	return card, nil
 }
 
 func writeTempFile(data []byte) (string, error) {
@@ -151,30 +167,30 @@ func writeTempFile(data []byte) (string, error) {
 	return filepath, nil
 }
 
-func (meta *PersonaMeta) ApplyChara(data []byte, user string) error {
+func (meta *PersonaMeta) ApplyChara(data []byte, user string) (TavernCardV2, error) {
 	// try json first
-	err := meta.ApplyJsonChara(data, user)
+	card, err := meta.ApplyJsonChara(data, user)
 	if err == nil {
-		return nil
+		return card, nil
 	}
 	slog.Warn("ApplyChara: failed to parse json chara, trying exif", slog.Any("err", err))
 
-	// not json, try extracting the "chara" field from exif
+	// not json, try extracting the "Chara" field from exif
 	et, err := exiftool.NewExiftool()
 	if err != nil {
-		return err
+		return card, err
 	}
 	defer et.Close()
 
 	filePath, err := writeTempFile(data)
 	if err != nil {
-		return err
+		return card, err
 	}
 	defer os.Remove(filePath)
 
 	metadata := et.ExtractMetadata(filePath)
 	if len(metadata) == 0 {
-		return errCharaExifNotFound
+		return card, errCharaExifNotFound
 	}
 
 	for _, data := range metadata {
@@ -182,13 +198,13 @@ func (meta *PersonaMeta) ApplyChara(data []byte, user string) error {
 			// decode b64
 			decodedData, err := base64.StdEncoding.DecodeString(charaValue.(string))
 			if err != nil {
-				return err
+				return card, err
 			}
 
-			err = meta.ApplyJsonChara(decodedData, user)
-			return err
+			card, err = meta.ApplyJsonChara(decodedData, user)
+			return card, err
 		}
 	}
 
-	return errCharaExifNotFound
+	return card, errCharaExifNotFound
 }

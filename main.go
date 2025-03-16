@@ -213,7 +213,7 @@ var (
 				},
 				discord.ApplicationCommandOptionString{
 					Name:        "card",
-					Description: "SillyTavern character card URL (image or json, get them from chub.ai and jannyai.com)",
+					Description: "SillyTavern character card URL (image or json, get them from chub.ai or jannyai.com)",
 					Required:    false,
 				},
 				discord.ApplicationCommandOptionInt{
@@ -1579,9 +1579,18 @@ func handlePersonaInfo(event *handler.CommandEvent, ephemeral bool) error {
 		AddField("Frequency Penalty", ftoa(settings.FrequencyPenalty), true).
 		AddField("Model", model.GetModelByName(cache.PersonaMeta.Model).Name, false)
 
+	var files []*discord.File
 	if cache.PersonaMeta.System != "" {
 		builder.AddField("System prompt", ellipsisTrim(cache.PersonaMeta.System, 1024), false)
+		// if the system prompt is > 1024 chars, attach it as a file
+		if utf8.RuneCountInString(cache.PersonaMeta.System) > 1024 {
+			files = append(files, &discord.File{
+				Name:   "system-prompt-full.txt",
+				Reader: strings.NewReader(cache.PersonaMeta.System),
+			})
+		}
 	}
+
 	builder.AddField("Context length", fmt.Sprintf("%d", cache.ContextLength), false)
 	if cache.Llmer != nil {
 		builder.AddField("Message cache", fmt.Sprintf("%d messages", cache.Llmer.NumMessages()), false)
@@ -1590,6 +1599,7 @@ func handlePersonaInfo(event *handler.CommandEvent, ephemeral bool) error {
 		discord.NewMessageCreateBuilder().
 			AddEmbeds(builder.Build()).
 			SetEphemeral(ephemeral).
+			AddFiles(files...).
 			Build(),
 	)
 }
@@ -1696,6 +1706,7 @@ func handlePersona(event *handler.CommandEvent) error {
 
 	// apply character card
 	didWhat := []string{}
+	creatorNotes := ""
 	if dataCard != "" {
 		// fetch from url (this is pretty scary)
 		slog.Debug("fetching character card", slog.String("url", dataCard))
@@ -1710,10 +1721,13 @@ func handlePersona(event *handler.CommandEvent) error {
 			slog.Error("failed to read character card resp body", slog.Any("err", err))
 			return updateInteractionError(event, err.Error())
 		}
-		err = cache.PersonaMeta.ApplyChara(body, event.User().EffectiveName())
+		card, err := cache.PersonaMeta.ApplyChara(body, event.User().EffectiveName())
 		if err != nil {
 			slog.Error("failed to apply character card", slog.Any("err", err))
 			return updateInteractionError(event, err.Error())
+		}
+		if card.Data != nil {
+			creatorNotes = card.Data.CreatorNotes
 		}
 		filename := path.Base(dataCard)
 		filename, _, _ = strings.Cut(filename, "?")
@@ -1770,33 +1784,38 @@ func handlePersona(event *handler.CommandEvent) error {
 		sb.WriteString("No changes made")
 	}
 
+	builder := discord.NewEmbedBuilder().
+		SetColor(0x0085ff).
+		SetTitle("Updated persona").
+		SetFooter("x3", x3Icon).
+		SetTimestamp(time.Now()).
+		SetDescription(sb.String())
+
+	files := []*discord.File{}
+	if creatorNotes != "" {
+		builder.AddField("Creator notes", ellipsisTrim(creatorNotes, 1024), false)
+		// if creator notes are > 1024 chars, attach them as a file
+		if utf8.RuneCountInString(creatorNotes) > 1024 {
+			files = append(files, &discord.File{
+				Reader: strings.NewReader(creatorNotes),
+				Name:   "creator-notes-full.txt",
+			})
+		}
+	}
+
 	if dataCard == "" {
 		return event.CreateMessage(
 			discord.NewMessageCreateBuilder().
-				AddEmbeds(
-					discord.NewEmbedBuilder().
-						SetColor(0x0085ff).
-						SetTitle("Updated persona").
-						SetFooter("x3", x3Icon).
-						SetTimestamp(time.Now()).
-						SetDescription(sb.String()).
-						Build(),
-				).
+				AddEmbeds(builder.Build()).
 				SetEphemeral(ephemeral).
+				AddFiles(files...).
 				Build(),
 		)
 	} else {
 		_, err := event.UpdateInteractionResponse(
 			discord.NewMessageUpdateBuilder().
-				AddEmbeds(
-					discord.NewEmbedBuilder().
-						SetColor(0x0085ff).
-						SetTitle("Updated persona").
-						SetFooter("x3", x3Icon).
-						SetTimestamp(time.Now()).
-						SetDescription(sb.String()).
-						Build(),
-				).
+				AddEmbeds(builder.Build()).
+				AddFiles(files...).
 				Build(),
 		)
 		return err

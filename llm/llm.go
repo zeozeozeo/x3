@@ -320,8 +320,11 @@ func (l *Llmer) requestCompletionInternal2(
 	if m.Name == model.ModelLlama90b.Name || m.Name == model.ModelLlama70b.Name {
 		// this model is so stupid that it often ignores the instruction to
 		// not put a space before the tilde
-		unescaped = strings.ReplaceAll(unescaped, " ~", "~")
-		unescaped = strings.ReplaceAll(unescaped, ">///&", ">///<")
+		replacer := strings.NewReplacer(
+			" ~", "~",
+			">///&", ">///<",
+		)
+		unescaped = replacer.Replace(unescaped)
 	}
 	// Nous Hermes 3 is dumb, too
 	unescaped = strings.TrimSuffix(unescaped, "@ [email protected]")
