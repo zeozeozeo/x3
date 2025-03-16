@@ -2,8 +2,6 @@ package imagecmd
 
 import (
 	"log/slog"
-	"net/http"
-	"path"
 
 	"github.com/disgoorg/disgo/discord"
 	"github.com/disgoorg/disgo/handler"
@@ -22,7 +20,7 @@ type imageHandler struct {
 
 var handlers map[string]imageHandler = make(map[string]imageHandler) // maps refreshID to imageHandler
 
-func redditFetchImage(subreddits []string, attempts int) (*http.Response, reddit.Post, error) {
+func redditFetchImage(subreddits []string, attempts int) (reddit.Post, error) {
 	slog.Info("redditFetchImage", slog.Int("attempts", attempts), slog.Any("subreddits", subreddits))
 
 	post, err := reddit.GetRandomImageFromSubreddits(subreddits...)
@@ -30,34 +28,36 @@ func redditFetchImage(subreddits []string, attempts int) (*http.Response, reddit
 		if attempts < maxRedditAttempts {
 			return redditFetchImage(subreddits, attempts+1)
 		}
-		return nil, post, err
+		return post, err
 	}
 
 	url := post.Data.GetRandomImage()
 
-	// silly discord thing: we can't make image attachments using the URL;
-	// we actually have to fetch the file and upload it as an octet stream
-	client := &http.Client{}
-	req, err := http.NewRequest("GET", url, nil)
-	if err != nil {
-		if attempts < maxRedditAttempts {
-			return redditFetchImage(subreddits, attempts+1)
+	/*
+		// silly discord thing: we can't make image attachments using the URL;
+		// we actually have to fetch the file and upload it as an octet stream
+		client := &http.Client{}
+		req, err := http.NewRequest("GET", url, nil)
+		if err != nil {
+			if attempts < maxRedditAttempts {
+				return redditFetchImage(subreddits, attempts+1)
+			}
+			return nil, post, err
 		}
-		return nil, post, err
-	}
-	req.Header.Set("User-Agent", reddit.UserAgent)
+		req.Header.Set("User-Agent", reddit.UserAgent)
 
-	resp, err := client.Do(req)
-	if err != nil {
-		if attempts < maxRedditAttempts {
-			return redditFetchImage(subreddits, attempts+1)
+		resp, err := client.Do(req)
+		if err != nil {
+			if attempts < maxRedditAttempts {
+				return redditFetchImage(subreddits, attempts+1)
+			}
+			return nil, post, err
 		}
-		return nil, post, err
-	}
+	*/
 
 	slog.Info("redditFetchImage: got post", slog.String("url", url), slog.Any("subreddits", subreddits))
 
-	return resp, post, nil
+	return post, nil
 }
 
 func MakeRedditImageCommand(
@@ -72,14 +72,13 @@ func MakeRedditImageCommand(
 
 			event.DeferCreateMessage(ephemeral)
 
-			resp, post, err := redditFetchImage(subreddits, 1)
+			post, err := redditFetchImage(subreddits, 1)
 			if err != nil {
 				if errorHandler != nil {
 					return errorHandler(event, err.Error())
 				}
 				return nil
 			}
-			defer resp.Body.Close()
 
 			var flags discord.MessageFlags
 			if ephemeral {
@@ -88,7 +87,7 @@ func MakeRedditImageCommand(
 
 			url := post.Data.GetRandomImage()
 			_, err = event.UpdateInteractionResponse(discord.NewMessageUpdateBuilder().
-				AddFile(path.Base(url), "", resp.Body).
+				SetContent(url).
 				AddContainerComponents(
 					discord.ActionRowComponent{
 						discord.ButtonComponent{
@@ -114,14 +113,13 @@ func MakeRedditImageCommand(
 		},
 		refresh: func(data discord.ButtonInteractionData, event *handler.ComponentEvent) error {
 			event.DeferUpdateMessage()
-			resp, post, err := redditFetchImage(handlers[data.CustomID()].subreddits, 1)
+			post, err := redditFetchImage(handlers[data.CustomID()].subreddits, 1)
 			if err != nil {
 				return err
 			}
-			defer resp.Body.Close()
 			url := post.Data.GetRandomImage()
 			_, err = event.UpdateInteractionResponse(discord.NewMessageUpdateBuilder().
-				AddFile(path.Base(url), "", resp.Body).
+				SetContent(url).
 				AddContainerComponents(
 					discord.ActionRowComponent{
 						discord.ButtonComponent{
