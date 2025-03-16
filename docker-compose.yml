@@ -1,0 +1,9 @@
+version: "3.3"
+services:
+  x3:
+    restart: always
+    container_name: x3
+    image: x3
+    volumes:
+      - /home/tower/containers/x3:/app
+    working_dir: /app

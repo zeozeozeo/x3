@@ -771,9 +771,8 @@ var (
 	}
 
 	AllModels = []Model{
-		ModelGpt4oMini, // gptslop
-		ModelGpt4o,     // too expensive gptslop
-		//ModelClaude3Haiku, // unstable api
+		ModelGpt4oMini,           // gptslop
+		ModelGpt4o,               // too expensive gptslop
 		ModelGeminiFlash,         // this is insanely bad for coding
 		ModelGeminiFlashThinking, // better for creative writing, probably even worse for coding
 		ModelGeminiPro,           // too expensive
@@ -794,18 +793,22 @@ var (
 		ModelQwen,       // very good and fast, default qwen model
 		ModelQwen72b,    // is this different from qwen2.5-max? idk
 		ModelQwenVL72b,
-		ModelDeepSeekR1DistillLlama70b,
+		ModelDeepSeekR1DistillLlama70b, // slightly better than qwq at writing
+		ModelCommandRplus,              // unstable api, good RAG
+		ModelDolphin3Mistral,           // fully uncensored, good
+		// discord menu cutoff (25) - only useless models should go below this
+		ModelDolphin3R1Mistral,        // pretty bad compared to the llama 70b distill
 		ModelDeepSeekR1DistillQwen32b, // useless when qwq is available
-		ModelDolphin3R1Mistral,
-		ModelDolphin3Mistral,
-		ModelRekaFlash3, // only good for english
-		ModelPhi4,
-		ModelOlympicCoder32b,
-		ModelCommandRplus, // unstable api
-		ModelGigaChatPro,  // this is a joke
-		ModelMoonlight16bA3b,
-		ModelToppyM7b,
-		ModelMythoMax13b, // ancient llama 2 finetune
+		ModelRekaFlash3,               // only good for english, worse than qwq
+		ModelPhi4,                     // synthetically trained microsoft slop
+		ModelOlympicCoder32b,          // marginally better than qwq
+		ModelMythoMax13b,              // ancient llama 2 finetune used by chub.ai
+		ModelGigaChatPro,              // this is a joke
+		ModelMoonlight16bA3b,          // insanely bad model
+		ModelToppyM7b,                 // this is really fucking bad
+
+		// TODO:
+		//ModelClaude3Haiku, // unstable api
 	}
 
 	modelByName = map[string]Model{}
