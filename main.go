@@ -45,8 +45,9 @@ import (
 
 	_ "embed"
 
-	_ "github.com/mattn/go-sqlite3"
 	"slices"
+
+	_ "github.com/mattn/go-sqlite3"
 )
 
 func makeGptCommand(name, desc string) discord.SlashCommandCreate {
@@ -382,7 +383,7 @@ var (
 			"Send a cute and relatable furry image",
 			[]string{
 				"furry_irl",
-				"furry",
+				//"furry",
 				//"furrymemes",
 				//"wholesome_furry",
 			},
