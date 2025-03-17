@@ -20,6 +20,7 @@ var (
 	g4fToken        = os.Getenv("X3_G4F_TOKEN")
 	crofToken       = os.Getenv("X3_CROF_TOKEN")
 	electronToken   = os.Getenv("X3_ELECTRONHUB_TOKEN")
+	cablyToken      = os.Getenv("X3_CABLYAI_TOKEN")
 )
 
 const (
@@ -33,6 +34,7 @@ const (
 	g4fBaseURL        = "http://192.168.230.44:1337/v1"
 	crofBaseURL       = "https://ai.nahcrof.com/v2"
 	electronBaseURL   = "https://api.electronhub.top/v1"
+	cablyBaseURL      = "https://cablyai.com/v1"
 )
 
 const (
@@ -46,6 +48,7 @@ const (
 	ProviderG4F         = "g4f"
 	ProviderCrof        = "crof"
 	ProviderElectron    = "electron" // electronhub
+	ProviderCably       = "cablyai"
 )
 
 type ModelProvider struct {
@@ -96,6 +99,9 @@ var (
 			ProviderElectron: {
 				Codenames: []string{"gpt-4o-mini"},
 			},
+			ProviderCably: {
+				Codenames: []string{"gpt-4o-mini"},
+			},
 		},
 	}
 
@@ -122,6 +128,9 @@ var (
 				Codenames: []string{"gpt-4o"},
 			},
 			ProviderElectron: {
+				Codenames: []string{"gpt-4o"},
+			},
+			ProviderCably: {
 				Codenames: []string{"gpt-4o"},
 			},
 		},
@@ -345,6 +354,9 @@ var (
 			ProviderG4F: {
 				Codenames: []string{"llama-3.1-8b"},
 			},
+			ProviderCably: {
+				Codenames: []string{"llama-3.1-8b-instruct"},
+			},
 		},
 	}
 
@@ -408,6 +420,9 @@ var (
 			},
 			ProviderGithub: {
 				Codenames: []string{"DeepSeek-V3"},
+			},
+			ProviderCably: {
+				Codenames: []string{"deepseek-v3"},
 			},
 		},
 	}
@@ -833,6 +848,48 @@ var (
 		},
 	}
 
+	ModelDeepSeekR1Uncensored = Model{
+		Name:      "DeepSeek R1 Uncensored 671B",
+		Command:   "r1u",
+		Reasoning: true,
+		Providers: map[string]ModelProvider{
+			ProviderCably: {
+				Codenames: []string{"deepseek-r1-uncensored"},
+			},
+		},
+	}
+
+	ModelO3MiniLow = Model{
+		Name:      "OpenAI o3-mini-low",
+		Command:   "o3",
+		Reasoning: true,
+		Providers: map[string]ModelProvider{
+			ProviderCably: {
+				Codenames: []string{"o3-mini-low"},
+			},
+		},
+	}
+
+	ModelClaudeSonnet = Model{
+		Name:    "Anthropic Claude 3.7 Sonnet",
+		Command: "sonnet",
+		Providers: map[string]ModelProvider{
+			ProviderCably: {
+				Codenames: []string{"claude-3-7-sonnet-20250219"},
+			},
+		},
+	}
+
+	ModelCommandA = Model{
+		Name:    "Cohere Command A 111B",
+		Command: "commanda",
+		Providers: map[string]ModelProvider{
+			ProviderCably: {
+				Codenames: []string{"command-a"},
+			},
+		},
+	}
+
 	AllModels = []Model{
 		ModelGpt4oMini,           // gptslop
 		ModelGpt4o,               // too expensive gptslop
@@ -882,6 +939,10 @@ var (
 		ModelMoonlight16bA3b, // insanely bad model
 		ModelToppyM7b,        // this is really fucking bad
 		ModelQwQAbliterated,
+		ModelDeepSeekR1Uncensored,
+		ModelO3MiniLow,
+		ModelClaudeSonnet,
+		ModelCommandA,
 
 		// TODO:
 		//ModelClaude3Haiku, // unstable api
@@ -900,6 +961,7 @@ var (
 		{Name: ProviderZukijourney},
 		{Name: ProviderOpenRouter},
 		{Name: ProviderFresed},
+		{Name: ProviderCably},
 		{Name: ProviderElectron},
 		{Name: ProviderHelixmind},
 		//{Name: ProviderG4F},
@@ -978,6 +1040,8 @@ func (m Model) Client(provider string) (*openai.Client, []string) {
 		token, api = crofToken, crofBaseURL
 	case ProviderElectron:
 		token, api = electronToken, electronBaseURL
+	case ProviderCably:
+		token, api = cablyToken, cablyBaseURL
 	default:
 		token, api = githubToken, azureBaseURL
 	}
