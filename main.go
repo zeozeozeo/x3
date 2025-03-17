@@ -364,6 +364,24 @@ var (
 				},
 			},
 		},
+		discord.SlashCommandCreate{
+			Name:        "regenerate",
+			Description: "Regenerate the last response, optionally prefill the response",
+			IntegrationTypes: []discord.ApplicationIntegrationType{
+				discord.ApplicationIntegrationTypeGuildInstall,
+				discord.ApplicationIntegrationTypeUserInstall,
+			},
+			Contexts: []discord.InteractionContextType{
+				discord.InteractionContextTypeGuild,
+				discord.InteractionContextTypeBotDM,
+			},
+			Options: []discord.ApplicationCommandOption{
+				discord.ApplicationCommandOptionString{
+					Name:        "prepend",
+					Description: "Text to start the response with",
+				},
+			},
+		},
 		// gpt commands are added in init(), except for this one
 		makeGptCommand("chat", "Chat with the current persona"),
 		// imagecmd
@@ -408,6 +426,7 @@ var (
 
 	startTime                    = time.Now()
 	errTimeInteractionNoMessages = errors.New("empty dm channel for time interaction")
+	errRegenerateNoMessage       = errors.New("cannot find last response to regenerate")
 )
 
 const (
@@ -787,6 +806,7 @@ func main() {
 	r.Autocomplete("/persona", handlePersonaModelAutocomplete)
 	r.Command("/stats", handleStats)
 	r.Command("/random_dms", handleRandomDMs)
+	r.Command("/regenerate", handleRegenerate)
 
 	// quote
 	r.Route("/quote", func(r handler.Router) {
@@ -891,11 +911,11 @@ func getLobotomyAmountFromMessage(msg discord.Message) int {
 	return n
 }
 
-// returns amount of messages from GetMessages
-func addContextMessagesIfPossible(client bot.Client, llmer *llm.Llmer, channelID, messageID snowflake.ID, contextLen int) (int, map[string]bool) {
+// returns amount of messages from GetMessages, map of all usernames, and the message struct of the last response (if any)
+func addContextMessagesIfPossible(client bot.Client, llmer *llm.Llmer, channelID, messageID snowflake.ID, contextLen int) (int, map[string]bool, *discord.Message) {
 	messages, err := client.Rest().GetMessages(channelID, 0, messageID, 0, contextLen)
 	if err != nil {
-		return len(messages), nil
+		return len(messages), nil, nil
 	}
 
 	latestImageAttachmentIdx := -1
@@ -912,6 +932,7 @@ outer:
 	}
 
 	usernames := map[string]bool{}
+	var lastResponseMessage *discord.Message
 
 	// discord returns surrounding message history from newest to oldest, but we want oldest to newest
 	for i := len(messages) - 1; i >= 0; i-- {
@@ -930,6 +951,9 @@ outer:
 		role := llm.RoleUser
 		if msg.Author.ID == client.ID() {
 			role = llm.RoleAssistant
+			if msg.ReferencedMessage != nil {
+				lastResponseMessage = &msg
+			}
 		} else if interaction, err := getMessageInteractionPrompt(msg.ID); err == nil {
 			// the prompt used for this response is in the interaction cache
 			llmer.AddMessage(llm.RoleUser, interaction)
@@ -950,7 +974,7 @@ outer:
 		usernames[msg.Author.EffectiveName()] = true
 	}
 
-	return len(messages), usernames
+	return len(messages), usernames, lastResponseMessage
 }
 
 func sendMessageSplits(client bot.Client, messageID snowflake.ID, event *handler.CommandEvent, flags discord.MessageFlags, channelID snowflake.ID, runes []rune, files []*discord.File) (*discord.Message, error) {
@@ -1055,7 +1079,7 @@ func handleLlm(event *handler.CommandEvent, m *model.Model) error {
 	lastMessage := event.Channel().MessageChannel.LastMessageID()
 	var usernames map[string]bool
 	if !useCache && lastMessage != nil {
-		_, usernames = addContextMessagesIfPossible(event.Client(), llmer, event.Channel().ID(), *lastMessage, cache.ContextLength)
+		_, usernames, _ = addContextMessagesIfPossible(event.Client(), llmer, event.Channel().ID(), *lastMessage, cache.ContextLength)
 
 		// and we also want the last message in the channel
 		msg, err := event.Client().Rest().GetMessage(event.Channel().ID(), *lastMessage)
@@ -1076,7 +1100,7 @@ func handleLlm(event *handler.CommandEvent, m *model.Model) error {
 	// discord only gives us 3s to respond unless we do this (x3 is thinking...)
 	event.DeferCreateMessage(ephemeral)
 
-	response, usage, err := llmer.RequestCompletion(*m, usernames, cache.PersonaMeta.Settings)
+	response, usage, err := llmer.RequestCompletion(*m, usernames, cache.PersonaMeta.Settings, cache.PersonaMeta.Prepend)
 	if err != nil {
 		slog.Error("failed to generate response", slog.Any("err", err))
 		return updateInteractionError(event, err.Error())
@@ -1178,14 +1202,14 @@ func getMessageContent(message discord.Message, isWhitelisted bool) string {
 
 	// fetch from txt attachments, some of them may be cached on disk
 	for i, attachment := range message.Attachments {
-		// whitelisted: 64k limit
-		// not whitelisted: 4k limit
+		// whitelisted: 256k limit
+		// not whitelisted: 16k limit
 		if isWhitelisted {
-			if attachment.Size > 64*1024 {
+			if attachment.Size > 256*1024 {
 				continue
 			}
 		} else {
-			if attachment.Size > 4*1024 {
+			if attachment.Size > 16*1024 {
 				continue
 			}
 		}
@@ -1256,7 +1280,7 @@ func handleLlmInteraction(event *events.MessageCreate, eraseX3 bool) error {
 	if eraseX3 {
 		content = stripX3(content)
 	}
-	return handleLlmInteraction2(
+	_, err := handleLlmInteraction2(
 		event.Client(),
 		event.ChannelID,
 		event.MessageID,
@@ -1264,8 +1288,11 @@ func handleLlmInteraction(event *events.MessageCreate, eraseX3 bool) error {
 		event.Message.Author.EffectiveName(),
 		event.Message.Attachments,
 		false,
+		false,
+		"",
 		&wg,
 	)
+	return err
 }
 
 var cardMessageRegex = regexp.MustCompile(`(?i)^<card message \d+ out of \d+>`)
@@ -1299,6 +1326,7 @@ func handleCard(client bot.Client, channelID, messageID snowflake.ID, cache *Cha
 }
 
 // doesn't call SendTyping!
+// if regeneratePrepend is true and err is nil, the first return is the jump url to the edited message
 func handleLlmInteraction2(
 	client bot.Client,
 	channelID,
@@ -1306,41 +1334,64 @@ func handleLlmInteraction2(
 	content string,
 	username string,
 	attachments []discord.Attachment,
-	timeInteraction bool,
+	timeInteraction,
+	isRegenerate bool, // whether to regenerate the last response
+	regeneratePrepend string, // what to prepend to the regenerate message
 	preMsgWg *sync.WaitGroup, // what to wait on before sending the message
-) error {
+) (string, error) {
 	cache := getChannelCache(channelID)
 	exit, err := handleCard(client, channelID, messageID, cache, preMsgWg)
 	if err != nil {
-		return err
+		return "", err
 	}
 	if exit {
-		return nil
+		return "", nil
 	}
 
 	persona := persona.GetPersonaByMeta(cache.PersonaMeta)
 
 	llmer := llm.NewLlmer()
-	numCtxMessages, usernames := addContextMessagesIfPossible(client, llmer, channelID, messageID, cache.ContextLength)
+	numCtxMessages, usernames, lastResponseMessage := addContextMessagesIfPossible(
+		client,
+		llmer,
+		channelID,
+		messageID,
+		cache.ContextLength,
+	)
 	if timeInteraction && numCtxMessages == 0 {
-		return errTimeInteractionNoMessages
+		return "", errTimeInteractionNoMessages
+	}
+	if isRegenerate && lastResponseMessage == nil {
+		// trying to regenerate a message but there is no previous message from x3
+		return "", errRegenerateNoMessage
 	}
 	slog.Debug("interaction; added context messages", slog.Int("added", numCtxMessages), slog.Int("count", llmer.NumMessages()))
 
-	llmer.AddMessage(llm.RoleUser, formatMsg(content, username, true))
-	addImageAttachments(llmer, attachments)
+	// content can be empty if we are regenerating
+	if content != "" {
+		llmer.AddMessage(llm.RoleUser, formatMsg(content, username, true))
+		addImageAttachments(llmer, attachments)
+	}
 
 	llmer.SetPersona(persona)
 
-	// now we generate the LLM response
-	m := model.GetModelByName(cache.PersonaMeta.Model)
-	response, usage, err := llmer.RequestCompletion(m, usernames, cache.PersonaMeta.Settings)
-	if err != nil {
-		slog.Error("failed to generate response", slog.Any("err", err))
-		return err
+	// `prepend` is what we should prefill the assistant response with
+	var prepend string
+	if isRegenerate && regeneratePrepend != "" {
+		prepend = regeneratePrepend
+	} else {
+		prepend = cache.PersonaMeta.Prepend
 	}
 
-	if timeInteraction && !cache.EverUsedRandomDMs {
+	// now we generate the LLM response
+	m := model.GetModelByName(cache.PersonaMeta.Model)
+	response, usage, err := llmer.RequestCompletion(m, usernames, cache.PersonaMeta.Settings, prepend)
+	if err != nil {
+		slog.Error("failed to generate response", slog.Any("err", err))
+		return "", err
+	}
+
+	if timeInteraction && !cache.EverUsedRandomDMs && !isRegenerate {
 		response += interactionReminder
 	}
 
@@ -1369,8 +1420,31 @@ func handleLlmInteraction2(
 	if preMsgWg != nil {
 		preMsgWg.Wait()
 	}
-	if _, err := sendMessageSplits(client, messageID, nil, 0, channelID, []rune(response), files); err != nil {
-		slog.Error("failed to send message splits", slog.Any("err", err))
+	var jumpURL string
+	if isRegenerate {
+		// edit the last response (lastResponseMessage is non-nil at this point)
+		builder := discord.NewMessageUpdateBuilder().SetAllowedMentions(&discord.AllowedMentions{RepliedUser: false})
+		if utf8.RuneCountInString(response) > 2000 {
+			builder.AddFiles(&discord.File{
+				Reader: strings.NewReader(response),
+				Name:   fmt.Sprintf("response-%v.txt", lastResponseMessage.ID),
+			})
+		} else {
+			builder.SetContent(response)
+		}
+		_, err := client.Rest().UpdateMessage(
+			channelID,
+			lastResponseMessage.ID,
+			builder.Build(),
+		)
+		if err != nil {
+			return "", err
+		}
+		jumpURL = lastResponseMessage.JumpURL()
+	} else {
+		if _, err := sendMessageSplits(client, messageID, nil, 0, channelID, []rune(response), files); err != nil {
+			slog.Error("failed to send message splits", slog.Any("err", err))
+		}
 	}
 
 	// update cache
@@ -1379,7 +1453,7 @@ func handleLlmInteraction2(
 	cache.write(channelID)
 	updateGlobalStats(usage)
 
-	return nil
+	return jumpURL, nil
 }
 
 var containsProtogenRegex = regexp.MustCompile(`(?i)(^|\W)(protogen|протоген)($|\W)`)
@@ -2355,14 +2429,16 @@ func initiateDMInteraction(client bot.Client) {
 		wg.Add(1)
 		go sendTypingWithLog(client, id, &wg)
 
-		err = handleLlmInteraction2(
+		_, err = handleLlmInteraction2(
 			client,
 			id,
 			0,
 			"<you are encouraged to interact with the user after some inactivity>",
 			"system message",
 			nil,
-			true, // timeInteraction
+			true,  // timeInteraction
+			false, // isRegenerate
+			"",    // regeneratePrepend
 			&wg,
 		)
 		if errors.Is(err, errTimeInteractionNoMessages) {
@@ -2375,4 +2451,48 @@ func initiateDMInteraction(client bot.Client) {
 	}
 
 	slog.Info("did not initiate dm interaction; no suitable channels")
+}
+
+func endsWithWhitespace(s string) bool {
+	if len(s) == 0 {
+		return false
+	}
+	return unicode.IsSpace(rune(s[len(s)-1]))
+}
+
+// renegerates last message
+// example: /regenerate
+// example: /regenerate prepend:Sure thing,
+func handleRegenerate(event *handler.CommandEvent) error {
+	prepend := event.SlashCommandInteractionData().String("prepend")
+	prepend = strings.ReplaceAll(prepend, "\\n", "\n") // put actual newlines
+	if prepend != "" && !endsWithWhitespace(prepend) {
+		prepend += " " // llms tend to respond better when there's a space after the prefill
+	}
+
+	event.DeferCreateMessage(true)
+
+	jumpURL, err := handleLlmInteraction2(
+		event.Client(),
+		event.Channel().ID(),
+		0,  // determined by handleLlmInteraction2
+		"", // empty because we are regenerating
+		"", // we don't need the username, we're only regenerating the response
+		nil,
+		false, // timeInteraction
+		true,  // isRegenerate
+		prepend,
+		nil,
+	)
+	if err != nil {
+		return updateInteractionError(event, err.Error())
+	}
+
+	_, err = event.UpdateInteractionResponse(
+		discord.NewMessageUpdateBuilder().
+			SetFlags(discord.MessageFlagEphemeral).
+			SetContentf("Regenerated message %s", jumpURL).
+			Build(),
+	)
+	return err
 }

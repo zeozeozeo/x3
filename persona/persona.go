@@ -120,14 +120,15 @@ func (s InferenceSettings) Fixup() InferenceSettings {
 }
 
 type PersonaMeta struct {
-	Name         string            `json:"name,omitempty"`
-	Desc         string            `json:"-"`
-	Model        string            `json:"model,omitempty"`
-	System       string            `json:"system,omitempty"`
-	FirstMes     []string          `json:"first_mes,omitempty"`
-	NextMes      *int              `json:"next_mes,omitempty"`
-	IsFirstMes   bool              `json:"is_first_mes,omitempty"`
-	Settings     InferenceSettings `json:"settings"`
+	Name       string            `json:"name,omitempty"`
+	Desc       string            `json:"-"`
+	Model      string            `json:"model,omitempty"`
+	System     string            `json:"system,omitempty"`
+	FirstMes   []string          `json:"first_mes,omitempty"`
+	NextMes    *int              `json:"next_mes,omitempty"`
+	IsFirstMes bool              `json:"is_first_mes,omitempty"`
+	Settings   InferenceSettings `json:"settings"`
+	Prepend    string            `json:"prepend,omitempty"` // prefill assistant response
 }
 
 func (meta PersonaMeta) String() string {

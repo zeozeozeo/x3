@@ -131,7 +131,7 @@ func (l *Llmer) AddImage(imageURL string) {
 	msg.Images = append(msg.Images, imageURL)
 }
 
-func (l Llmer) convertMessages(hasVision bool, isLlama bool) []openai.ChatCompletionMessage {
+func (l Llmer) convertMessages(hasVision bool, isLlama bool, prepend string) []openai.ChatCompletionMessage {
 	// find the index of the last message with images
 	imageIdx := -1
 	for i := len(l.Messages) - 1; i >= 0; i-- {
@@ -203,6 +203,15 @@ func (l Llmer) convertMessages(hasVision bool, isLlama bool) []openai.ChatComple
 			})
 		}
 	}
+
+	if prepend != "" {
+		// https://console.groq.com/docs/prefilling
+		messages = append(messages, openai.ChatCompletionMessage{
+			Role:    RoleAssistant,
+			Content: prepend,
+		})
+	}
+
 	return messages
 }
 
@@ -249,11 +258,12 @@ func (l *Llmer) requestCompletionInternal2(
 	usernames map[string]bool,
 	settings persona.InferenceSettings,
 	client *openai.Client,
+	prepend string,
 ) (string, Usage, error) {
 	req := openai.ChatCompletionRequest{
 		Model: codename,
 		// google api doesn't support image URIs, WTF google?
-		Messages: l.convertMessages(m.Vision && provider != model.ProviderGoogle, m.IsLlama),
+		Messages: l.convertMessages(m.Vision && provider != model.ProviderGoogle, m.IsLlama, prepend),
 		Stream:   true,
 		StreamOptions: &openai.StreamOptions{
 			IncludeUsage: true,
@@ -347,6 +357,7 @@ func (l *Llmer) requestCompletionInternal(
 	provider string,
 	usernames map[string]bool,
 	settings persona.InferenceSettings,
+	prepend string,
 ) (string, Usage, error) {
 	slog.Info(
 		"request completion.. message history follows..",
@@ -366,8 +377,13 @@ func (l *Llmer) requestCompletionInternal(
 	}
 
 	for _, codename := range codenames {
-		res, usage, err := l.requestCompletionInternal2(m, codename, provider, usernames, settings, client)
+		res, usage, err := l.requestCompletionInternal2(m, codename, provider, usernames, settings, client, prepend)
 		if err == nil {
+			// we got a response, but if we used a prefill, we should indicate that it was used
+			// (prepend it to the response in bold)
+			if prepend != "" {
+				res = fmt.Sprintf("**%s** %s", strings.ReplaceAll(strings.TrimSpace(prepend), "**", ""), res)
+			}
 			return res, usage, nil
 		}
 	}
@@ -375,7 +391,7 @@ func (l *Llmer) requestCompletionInternal(
 	return "", Usage{}, nil // all codenames errored, retry
 }
 
-func (l *Llmer) RequestCompletion(m model.Model, usernames map[string]bool, settings persona.InferenceSettings) (res string, usage Usage, err error) {
+func (l *Llmer) RequestCompletion(m model.Model, usernames map[string]bool, settings persona.InferenceSettings, prepend string) (res string, usage Usage, err error) {
 	for _, provider := range model.ScoreProviders(m.Reasoning) {
 		retries := 0
 	retry:
@@ -387,7 +403,7 @@ func (l *Llmer) RequestCompletion(m model.Model, usernames map[string]bool, sett
 		}
 		slog.Info("requesting completion", slog.String("provider", provider.Name), slog.Int("providerErrors", provider.Errors), slog.Int("retries", retries))
 
-		res, usage, err = l.requestCompletionInternal(m, provider.Name, usernames, settings.Fixup())
+		res, usage, err = l.requestCompletionInternal(m, provider.Name, usernames, settings.Fixup(), prepend)
 		if res == "" {
 			slog.Warn("got an empty response from requestCompletionInternal", slog.String("provider", provider.Name))
 			retries++
