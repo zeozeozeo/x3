@@ -937,26 +937,30 @@ outer:
 	// discord returns surrounding message history from newest to oldest, but we want oldest to newest
 	for i := len(messages) - 1; i >= 0; i-- {
 		msg := messages[i]
-		if isLobotomyMessage(msg) {
-			amount := getLobotomyAmountFromMessage(msg)
-			llmer.Lobotomize(amount)
-			slog.Debug("handled lobotomy history", slog.Int("amount", amount), slog.Int("num_messages", llmer.NumMessages()))
-			continue
-		} else if isCardMessage(msg) {
-			// message like "<card message %d out of %d>\n", remove the first line
-			_, msg.Content, _ = strings.Cut(msg.Content, "\n\n")
-			llmer.Lobotomize(1) // remove trigger message
-		}
 
 		role := llm.RoleUser
 		if msg.Author.ID == client.ID() {
+			if isLobotomyMessage(msg) {
+				amount := getLobotomyAmountFromMessage(msg)
+				llmer.Lobotomize(amount)
+				slog.Debug("handled lobotomy history", slog.Int("amount", amount), slog.Int("num_messages", llmer.NumMessages()))
+				continue
+			} else if isCardMessage(msg) {
+				// message like "<card message %d out of %d>\n", remove the first line
+				_, msg.Content, _ = strings.Cut(msg.Content, "\n\n")
+				llmer.Lobotomize(1) // remove trigger message
+			} else if msg.EditedTimestamp != nil && strings.HasPrefix(msg.Content, "**") {
+				// regenerated message with prefill, remove ** twice
+				msg.Content = strings.Replace(msg.Content, "**", "", 2)
+			}
+
 			role = llm.RoleAssistant
 			if msg.ReferencedMessage != nil {
 				lastResponseMessage = &msg
 			}
 		} else if interaction, err := getMessageInteractionPrompt(msg.ID); err == nil {
 			// the prompt used for this response is in the interaction cache
-			llmer.AddMessage(llm.RoleUser, interaction)
+			llmer.AddMessage(llm.RoleUser, interaction, msg.ID)
 		}
 
 		content := getMessageContentNoWhitelist(msg)
@@ -964,7 +968,7 @@ outer:
 			// in case of random dm, remove the interaction reminder
 			content = strings.TrimSuffix(content, interactionReminder)
 		}
-		llmer.AddMessage(role, formatMsg(content, msg.Author.EffectiveName(), true))
+		llmer.AddMessage(role, formatMsg(content, msg.Author.EffectiveName(), true), msg.ID)
 
 		// if this is the last message with an image we add, check for images
 		if i == latestImageAttachmentIdx {
@@ -1087,7 +1091,7 @@ func handleLlm(event *handler.CommandEvent, m *model.Model) error {
 			if isLobotomyMessage(*msg) {
 				llmer.Lobotomize(getLobotomyAmountFromMessage(*msg))
 			} else {
-				llmer.AddMessage(llm.RoleUser, formatMsg(msg.Content, msg.Author.EffectiveName(), true))
+				llmer.AddMessage(llm.RoleUser, formatMsg(msg.Content, msg.Author.EffectiveName(), true), msg.ID)
 			}
 		}
 	}
@@ -1095,7 +1099,7 @@ func handleLlm(event *handler.CommandEvent, m *model.Model) error {
 	slog.Debug("handleLlm: got context messages", slog.Int("count", llmer.NumMessages()))
 
 	// and we also want the actual slash command prompt
-	llmer.AddMessage(llm.RoleUser, formatMsg(prompt, event.User().EffectiveName(), true))
+	llmer.AddMessage(llm.RoleUser, formatMsg(prompt, event.User().EffectiveName(), true), 0)
 
 	// discord only gives us 3s to respond unless we do this (x3 is thinking...)
 	event.DeferCreateMessage(ephemeral)
@@ -1369,8 +1373,12 @@ func handleLlmInteraction2(
 
 	// content can be empty if we are regenerating
 	if content != "" {
-		llmer.AddMessage(llm.RoleUser, formatMsg(content, username, true))
+		llmer.AddMessage(llm.RoleUser, formatMsg(content, username, true), messageID)
 		addImageAttachments(llmer, attachments)
+	}
+
+	if isRegenerate {
+		llmer.LobotomizeUntilID(lastResponseMessage.ID)
 	}
 
 	llmer.SetPersona(persona)

@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/disgoorg/snowflake/v2"
 	openai "github.com/sashabaranov/go-openai"
 	"github.com/zeozeozeo/x3/model"
 	"github.com/zeozeozeo/x3/persona"
@@ -22,9 +23,10 @@ const (
 )
 
 type Message struct {
-	Role    string   `json:"role"`
-	Content string   `json:"content"`
-	Images  []string `json:"images"` // image URIs
+	Role    string       `json:"role"`
+	Content string       `json:"content"`
+	Images  []string     `json:"images"` // image URIs
+	ID      snowflake.ID `json:"-"`
 }
 
 type Usage struct {
@@ -86,7 +88,24 @@ func (l *Llmer) Lobotomize(removeN int) {
 	}
 }
 
-func (l *Llmer) AddMessage(role, content string) {
+// this is inclusive!
+func (l *Llmer) LobotomizeUntilID(id snowflake.ID) {
+	if len(l.Messages) == 0 {
+		return
+	}
+
+	for i := len(l.Messages) - 1; i >= 0; i-- {
+		if l.Messages[i].ID == id {
+			if l.Messages[i].Role == RoleSystem {
+				continue // don't nuke the system prompt
+			}
+			l.Messages = l.Messages[:i]
+			return
+		}
+	}
+}
+
+func (l *Llmer) AddMessage(role, content string, id snowflake.ID) {
 	if len(l.Messages) > 0 && role == RoleAssistant && l.Messages[len(l.Messages)-1].Role == RoleAssistant {
 		// previous message is also an assistant message, merge this
 		// (this is required when x3 splits the message up into multiple parts to bypass
@@ -98,6 +117,7 @@ func (l *Llmer) AddMessage(role, content string) {
 	msg := Message{
 		Role:    role,
 		Content: content,
+		ID:      id,
 	}
 	l.Messages = append(l.Messages, msg)
 }
