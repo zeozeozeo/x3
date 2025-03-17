@@ -147,7 +147,7 @@ var (
 	PersonaProto   = PersonaMeta{
 		Name:  "x3 Protogen (Default)",
 		Desc:  "x3 as a furry protogen. Suitable for RP",
-		Model: model.ModelLlama70b.Name,
+		Model: model.DefaultModel.Name,
 	}
 
 	AllPersonas = []PersonaMeta{

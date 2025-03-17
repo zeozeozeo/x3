@@ -81,10 +81,10 @@ func makeGptCommand(name, desc string) discord.SlashCommandCreate {
 func formatModel(m model.Model) string {
 	var sb strings.Builder
 	sb.WriteString(m.Name)
-	if m.Name == model.ModelLlama70b.Name {
+	if m.Name == model.DefaultModel.Name {
 		sb.WriteString(" (Default)")
 	}
-	if m.NeedsWhitelist {
+	if m.Whitelisted {
 		sb.WriteString(" (Whitelist)")
 	}
 	if m.Vision {
@@ -783,7 +783,7 @@ func main() {
 	// LLM commands
 	registerLlm := func(r handler.Router, command string, model model.Model) {
 		r.Command(command, func(event *handler.CommandEvent) error {
-			if model.NeedsWhitelist && !isInWhitelist(event.User().ID) {
+			if model.Whitelisted && !isInWhitelist(event.User().ID) {
 				return event.CreateMessage(discord.MessageCreate{
 					Content: "You are not in the whitelist, therefore you cannot use this command. Try `/gpt4o`.",
 					Flags:   discord.MessageFlagEphemeral,
@@ -1726,11 +1726,11 @@ func handlePersona(event *handler.CommandEvent) error {
 
 	// only query whitelist if we need to
 	inWhitelist := false
-	if m.NeedsWhitelist || dataContext > 50 {
+	if m.Whitelisted || dataContext > 50 {
 		inWhitelist = isInWhitelist(event.User().ID)
 	}
 
-	if m.NeedsWhitelist && !inWhitelist {
+	if m.Whitelisted && !inWhitelist {
 		return event.CreateMessage(
 			discord.NewMessageCreateBuilder().
 				SetContentf("You need to be whitelisted to set the model `%s`. Try `%s`", dataModel, model.ModelGpt4oMini.Name).
@@ -1910,7 +1910,7 @@ func handlePersonaModelAutocomplete(event *handler.AutocompleteEvent) error {
 	models := []string{}
 	inWhitelist := isInWhitelist(event.User().ID)
 	for _, m := range model.AllModels {
-		if m.NeedsWhitelist && !inWhitelist {
+		if m.Whitelisted && !inWhitelist {
 			continue
 		}
 		models = append(models, formatModel(m))
