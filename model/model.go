@@ -22,6 +22,8 @@ var (
 	electronToken   = os.Getenv("X3_ELECTRONHUB_TOKEN")
 	cablyToken      = os.Getenv("X3_CABLYAI_TOKEN")
 	meowToken       = os.Getenv("X3_MEOWAPI_TOKEN")
+	cfBaseURL       = os.Getenv("X3_CLOUDFLARE_API_BASE")
+	cfToken         = os.Getenv("X3_CLOUDFLARE_API_TOKEN")
 )
 
 const (
@@ -52,6 +54,7 @@ const (
 	ProviderElectron    = "electronhub"
 	ProviderCably       = "cablyai"
 	ProviderMeow        = "meowapi"
+	ProviderCloudflare  = "cloudflare"
 )
 
 type ModelProvider struct {
@@ -320,6 +323,12 @@ var (
 			ProviderElectron: {
 				Codenames: []string{"llama-3.2-11b"},
 			},
+			ProviderMeow: {
+				Codenames: []string{"llama-3.2-11b-instruct"},
+			},
+			ProviderCloudflare: {
+				Codenames: []string{"@cf/meta/llama-3.2-11b-vision-instruct"},
+			},
 		},
 	}
 
@@ -351,6 +360,9 @@ var (
 			},
 			ProviderMeow: {
 				Codenames: []string{"llama-3.3-70b-instruct-fp8-fast"},
+			},
+			ProviderCloudflare: {
+				Codenames: []string{"@cf/meta/llama-3.3-70b-instruct-fp8-fast"},
 			},
 		},
 	}
@@ -596,6 +608,9 @@ var (
 			},
 			ProviderMeow: {
 				Codenames: []string{"deepseek-r1-distill-qwen-32b"},
+			},
+			ProviderCloudflare: {
+				Codenames: []string{"@cf/deepseek-ai/deepseek-r1-distill-qwen-32b"},
 			},
 		},
 	}
@@ -1021,6 +1036,7 @@ var (
 		{Name: ProviderCrof, PreferReasoning: true}, // above groq when reasoning
 		{Name: ProviderZukijourney},
 		{Name: ProviderOpenRouter},
+		{Name: ProviderCloudflare},
 		{Name: ProviderCably},
 		{Name: ProviderMeow},
 		{Name: ProviderFresed},
@@ -1106,6 +1122,8 @@ func (m Model) Client(provider string) (*openai.Client, []string) {
 		token, api = cablyToken, cablyBaseURL
 	case ProviderMeow:
 		token, api = meowToken, meowBaseURL
+	case ProviderCloudflare:
+		token, api = cfToken, cfBaseURL
 	default:
 		token, api = githubToken, azureBaseURL
 	}
