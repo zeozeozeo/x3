@@ -964,6 +964,39 @@ var (
 		},
 	}
 
+	ModelGrok3 = Model{
+		Name:        "xAI Grok 3",
+		Command:     "grok3",
+		Whitelisted: true,
+		Providers: map[string]ModelProvider{
+			ProviderMeow: {
+				Codenames: []string{"grok-3"},
+			},
+			ProviderFresed: {
+				Codenames: []string{"grok-3"},
+			},
+		},
+	}
+
+	ModelGrok2 = Model{
+		Name:    "xAI Grok 2",
+		Command: "grok",
+		Providers: map[string]ModelProvider{
+			ProviderMeow: {
+				Codenames: []string{"grok-2"},
+			},
+			ProviderZukijourney: {
+				Codenames: []string{"grok-2-1212"},
+			},
+			ProviderFresed: {
+				Codenames: []string{"grok-2"},
+			},
+			ProviderElectron: {
+				Codenames: []string{"grok-2"},
+			},
+		},
+	}
+
 	AllModels = []Model{
 		ModelGpt4oMini,           // gptslop
 		ModelGpt4o,               // too expensive gptslop
@@ -1019,6 +1052,8 @@ var (
 		ModelCommandA,
 		ModelGpt45,
 		ModelO1,
+		ModelGrok2,
+		ModelGrok3,
 
 		// TODO:
 		//ModelClaude3Haiku, // unstable api
