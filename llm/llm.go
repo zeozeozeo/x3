@@ -248,14 +248,9 @@ func (l Llmer) estimateUsage(m model.Model) Usage {
 			continue
 		}
 		if ids, _, err := codec.Encode(msg.Content); err == nil {
-			switch msg.Role {
-			case RoleSystem:
-				fallthrough
-			case RoleUser:
-				usage.PromptTokens += len(ids)
-				if len(msg.Images) > 0 {
-					numImages = len(msg.Images)
-				}
+			usage.PromptTokens += len(ids)
+			if len(msg.Images) > 0 {
+				numImages = len(msg.Images)
 			}
 		}
 	}

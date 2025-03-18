@@ -21,6 +21,7 @@ var (
 	crofToken       = os.Getenv("X3_CROF_TOKEN")
 	electronToken   = os.Getenv("X3_ELECTRONHUB_TOKEN")
 	cablyToken      = os.Getenv("X3_CABLYAI_TOKEN")
+	meowToken       = os.Getenv("X3_MEOWAPI_TOKEN")
 )
 
 const (
@@ -35,6 +36,7 @@ const (
 	crofBaseURL       = "https://ai.nahcrof.com/v2"
 	electronBaseURL   = "https://api.electronhub.top/v1"
 	cablyBaseURL      = "https://cablyai.com/v1"
+	meowBaseURL       = "https://meow.cablyai.com/v1"
 )
 
 const (
@@ -47,8 +49,9 @@ const (
 	ProviderOpenRouter  = "openrouter"
 	ProviderG4F         = "g4f"
 	ProviderCrof        = "crof"
-	ProviderElectron    = "electron" // electronhub
+	ProviderElectron    = "electronhub"
 	ProviderCably       = "cablyai"
+	ProviderMeow        = "meowapi"
 )
 
 type ModelProvider struct {
@@ -102,6 +105,9 @@ var (
 			ProviderCably: {
 				Codenames: []string{"gpt-4o-mini"},
 			},
+			ProviderMeow: {
+				Codenames: []string{"gpt-4o-mini"},
+			},
 		},
 	}
 
@@ -131,6 +137,9 @@ var (
 				Codenames: []string{"gpt-4o"},
 			},
 			ProviderCably: {
+				Codenames: []string{"gpt-4o"},
+			},
+			ProviderMeow: {
 				Codenames: []string{"gpt-4o"},
 			},
 		},
@@ -171,6 +180,9 @@ var (
 				Codenames: []string{"gemini-2.0-flash"},
 			},
 			ProviderZukijourney: {
+				Codenames: []string{"gemini-2.0-flash"},
+			},
+			ProviderMeow: {
 				Codenames: []string{"gemini-2.0-flash"},
 			},
 		},
@@ -221,6 +233,9 @@ var (
 			ProviderFresed: {
 				Codenames: []string{"mistral-nemo-12b"},
 			},
+			ProviderMeow: {
+				Codenames: []string{"mistral-nemo-12b"},
+			},
 		},
 	}
 
@@ -239,9 +254,6 @@ var (
 		Command: "llama405b",
 		IsLlama: true,
 		Providers: map[string]ModelProvider{
-			ProviderOpenRouter: {
-				Codenames: []string{"meta-llama/llama-3.1-405b-instruct:free"},
-			},
 			ProviderZukijourney: {
 				Codenames: []string{"llama-3.1-405b-instruct"},
 			},
@@ -257,6 +269,9 @@ var (
 			ProviderGithub: {
 				Codenames: []string{"Meta-Llama-3.1-405B-Instruct"},
 			},
+			ProviderMeow: {
+				Codenames: []string{"llama-3.1-405b"},
+			},
 		},
 	}
 
@@ -269,9 +284,6 @@ var (
 			ProviderGroq: {
 				Codenames: []string{"llama-3.2-90b-vision-preview"},
 			},
-			ProviderOpenRouter: {
-				Codenames: []string{"meta-llama/llama-3.2-90b-vision-instruct:free"},
-			},
 			ProviderZukijourney: {
 				Codenames: []string{"llama-3.2-90b-instruct"},
 			},
@@ -279,6 +291,9 @@ var (
 				Codenames: []string{"llama-3.2-90b"},
 			},
 			ProviderG4F: {
+				Codenames: []string{"llama-3.2-90b"},
+			},
+			ProviderElectron: {
 				Codenames: []string{"llama-3.2-90b"},
 			},
 		},
@@ -293,9 +308,6 @@ var (
 			ProviderGroq: {
 				Codenames: []string{"llama-3.2-11b-vision-preview"},
 			},
-			ProviderOpenRouter: {
-				Codenames: []string{"meta-llama/llama-3.2-11b-vision-instruct:free"},
-			},
 			ProviderZukijourney: {
 				Codenames: []string{"llama-3.2-11b-instruct"},
 			},
@@ -303,6 +315,9 @@ var (
 				Codenames: []string{"llama-3.2-11b"},
 			},
 			ProviderG4F: {
+				Codenames: []string{"llama-3.2-11b"},
+			},
+			ProviderElectron: {
 				Codenames: []string{"llama-3.2-11b"},
 			},
 		},
@@ -331,6 +346,12 @@ var (
 			ProviderGithub: {
 				Codenames: []string{"Llama-3.3-70B-Instruct"},
 			},
+			ProviderElectron: {
+				Codenames: []string{"llama-3.3-70b-instruct"},
+			},
+			ProviderMeow: {
+				Codenames: []string{"llama-3.3-70b-instruct-fp8-fast"},
+			},
 		},
 	}
 
@@ -356,6 +377,9 @@ var (
 			},
 			ProviderCably: {
 				Codenames: []string{"llama-3.1-8b-instruct"},
+			},
+			ProviderElectron: {
+				Codenames: []string{"llama-3.1-8b"},
 			},
 		},
 	}
@@ -442,6 +466,9 @@ var (
 				Codenames: []string{"DeepSeek-R1"},
 			},
 			ProviderElectron: {
+				Codenames: []string{"deepseek-r1"},
+			},
+			ProviderMeow: {
 				Codenames: []string{"deepseek-r1"},
 			},
 		},
@@ -565,6 +592,9 @@ var (
 				Codenames: []string{"deepseek-r1-distill-qwen-32b"},
 			},
 			ProviderCrof: {
+				Codenames: []string{"deepseek-r1-distill-qwen-32b"},
+			},
+			ProviderMeow: {
 				Codenames: []string{"deepseek-r1-distill-qwen-32b"},
 			},
 		},
@@ -877,6 +907,9 @@ var (
 			ProviderCably: {
 				Codenames: []string{"claude-3-7-sonnet-20250219"},
 			},
+			ProviderMeow: {
+				Codenames: []string{"claude-3.7-sonnet"},
+			},
 		},
 	}
 
@@ -886,6 +919,32 @@ var (
 		Providers: map[string]ModelProvider{
 			ProviderCably: {
 				Codenames: []string{"command-a"},
+			},
+			ProviderMeow: {
+				Codenames: []string{"command-a"},
+			},
+		},
+	}
+
+	ModelGpt45 = Model{
+		Name:        "OpenAI GPT-4.5",
+		Command:     "gpt5",
+		Whitelisted: true,
+		Providers: map[string]ModelProvider{
+			ProviderMeow: {
+				Codenames: []string{"gpt-4.5", "gpt-4.5-preview"},
+			},
+		},
+	}
+
+	ModelO1 = Model{
+		Name:        "OpenAI o1",
+		Command:     "o1",
+		Whitelisted: true,
+		Reasoning:   true,
+		Providers: map[string]ModelProvider{
+			ProviderMeow: {
+				Codenames: []string{"o1"},
 			},
 		},
 	}
@@ -943,6 +1002,8 @@ var (
 		ModelO3MiniLow,
 		ModelClaudeSonnet,
 		ModelCommandA,
+		ModelGpt45,
+		ModelO1,
 
 		// TODO:
 		//ModelClaude3Haiku, // unstable api
@@ -960,8 +1021,9 @@ var (
 		{Name: ProviderCrof, PreferReasoning: true}, // above groq when reasoning
 		{Name: ProviderZukijourney},
 		{Name: ProviderOpenRouter},
-		{Name: ProviderFresed},
 		{Name: ProviderCably},
+		{Name: ProviderMeow},
+		{Name: ProviderFresed},
 		{Name: ProviderElectron},
 		{Name: ProviderHelixmind},
 		//{Name: ProviderG4F},
@@ -1042,6 +1104,8 @@ func (m Model) Client(provider string) (*openai.Client, []string) {
 		token, api = electronToken, electronBaseURL
 	case ProviderCably:
 		token, api = cablyToken, cablyBaseURL
+	case ProviderMeow:
+		token, api = meowToken, meowBaseURL
 	default:
 		token, api = githubToken, azureBaseURL
 	}
