@@ -24,6 +24,7 @@ var (
 	meowToken       = os.Getenv("X3_MEOWAPI_TOKEN")
 	cfBaseURL       = os.Getenv("X3_CLOUDFLARE_API_BASE")
 	cfToken         = os.Getenv("X3_CLOUDFLARE_API_TOKEN")
+	cohereToken     = os.Getenv("X3_COHERE_TOKEN")
 )
 
 const (
@@ -39,6 +40,7 @@ const (
 	electronBaseURL   = "https://api.electronhub.top/v1"
 	cablyBaseURL      = "https://cablyai.com/v1"
 	meowBaseURL       = "https://meow.cablyai.com/v1"
+	cohereBaseURL     = "https://api.cohere.ai/compatibility/v1"
 )
 
 const (
@@ -55,6 +57,7 @@ const (
 	ProviderCably       = "cablyai"
 	ProviderMeow        = "meowapi"
 	ProviderCloudflare  = "cloudflare"
+	ProviderCohere      = "cohere"
 )
 
 type ModelProvider struct {
@@ -203,6 +206,9 @@ var (
 			ProviderGithub: {
 				Codenames: []string{"Cohere-command-r-plus-08-2024"},
 			},
+			ProviderCohere: {
+				Codenames: []string{"command-r-plus"},
+			},
 		},
 	}
 
@@ -247,6 +253,9 @@ var (
 		Providers: map[string]ModelProvider{
 			ProviderGroq: {
 				Codenames: []string{"mistral-saba-24b"},
+			},
+			ProviderElectron: {
+				Codenames: []string{"mistral-saba-latest"},
 			},
 		},
 	}
@@ -937,6 +946,9 @@ var (
 			ProviderMeow: {
 				Codenames: []string{"command-a"},
 			},
+			ProviderCohere: {
+				Codenames: []string{"command-a-03-2025"},
+			},
 		},
 	}
 
@@ -1076,6 +1088,7 @@ var (
 		{Name: ProviderFresed},
 		{Name: ProviderElectron},
 		{Name: ProviderHelixmind},
+		{Name: ProviderCohere}, // 1,000 reqs/mo limit
 		//{Name: ProviderG4F},
 	}
 
@@ -1158,6 +1171,8 @@ func (m Model) Client(provider string) (*openai.Client, []string) {
 		token, api = meowToken, meowBaseURL
 	case ProviderCloudflare:
 		token, api = cfToken, cfBaseURL
+	case ProviderCohere:
+		token, api = cohereToken, cohereBaseURL
 	default:
 		token, api = githubToken, azureBaseURL
 	}

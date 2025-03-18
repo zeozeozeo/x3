@@ -4,6 +4,7 @@ import "strings"
 
 var thinkingTags = [][2]string{
 	{"<think>", "</think>"},
+	{"<thought>", "</thought>"},
 	{"<thinking>", "</thinking>"},
 	{"<reasoning>", "</reasoning>"},
 }
