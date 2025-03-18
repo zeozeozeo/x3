@@ -50,6 +50,12 @@ func (c TavernCardV2) formatField(field string, user string) string {
 		"<char>", c.Data.Name, // bad
 		"<bot>", c.Data.Name, // bad
 		"<user>", user, // bad
+		"[char]", c.Data.Name, // bad
+		"[bot]", c.Data.Name, // bad
+		"[user]", user, // bad
+		"{char}", c.Data.Name, // bad
+		"{bot}", c.Data.Name, // bad
+		"{user}", user, // bad
 	).Replace(field)
 	return field
 }
