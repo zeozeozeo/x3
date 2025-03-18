@@ -115,11 +115,10 @@ var (
 	}
 
 	ModelGpt4o = Model{
-		Name:        "OpenAI GPT-4o",
-		Command:     "gpt4",
-		Whitelisted: true,
-		Vision:      true,
-		Encoding:    tokenizer.O200kBase,
+		Name:     "OpenAI GPT-4o",
+		Command:  "gpt4",
+		Vision:   true,
+		Encoding: tokenizer.O200kBase,
 		Providers: map[string]ModelProvider{
 			ProviderGithub: {
 				Codenames: []string{"gpt-4o"},
