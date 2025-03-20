@@ -1082,9 +1082,9 @@ var (
 		{Name: ProviderCrof, PreferReasoning: true}, // above groq when reasoning
 		{Name: ProviderZukijourney},
 		{Name: ProviderOpenRouter},
-		{Name: ProviderCloudflare},
 		{Name: ProviderCably},
 		{Name: ProviderMeow},
+		{Name: ProviderCloudflare},
 		{Name: ProviderFresed},
 		{Name: ProviderElectron},
 		{Name: ProviderHelixmind},
@@ -1112,7 +1112,7 @@ func getErrors(p *ScoredProvider, reasoning bool) int {
 }
 
 func ScoreProviders(reasoning bool) []*ScoredProvider {
-	if time.Since(lastScoreReset) > 15*time.Minute {
+	if time.Since(lastScoreReset) > 5*time.Minute {
 		resetProviderScore()
 		lastScoreReset = time.Now()
 	}
