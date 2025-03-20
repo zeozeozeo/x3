@@ -33,6 +33,7 @@ import (
 	"github.com/disgoorg/disgo/gateway"
 	"github.com/disgoorg/disgo/handler"
 	"github.com/disgoorg/disgo/handler/middleware"
+	"github.com/disgoorg/disgo/sharding"
 	"github.com/disgoorg/snowflake/v2"
 	"github.com/dustin/go-humanize"
 	"github.com/lithammer/fuzzysearch/fuzzy"
@@ -825,12 +826,26 @@ func main() {
 	r.NotFound(handleNotFound)
 
 	client, err := disgo.New(token,
-		bot.WithGatewayConfigOpts(gateway.WithIntents(
-			gateway.IntentGuildMessages,
-			gateway.IntentMessageContent,
-			gateway.IntentsDirectMessage,
-		)),
-		bot.WithEventListeners(r),
+		bot.WithShardManagerConfigOpts(
+			sharding.WithShardIDs(0, 1),
+			sharding.WithShardCount(2),
+			sharding.WithAutoScaling(true),
+			sharding.WithGatewayConfigOpts(
+				gateway.WithIntents(gateway.IntentGuildMessages, gateway.IntentMessageContent, gateway.IntentsDirectMessage),
+				gateway.WithCompress(true),
+			),
+		),
+		bot.WithEventListeners(
+			r,
+			&events.ListenerAdapter{
+				OnGuildReady: func(event *events.GuildReady) {
+					slog.Info("guild ready", slog.Uint64("id", uint64(event.GuildID)))
+				},
+				OnGuildsReady: func(event *events.GuildsReady) {
+					slog.Info("guilds on shard ready", slog.Uint64("shard_id", uint64(event.ShardID())))
+				},
+			},
+		),
 		bot.WithEventListenerFunc(onMessageCreate),
 	)
 	if err != nil {
@@ -845,8 +860,8 @@ func main() {
 		return
 	}
 
-	if err = client.OpenGateway(context.TODO()); err != nil {
-		slog.Error("error while opening gateway", slog.Any("err", err))
+	if err = client.OpenShardManager(context.TODO()); err != nil {
+		slog.Error("error while connecting to gateway", slog.Any("err", err))
 		return
 	}
 
