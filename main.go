@@ -383,6 +383,27 @@ var (
 				},
 			},
 		},
+		discord.SlashCommandCreate{
+			Name:        "blacklist",
+			Description: "For server moderators: blacklist a channel from the bot",
+			IntegrationTypes: []discord.ApplicationIntegrationType{
+				discord.ApplicationIntegrationTypeGuildInstall,
+			},
+			Contexts: []discord.InteractionContextType{
+				discord.InteractionContextTypeGuild,
+			},
+			Options: []discord.ApplicationCommandOption{
+				discord.ApplicationCommandOptionChannel{
+					Name:        "channel",
+					Description: "Channel to blacklist. If already in the blacklist, removes it instead",
+					Required:    true,
+				},
+				discord.ApplicationCommandOptionBool{
+					Name:        "ephemeral",
+					Description: "If the response should only be visible to you",
+				},
+			},
+		},
 		// gpt commands are added in init(), except for this one
 		makeGptCommand("chat", "Chat with the current persona"),
 		// imagecmd
@@ -628,6 +649,31 @@ func getMessageInteractionPrompt(id snowflake.ID) (string, error) {
 	return prompt, err
 }
 
+func isChannelInBlacklist(id snowflake.ID) bool {
+	var count int
+	err := db.QueryRow("SELECT COUNT(*) FROM blacklist WHERE channel_id = ?", id.String()).Scan(&count)
+	if err != nil {
+		slog.Error("failed to check if channel is in blacklist", slog.Any("err", err))
+	}
+	return count > 0
+}
+
+func addChannelToBlacklist(id snowflake.ID) error {
+	_, err := db.Exec("INSERT OR IGNORE INTO blacklist (channel_id) VALUES (?)", id.String())
+	if err != nil {
+		slog.Error("failed to add channel to blacklist", slog.Any("err", err))
+	}
+	return err
+}
+
+func removeChannelFromBlacklist(id snowflake.ID) error {
+	_, err := db.Exec("DELETE FROM blacklist WHERE channel_id = ?", id.String())
+	if err != nil {
+		slog.Error("failed to remove channel from blacklist", slog.Any("err", err))
+	}
+	return err
+}
+
 // never returns nil
 func getChannelCache(id snowflake.ID) *ChannelCache {
 	var data []byte
@@ -747,6 +793,16 @@ func init() {
 		panic(err)
 	}
 
+	// blacklist
+	_, err = db.Exec(`
+			CREATE TABLE IF NOT EXISTS blacklist (
+				channel_id TEXT PRIMARY KEY
+			)
+		`)
+	if err != nil {
+		panic(err)
+	}
+
 	// default db state
 	addToWhitelist(890686470556356619)
 
@@ -808,6 +864,7 @@ func main() {
 	r.Command("/stats", handleStats)
 	r.Command("/random_dms", handleRandomDMs)
 	r.Command("/regenerate", handleRegenerate)
+	r.Command("/blacklist", handleBlacklist)
 
 	// quote
 	r.Route("/quote", func(r handler.Router) {
@@ -1480,10 +1537,11 @@ func handleLlmInteraction2(
 }
 
 var containsProtogenRegex = regexp.MustCompile(`(?i)(^|\W)(protogen|протоген)($|\W)`)
-var containsSigmaRegex = regexp.MustCompile(`(?i)(^|\W)(sigma)($|\W)`)
+var containsSigmaRegex = regexp.MustCompile(`(?i)(^|\W)(sigma|сигма)($|\W)`)
 
 func onMessageCreate(event *events.MessageCreate) {
-	if event.Message.Author.Bot {
+	slog.Debug("got message, guildid:", slog.Any("guildid", event.GuildID))
+	if event.Message.Author.Bot || (event.GuildID != nil && isChannelInBlacklist(event.ChannelID)) {
 		return
 	}
 
@@ -2518,4 +2576,37 @@ func handleRegenerate(event *handler.CommandEvent) error {
 			Build(),
 	)
 	return err
+}
+
+func handleBlacklist(event *handler.CommandEvent) error {
+	if !isModerator(event.Member().Permissions) {
+		return sendInteractionError(event, "you must be a moderator to use this command", true)
+	}
+
+	id := event.SlashCommandInteractionData().Snowflake("channel")
+	ephemeral := event.SlashCommandInteractionData().Bool("ephemeral")
+
+	if isChannelInBlacklist(id) {
+		err := removeChannelFromBlacklist(id)
+		if err != nil {
+			return sendInteractionError(event, err.Error(), true)
+		}
+		return event.CreateMessage(
+			discord.NewMessageCreateBuilder().
+				SetContentf("Removed channel <#%d> from the blacklist", id).
+				SetEphemeral(ephemeral).
+				Build(),
+		)
+	}
+
+	err := addChannelToBlacklist(id)
+	if err != nil {
+		return sendInteractionError(event, err.Error(), true)
+	}
+	return event.CreateMessage(
+		discord.NewMessageCreateBuilder().
+			SetContentf("Added channel <#%d> to the blacklist", id).
+			SetEphemeral(ephemeral).
+			Build(),
+	)
 }
