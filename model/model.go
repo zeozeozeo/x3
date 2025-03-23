@@ -209,6 +209,9 @@ var (
 			ProviderCohere: {
 				Codenames: []string{"command-r-plus"},
 			},
+			ProviderZukijourney: {
+				Codenames: []string{"command-r-plus"},
+			},
 		},
 	}
 
@@ -224,6 +227,25 @@ var (
 			},
 			ProviderFresed: {
 				Codenames: []string{"mistral-large"},
+			},
+			ProviderElectron: {
+				Codenames: []string{"mistral-large-latest"},
+			},
+		},
+	}
+
+	ModelMistralSmall = Model{
+		Name:   "Mistral Small 3.1 24B",
+		Vision: true,
+		Providers: map[string]ModelProvider{
+			ProviderOpenRouter: {
+				Codenames: []string{"mistralai/mistral-small-3.1-24b-instruct:free"},
+			},
+			ProviderZukijourney: {
+				Codenames: []string{"mistral-small"},
+			},
+			ProviderGithub: {
+				Codenames: []string{"mistral-small-2503"},
 			},
 		},
 	}
@@ -248,7 +270,7 @@ var (
 	}
 
 	ModelMistralSaba = Model{
-		Name:    "Mistral Saba 24B",
+		Name:    "Mistral Saba 24B (Arabic)",
 		Command: "saba",
 		Providers: map[string]ModelProvider{
 			ProviderGroq: {
@@ -552,6 +574,9 @@ var (
 		Providers: map[string]ModelProvider{
 			ProviderOpenRouter: {
 				Codenames: []string{"sophosympatheia/rogue-rose-103b-v0.2:free"},
+			},
+			ProviderZukijourney: {
+				Codenames: []string{"rogue-rose-103b-v0.2"},
 			},
 		},
 	}
@@ -898,6 +923,9 @@ var (
 			ProviderElectron: {
 				Codenames: []string{"l3.3-70b-euryale-v2.3"},
 			},
+			ProviderZukijourney: {
+				Codenames: []string{"euryale-70b"},
+			},
 		},
 	}
 
@@ -948,6 +976,9 @@ var (
 			},
 			ProviderCohere: {
 				Codenames: []string{"command-a-03-2025"},
+			},
+			ProviderZukijourney: {
+				Codenames: []string{"command-a"},
 			},
 		},
 	}
@@ -1010,18 +1041,16 @@ var (
 
 	AllModels = []Model{
 		ModelGpt4oMini,           // gptslop
-		ModelGpt4o,               // too expensive gptslop
+		ModelGpt4o,               // overly expensive gptslop
 		ModelGeminiFlash,         // this is insanely bad for coding
 		ModelGeminiFlashThinking, // better for creative writing, probably even worse for coding
 		ModelGeminiPro,           // too expensive
-		ModelMistralLarge,
-		ModelMistralNemo,
-		ModelMistralSaba,
+		ModelMistralLarge,        // uncensored; i wish i could make this the default, but it's very slow
+		ModelMistralSmall,
 		ModelLlama405b, // unstable api
 		ModelLlama90b,  // very bad vision capabilities
 		ModelLlama70b,  // default - fastest with specdec, mostly uncensored, good for RP
 		ModelLlama11b,  // even worse vision capabilities
-		ModelLlama8b,
 		ModelRogueRose, // good RP model
 		ModelGemma9b,
 		ModelGemma27b,   // this is balls
@@ -1032,9 +1061,12 @@ var (
 		ModelQwen72b,    // is this different from qwen2.5-max? idk
 		ModelQwenVL72b,
 		ModelDeepSeekR1DistillLlama70b, // slightly better than qwq at writing
-		ModelCommandRplus,              // unstable api, good RAG
-		ModelDolphin3Mistral,           // fully uncensored, good
+		ModelCommandA,
+		ModelDolphin3Mistral, // fully uncensored, good
+		ModelO3MiniLow,       // unstable
+		ModelClaudeSonnet,
 		// discord menu cutoff (25) - only useless models should go below this
+		ModelMistralNemo,
 		ModelLunaris8b, // best 8b rp model
 		ModelAnubisPro105b,
 		ModelEuryale70b, // very unstable api
@@ -1058,13 +1090,13 @@ var (
 		ModelToppyM7b,        // this is really fucking bad
 		ModelQwQAbliterated,
 		ModelDeepSeekR1Uncensored,
-		ModelO3MiniLow,
-		ModelClaudeSonnet,
-		ModelCommandA,
+		ModelCommandRplus,
 		ModelGpt45,
 		ModelO1,
 		ModelGrok2,
 		ModelGrok3,
+		ModelMistralSaba,
+		ModelLlama8b,
 
 		// TODO:
 		//ModelClaude3Haiku, // unstable api

@@ -1341,6 +1341,7 @@ func getMessageContentNoWhitelist(message discord.Message) string {
 
 func sendTypingWithLog(client bot.Client, channelID snowflake.ID, wg *sync.WaitGroup) {
 	defer wg.Done()
+	// typing state lasts for 10s
 	if err := client.Rest().SendTyping(channelID); err != nil {
 		slog.Error("failed to SendTyping", slog.Any("err", err))
 	}
@@ -1540,7 +1541,6 @@ var containsProtogenRegex = regexp.MustCompile(`(?i)(^|\W)(protogen|протог
 var containsSigmaRegex = regexp.MustCompile(`(?i)(^|\W)(sigma|сигма)($|\W)`)
 
 func onMessageCreate(event *events.MessageCreate) {
-	slog.Debug("got message, guildid:", slog.Any("guildid", event.GuildID))
 	if event.Message.Author.Bot || (event.GuildID != nil && isChannelInBlacklist(event.ChannelID)) {
 		return
 	}
