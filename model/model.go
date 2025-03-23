@@ -383,9 +383,9 @@ var (
 			ProviderCrof: {
 				Codenames: []string{"llama3.3-70b"},
 			},
-			ProviderGithub: {
-				Codenames: []string{"Llama-3.3-70B-Instruct"},
-			},
+			// ProviderGithub: {
+			// 	Codenames: []string{"Llama-3.3-70B-Instruct"},
+			// },
 			ProviderElectron: {
 				Codenames: []string{"llama-3.3-70b-instruct"},
 			},
