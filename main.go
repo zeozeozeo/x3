@@ -89,10 +89,10 @@ func formatModel(m model.Model) string {
 		sb.WriteString(" (Whitelist)")
 	}
 	if m.Vision {
-		sb.WriteString(" (Vision)")
+		sb.WriteString(" 👀")
 	}
 	if m.Reasoning {
-		sb.WriteString(" (Reasoning)")
+		sb.WriteString(" 🧠")
 	}
 	return sb.String()
 }

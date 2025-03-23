@@ -235,8 +235,9 @@ var (
 	}
 
 	ModelMistralSmall = Model{
-		Name:   "Mistral Small 3.1 24B",
-		Vision: true,
+		Name:    "Mistral Small 3.1 24B",
+		Command: "small",
+		Vision:  true,
 		Providers: map[string]ModelProvider{
 			ProviderOpenRouter: {
 				Codenames: []string{"mistralai/mistral-small-3.1-24b-instruct:free"},
