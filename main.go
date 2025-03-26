@@ -903,6 +903,9 @@ func main() {
 				},
 			},
 		),
+		bot.WithEventManagerConfigOpts(
+			bot.WithAsyncEventsEnabled(),
+		),
 		bot.WithEventListenerFunc(onMessageCreate),
 	)
 	if err != nil {
