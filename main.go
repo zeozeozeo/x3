@@ -943,7 +943,16 @@ func handleNotFound(event *handler.InteractionEvent) error {
 	return event.CreateMessage(discord.MessageCreate{Content: "Command not found", Flags: discord.MessageFlagEphemeral})
 }
 
-func formatMsg(msg, username string) string {
+func formatMsg(msg, username string, reference *discord.Message) string {
+	if reference != nil {
+		return fmt.Sprintf(
+			"<in reply to %s: \"%s\">\n%s: %s",
+			reference.Author.EffectiveName(),
+			strings.TrimSpace(strings.TrimSuffix(reference.Content, "\u200B")),
+			username,
+			msg,
+		)
+	}
 	return fmt.Sprintf("%s: %s", username, msg)
 }
 
@@ -984,10 +993,10 @@ func getLobotomyAmountFromMessage(msg discord.Message) int {
 }
 
 // returns amount of messages from GetMessages, map of all usernames, and the message struct of the last response (if any)
-func addContextMessagesIfPossible(client bot.Client, llmer *llm.Llmer, channelID, messageID snowflake.ID, contextLen int) (int, map[string]bool, *discord.Message) {
+func addContextMessagesIfPossible(client bot.Client, llmer *llm.Llmer, channelID, messageID snowflake.ID, contextLen int) (int, map[string]bool, *discord.Message, snowflake.ID) {
 	messages, err := client.Rest().GetMessages(channelID, 0, messageID, 0, contextLen)
 	if err != nil {
-		return len(messages), nil, nil
+		return len(messages), nil, nil, 0
 	}
 
 	latestImageAttachmentIdx := -1
@@ -1005,6 +1014,7 @@ outer:
 
 	usernames := map[string]bool{}
 	var lastResponseMessage *discord.Message
+	var lastAssistantMessageID snowflake.ID
 
 	// discord returns surrounding message history from newest to oldest, but we want oldest to newest
 	for i := len(messages) - 1; i >= 0; i-- {
@@ -1027,6 +1037,7 @@ outer:
 			}
 
 			role = llm.RoleAssistant
+			lastAssistantMessageID = msg.ID
 			if msg.ReferencedMessage != nil {
 				lastResponseMessage = &msg
 			}
@@ -1039,9 +1050,17 @@ outer:
 		if role == llm.RoleAssistant {
 			// in case of random dm, remove the interaction reminder
 			content = strings.TrimSuffix(content, interactionReminder)
+			// sepFlag in sendMessageSplits indicates to join the messages with "<new_message>"
+			if strings.HasSuffix(content, "\u200B") {
+				content = strings.TrimSuffix(content, "\u200B") + " <new_message> "
+			}
 		} else {
-			// user message, prepend the username
-			content = formatMsg(content, msg.Author.EffectiveName())
+			// user message, prepend the username and reply (if the reply doesn't reference the last response)
+			reference := msg.ReferencedMessage
+			if reference != nil && reference.ID == lastAssistantMessageID {
+				reference = nil
+			}
+			content = formatMsg(content, msg.Author.EffectiveName(), reference)
 		}
 		llmer.AddMessage(role, content, msg.ID)
 
@@ -1053,21 +1072,38 @@ outer:
 		usernames[msg.Author.EffectiveName()] = true
 	}
 
-	return len(messages), usernames, lastResponseMessage
+	return len(messages), usernames, lastResponseMessage, lastAssistantMessageID
 }
 
-func sendMessageSplits(client bot.Client, messageID snowflake.ID, event *handler.CommandEvent, flags discord.MessageFlags, channelID snowflake.ID, runes []rune, files []*discord.File) (*discord.Message, error) {
+func sendMessageSplits(
+	client bot.Client,
+	messageID snowflake.ID,
+	event *handler.CommandEvent,
+	flags discord.MessageFlags,
+	channelID snowflake.ID,
+	runes []rune,
+	files []*discord.File,
+	sepFlag bool, // add an invisible character that indicates to join the messages with "<new_message>"
+) (*discord.Message, error) {
 	// if messageID != 0, first respond to the message with the first 2000 characters, then
 	// send the remaining 2000character-splits as regular messages.
 	// if messageID == 0, send the 2000character-splits as separate messages.
+	maxLen := 2000
+	if sepFlag {
+		maxLen-- // the last split message will have \u200B
+	}
 	messageLen := len(runes)
-	numMessages := (messageLen + 2000 - 1) / 2000
+	numMessages := (messageLen + maxLen - 1) / maxLen
 	var botMessage *discord.Message
 
 	for i := range numMessages {
-		start := i * 2000
-		end := min(start+2000, messageLen)
+		start := i * maxLen
+		end := min(start+maxLen, messageLen)
 		segment := string(runes[start:end])
+
+		if sepFlag && i == numMessages-1 {
+			segment += "\u200B" // zero width space, handled in addContextMessagesIfPossible
+		}
 
 		var message *discord.Message
 		var err error
@@ -1104,9 +1140,20 @@ func sendMessageSplits(client bot.Client, messageID snowflake.ID, event *handler
 			}
 		} else if i == numMessages-1 {
 			// last message, attach reasoning.txt
-			message, err = client.Rest().CreateMessage(channelID, discord.MessageCreate{Content: segment, Files: files})
+			message, err = client.Rest().CreateMessage(channelID, discord.MessageCreate{
+				Content: segment,
+				Files:   files,
+				AllowedMentions: &discord.AllowedMentions{
+					RepliedUser: false,
+				},
+			})
 		} else {
-			message, err = client.Rest().CreateMessage(channelID, discord.MessageCreate{Content: segment})
+			message, err = client.Rest().CreateMessage(channelID, discord.MessageCreate{
+				Content: segment,
+				AllowedMentions: &discord.AllowedMentions{
+					RepliedUser: false,
+				},
+			})
 		}
 
 		if err != nil {
@@ -1167,7 +1214,7 @@ func handleLlm(event *handler.CommandEvent, m *model.Model) error {
 	lastMessage := event.Channel().MessageChannel.LastMessageID()
 	var usernames map[string]bool
 	if !useCache && lastMessage != nil {
-		_, usernames, _ = addContextMessagesIfPossible(event.Client(), llmer, event.Channel().ID(), *lastMessage, cache.ContextLength)
+		_, usernames, _, _ = addContextMessagesIfPossible(event.Client(), llmer, event.Channel().ID(), *lastMessage, cache.ContextLength)
 
 		// and we also want the last message in the channel
 		msg, err := event.Client().Rest().GetMessage(event.Channel().ID(), *lastMessage)
@@ -1175,7 +1222,7 @@ func handleLlm(event *handler.CommandEvent, m *model.Model) error {
 			if isLobotomyMessage(*msg) {
 				llmer.Lobotomize(getLobotomyAmountFromMessage(*msg))
 			} else {
-				llmer.AddMessage(llm.RoleUser, formatMsg(msg.Content, msg.Author.EffectiveName()), msg.ID)
+				llmer.AddMessage(llm.RoleUser, formatMsg(msg.Content, msg.Author.EffectiveName(), msg.ReferencedMessage), msg.ID)
 			}
 		}
 	}
@@ -1183,7 +1230,7 @@ func handleLlm(event *handler.CommandEvent, m *model.Model) error {
 	slog.Debug("handleLlm: got context messages", slog.Int("count", llmer.NumMessages()))
 
 	// and we also want the actual slash command prompt
-	llmer.AddMessage(llm.RoleUser, formatMsg(prompt, event.User().EffectiveName()), 0)
+	llmer.AddMessage(llm.RoleUser, formatMsg(prompt, event.User().EffectiveName(), nil), 0)
 
 	// discord only gives us 3s to respond unless we do this (x3 is thinking...)
 	event.DeferCreateMessage(ephemeral)
@@ -1233,9 +1280,25 @@ func handleLlm(event *handler.CommandEvent, m *model.Model) error {
 	var botMessage *discord.Message
 	responseRunes := []rune(response)
 	if !useCache && !ephemeral {
-		for content := range strings.SplitSeq(response, "<new_message>") {
+		event2 := event
+		messages := strings.Split(response, "<new_message>")
+		for i, content := range messages {
 			content = strings.TrimSpace(content)
-			botMessage, err = sendMessageSplits(event.Client(), 0, event, flags, event.Channel().ID(), []rune(content), files)
+			botMessage, err = sendMessageSplits(
+				event.Client(),
+				0,
+				event2,
+				flags,
+				event.Channel().ID(),
+				[]rune(content),
+				files,
+				i != len(messages)-1,
+			)
+			if err != nil {
+				updateInteractionError(event, err.Error())
+				return err
+			}
+			event2 = nil // not in a dm, only update the first response, then continue sending splits
 		}
 	} else if len(responseRunes) > 2000 {
 		// send as file
@@ -1388,6 +1451,7 @@ func handleLlmInteraction(event *events.MessageCreate, eraseX3 bool) error {
 		false,
 		"",
 		&wg,
+		event.Message.ReferencedMessage,
 	)
 	return err
 }
@@ -1411,7 +1475,7 @@ func handleCard(client bot.Client, channelID, messageID snowflake.ID, cache *Cha
 		if preMsgWg != nil {
 			preMsgWg.Wait()
 		}
-		_, err := sendMessageSplits(client, messageID, nil, 0, channelID, []rune(firstMes), nil)
+		_, err := sendMessageSplits(client, messageID, nil, 0, channelID, []rune(firstMes), nil, false)
 		if err != nil {
 			return true, err
 		}
@@ -1435,6 +1499,7 @@ func handleLlmInteraction2(
 	isRegenerate bool, // whether to regenerate the last response
 	regeneratePrepend string, // what to prepend to the regenerate message
 	preMsgWg *sync.WaitGroup, // what to wait on before sending the message
+	reference *discord.Message, // in reply to
 ) (string, error) {
 	cache := getChannelCache(channelID)
 	exit, err := handleCard(client, channelID, messageID, cache, preMsgWg)
@@ -1448,7 +1513,7 @@ func handleLlmInteraction2(
 	persona := persona.GetPersonaByMeta(cache.PersonaMeta)
 
 	llmer := llm.NewLlmer()
-	numCtxMessages, usernames, lastResponseMessage := addContextMessagesIfPossible(
+	numCtxMessages, usernames, lastResponseMessage, lastAssistantMessageID := addContextMessagesIfPossible(
 		client,
 		llmer,
 		channelID,
@@ -1466,7 +1531,10 @@ func handleLlmInteraction2(
 
 	// content can be empty if we are regenerating
 	if content != "" {
-		llmer.AddMessage(llm.RoleUser, formatMsg(content, username), messageID)
+		if reference != nil && reference.ID == lastAssistantMessageID {
+			reference = nil // don't format the reply if the reference is the last response
+		}
+		llmer.AddMessage(llm.RoleUser, formatMsg(content, username, reference), messageID)
 		addImageAttachments(llmer, attachments)
 	}
 
@@ -1546,9 +1614,10 @@ func handleLlmInteraction2(
 		}
 		jumpURL = lastResponseMessage.JumpURL()
 	} else {
-		for content := range strings.SplitSeq(response, "<new_message>") {
+		messages := strings.Split(response, "<new_message>")
+		for i, content := range messages {
 			content = strings.TrimSpace(content)
-			if _, err := sendMessageSplits(client, messageID, nil, 0, channelID, []rune(content), files); err != nil {
+			if _, err := sendMessageSplits(client, messageID, nil, 0, channelID, []rune(content), files, i != len(messages)-1); err != nil {
 				slog.Error("failed to send message splits", slog.Any("err", err))
 			}
 			messageID = 0 // only respond in the first message
@@ -2548,6 +2617,7 @@ func initiateDMInteraction(client bot.Client) {
 			false, // isRegenerate
 			"",    // regeneratePrepend
 			&wg,
+			nil,
 		)
 		if errors.Is(err, errTimeInteractionNoMessages) {
 			continue // GetMessages returned 0, no messages in channel (we passed `true` the line before)
@@ -2591,6 +2661,7 @@ func handleRegenerate(event *handler.CommandEvent) error {
 		true,  // isRegenerate
 		prepend,
 		nil,
+		nil, // will be filled in by handleLlmInteraction2
 	)
 	if err != nil {
 		return updateInteractionError(event, err.Error())
