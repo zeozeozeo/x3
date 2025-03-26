@@ -25,6 +25,7 @@ var (
 	cfBaseURL       = os.Getenv("X3_CLOUDFLARE_API_BASE")
 	cfToken         = os.Getenv("X3_CLOUDFLARE_API_TOKEN")
 	cohereToken     = os.Getenv("X3_COHERE_TOKEN")
+	mnnToken        = os.Getenv("X3_MNN_TOKEN")
 )
 
 const (
@@ -41,6 +42,7 @@ const (
 	cablyBaseURL      = "https://cablyai.com/v1"
 	meowBaseURL       = "https://meow.cablyai.com/v1"
 	cohereBaseURL     = "https://api.cohere.ai/compatibility/v1"
+	mnnBaseURL        = "https://api.mnnai.ru/v1"
 )
 
 const (
@@ -58,6 +60,7 @@ const (
 	ProviderMeow        = "meowapi"
 	ProviderCloudflare  = "cloudflare"
 	ProviderCohere      = "cohere"
+	ProviderMNN         = "mnn"
 )
 
 type ModelProvider struct {
@@ -114,6 +117,9 @@ var (
 			ProviderMeow: {
 				Codenames: []string{"gpt-4o-mini"},
 			},
+			ProviderMNN: {
+				Codenames: []string{"gpt-4o-mini"},
+			},
 		},
 	}
 
@@ -145,6 +151,9 @@ var (
 				Codenames: []string{"gpt-4o"},
 			},
 			ProviderMeow: {
+				Codenames: []string{"gpt-4o"},
+			},
+			ProviderMNN: {
 				Codenames: []string{"gpt-4o"},
 			},
 		},
@@ -190,6 +199,9 @@ var (
 			ProviderMeow: {
 				Codenames: []string{"gemini-2.0-flash"},
 			},
+			ProviderMNN: {
+				Codenames: []string{"gemini-2.0-flash"},
+			},
 		},
 	}
 
@@ -212,6 +224,9 @@ var (
 			ProviderZukijourney: {
 				Codenames: []string{"command-r-plus"},
 			},
+			ProviderMNN: {
+				Codenames: []string{"command-r-plus"},
+			},
 		},
 	}
 
@@ -231,6 +246,9 @@ var (
 			ProviderElectron: {
 				Codenames: []string{"mistral-large-latest"},
 			},
+			ProviderMNN: {
+				Codenames: []string{"mistral-large-latest"},
+			},
 		},
 	}
 
@@ -247,6 +265,9 @@ var (
 			},
 			ProviderGithub: {
 				Codenames: []string{"mistral-small-2503"},
+			},
+			ProviderMNN: {
+				Codenames: []string{"mistral-small"},
 			},
 		},
 	}
@@ -330,6 +351,9 @@ var (
 			ProviderElectron: {
 				Codenames: []string{"llama-3.2-90b"},
 			},
+			ProviderMNN: {
+				Codenames: []string{"llama-3.2-90b"},
+			},
 		},
 	}
 
@@ -344,6 +368,9 @@ var (
 			},
 			ProviderZukijourney: {
 				Codenames: []string{"llama-3.2-11b-instruct"},
+			},
+			ProviderOpenRouter: {
+				Codenames: []string{"meta-llama/llama-3.2-11b-vision-instruct:free"},
 			},
 			ProviderFresed: {
 				Codenames: []string{"llama-3.2-11b"},
@@ -372,7 +399,7 @@ var (
 				Codenames: []string{"llama-3.3-70b-specdec", "llama-3.3-70b-versatile"},
 			},
 			ProviderOpenRouter: {
-				Codenames: []string{"meta-llama/llama-3.1-70b-instruct:free"},
+				Codenames: []string{"meta-llama/llama-3.3-70b-instruct:free"},
 			},
 			ProviderZukijourney: {
 				Codenames: []string{"llama-3.3-70b-instruct"},
@@ -394,6 +421,9 @@ var (
 			},
 			ProviderCloudflare: {
 				Codenames: []string{"@cf/meta/llama-3.3-70b-instruct-fp8-fast"},
+			},
+			ProviderMNN: {
+				Codenames: []string{"llama-3.3-70b"},
 			},
 		},
 	}
@@ -422,6 +452,9 @@ var (
 				Codenames: []string{"llama-3.1-8b-instruct"},
 			},
 			ProviderElectron: {
+				Codenames: []string{"llama-3.1-8b"},
+			},
+			ProviderMNN: {
 				Codenames: []string{"llama-3.1-8b"},
 			},
 		},
@@ -491,6 +524,9 @@ var (
 			ProviderCably: {
 				Codenames: []string{"deepseek-v3"},
 			},
+			ProviderMNN: {
+				Codenames: []string{"deepseek-v3"},
+			},
 		},
 	}
 
@@ -512,6 +548,9 @@ var (
 				Codenames: []string{"deepseek-r1"},
 			},
 			ProviderMeow: {
+				Codenames: []string{"deepseek-r1"},
+			},
+			ProviderMNN: {
 				Codenames: []string{"deepseek-r1"},
 			},
 		},
@@ -677,6 +716,9 @@ var (
 			ProviderOpenRouter: {
 				Codenames: []string{"google/gemini-2.0-flash-thinking-exp:free"},
 			},
+			ProviderMNN: {
+				Codenames: []string{"gemini-2.0-flash-thinking-exp-01-21"},
+			},
 		},
 	}
 
@@ -693,6 +735,9 @@ var (
 			},
 			ProviderOpenRouter: {
 				Codenames: []string{"google/gemini-2.0-pro-exp-02-05:free"},
+			},
+			ProviderMNN: {
+				Codenames: []string{"gemini-2.0-pro-exp-02-05"},
 			},
 		},
 	}
@@ -949,17 +994,18 @@ var (
 			ProviderCably: {
 				Codenames: []string{"o3-mini-low"},
 			},
+			ProviderMNN: {
+				Codenames: []string{"o3-mini"},
+			},
 		},
 	}
 
 	ModelClaudeSonnet = Model{
-		Name:    "Anthropic Claude 3.7 Sonnet",
-		Command: "sonnet",
+		Name:        "Anthropic Claude 3.7 Sonnet",
+		Command:     "sonnet",
+		Whitelisted: true,
 		Providers: map[string]ModelProvider{
-			ProviderCably: {
-				Codenames: []string{"claude-3-7-sonnet-20250219"},
-			},
-			ProviderMeow: {
+			ProviderMNN: {
 				Codenames: []string{"claude-3.7-sonnet"},
 			},
 		},
@@ -1119,6 +1165,7 @@ var (
 		{Name: ProviderMeow},
 		{Name: ProviderCloudflare},
 		{Name: ProviderFresed},
+		{Name: ProviderMNN},
 		{Name: ProviderElectron},
 		{Name: ProviderHelixmind},
 		{Name: ProviderCohere}, // 1,000 reqs/mo limit
@@ -1206,6 +1253,8 @@ func (m Model) Client(provider string) (*openai.Client, []string) {
 		token, api = cfToken, cfBaseURL
 	case ProviderCohere:
 		token, api = cohereToken, cohereBaseURL
+	case ProviderMNN:
+		token, api = mnnToken, mnnBaseURL
 	default:
 		token, api = githubToken, azureBaseURL
 	}
