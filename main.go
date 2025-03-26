@@ -940,11 +940,8 @@ func handleNotFound(event *handler.InteractionEvent) error {
 	return event.CreateMessage(discord.MessageCreate{Content: "Command not found", Flags: discord.MessageFlagEphemeral})
 }
 
-func formatMsg(msg, username string, formatUsernames bool) string {
-	if formatUsernames {
-		return fmt.Sprintf("%s: %s", username, msg)
-	}
-	return msg
+func formatMsg(msg, username string) string {
+	return fmt.Sprintf("%s: %s", username, msg)
 }
 
 func isImageAttachment(attachment discord.Attachment) bool {
@@ -1039,8 +1036,11 @@ outer:
 		if role == llm.RoleAssistant {
 			// in case of random dm, remove the interaction reminder
 			content = strings.TrimSuffix(content, interactionReminder)
+		} else {
+			// user message, prepend the username
+			content = formatMsg(content, msg.Author.EffectiveName())
 		}
-		llmer.AddMessage(role, formatMsg(content, msg.Author.EffectiveName(), true), msg.ID)
+		llmer.AddMessage(role, content, msg.ID)
 
 		// if this is the last message with an image we add, check for images
 		if i == latestImageAttachmentIdx {
@@ -1117,6 +1117,15 @@ func sendMessageSplits(client bot.Client, messageID snowflake.ID, event *handler
 	return botMessage, nil
 }
 
+func replaceNewMessagesWithNewlines(response string) string {
+	var b strings.Builder
+	for content := range strings.SplitSeq(response, "<new_message>") {
+		b.WriteString(strings.TrimSpace(content))
+		b.WriteRune('\n')
+	}
+	return strings.TrimSpace(b.String())
+}
+
 func handleLlm(event *handler.CommandEvent, m *model.Model) error {
 	data := event.SlashCommandInteractionData()
 	prompt := data.String("prompt")
@@ -1163,7 +1172,7 @@ func handleLlm(event *handler.CommandEvent, m *model.Model) error {
 			if isLobotomyMessage(*msg) {
 				llmer.Lobotomize(getLobotomyAmountFromMessage(*msg))
 			} else {
-				llmer.AddMessage(llm.RoleUser, formatMsg(msg.Content, msg.Author.EffectiveName(), true), msg.ID)
+				llmer.AddMessage(llm.RoleUser, formatMsg(msg.Content, msg.Author.EffectiveName()), msg.ID)
 			}
 		}
 	}
@@ -1171,7 +1180,7 @@ func handleLlm(event *handler.CommandEvent, m *model.Model) error {
 	slog.Debug("handleLlm: got context messages", slog.Int("count", llmer.NumMessages()))
 
 	// and we also want the actual slash command prompt
-	llmer.AddMessage(llm.RoleUser, formatMsg(prompt, event.User().EffectiveName(), true), 0)
+	llmer.AddMessage(llm.RoleUser, formatMsg(prompt, event.User().EffectiveName()), 0)
 
 	// discord only gives us 3s to respond unless we do this (x3 is thinking...)
 	event.DeferCreateMessage(ephemeral)
@@ -1213,10 +1222,18 @@ func handleLlm(event *handler.CommandEvent, m *model.Model) error {
 		})
 	}
 
+	if useCache || ephemeral {
+		// can't use sendMessageSplits, so we need to replace <new_message> with newlines
+		response = replaceNewMessagesWithNewlines(response)
+	}
+
 	var botMessage *discord.Message
 	responseRunes := []rune(response)
 	if !useCache && !ephemeral {
-		botMessage, err = sendMessageSplits(event.Client(), 0, event, flags, event.Channel().ID(), responseRunes, files)
+		for content := range strings.SplitSeq(response, "<new_message>") {
+			content = strings.TrimSpace(content)
+			botMessage, err = sendMessageSplits(event.Client(), 0, event, flags, event.Channel().ID(), []rune(content), files)
+		}
 	} else if len(responseRunes) > 2000 {
 		// send as file
 		files = append(files, &discord.File{
@@ -1446,7 +1463,7 @@ func handleLlmInteraction2(
 
 	// content can be empty if we are regenerating
 	if content != "" {
-		llmer.AddMessage(llm.RoleUser, formatMsg(content, username, true), messageID)
+		llmer.AddMessage(llm.RoleUser, formatMsg(content, username), messageID)
 		addImageAttachments(llmer, attachments)
 	}
 
@@ -1503,6 +1520,9 @@ func handleLlmInteraction2(
 	}
 	var jumpURL string
 	if isRegenerate {
+		// replace <new_message> with newlines
+		response = replaceNewMessagesWithNewlines(response)
+
 		// edit the last response (lastResponseMessage is non-nil at this point)
 		builder := discord.NewMessageUpdateBuilder().SetAllowedMentions(&discord.AllowedMentions{RepliedUser: false})
 		if utf8.RuneCountInString(response) > 2000 {
@@ -1523,8 +1543,12 @@ func handleLlmInteraction2(
 		}
 		jumpURL = lastResponseMessage.JumpURL()
 	} else {
-		if _, err := sendMessageSplits(client, messageID, nil, 0, channelID, []rune(response), files); err != nil {
-			slog.Error("failed to send message splits", slog.Any("err", err))
+		for content := range strings.SplitSeq(response, "<new_message>") {
+			content = strings.TrimSpace(content)
+			if _, err := sendMessageSplits(client, messageID, nil, 0, channelID, []rune(content), files); err != nil {
+				slog.Error("failed to send message splits", slog.Any("err", err))
+			}
+			messageID = 0 // only respond in the first message
 		}
 	}
 
