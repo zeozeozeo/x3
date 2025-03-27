@@ -404,6 +404,29 @@ var (
 				},
 			},
 		},
+		discord.SlashCommandCreate{
+			Name:        "memory",
+			Description: "Manage x3 memories about you",
+			IntegrationTypes: []discord.ApplicationIntegrationType{
+				discord.ApplicationIntegrationTypeGuildInstall,
+				discord.ApplicationIntegrationTypeUserInstall,
+			},
+			Contexts: []discord.InteractionContextType{
+				discord.InteractionContextTypeGuild,
+				discord.InteractionContextTypeBotDM,
+				discord.InteractionContextTypePrivateChannel,
+			},
+			Options: []discord.ApplicationCommandOption{
+				discord.ApplicationCommandOptionSubCommand{
+					Name:        "list",
+					Description: "List things that x3 knows about you",
+				},
+				discord.ApplicationCommandOptionSubCommand{
+					Name:        "clear",
+					Description: "Make x3 forget everything about you :(",
+				},
+			},
+		},
 		// gpt commands are added in init(), except for this one
 		makeGptCommand("chat", "Chat with the current persona"),
 		// imagecmd
@@ -716,6 +739,65 @@ func writeMessageInteractionPrompt(id snowflake.ID, prompt string) error {
 	return err
 }
 
+func handleMemories(userID snowflake.ID, memories []string) error {
+	if len(memories) == 0 || userID == 0 {
+		return nil
+	}
+
+	tx, err := db.Begin()
+	if err != nil {
+		return err
+	}
+
+	stmt, err := tx.Prepare("INSERT OR REPLACE INTO memories (user_id, memory) VALUES (?, ?)")
+	if err != nil {
+		return err
+	}
+	defer stmt.Close()
+
+	for _, memory := range memories {
+		if memory == "" {
+			continue
+		}
+		_, err := stmt.Exec(userID.String(), memory)
+		if err != nil {
+			tx.Rollback()
+			return err
+		}
+	}
+
+	return tx.Commit()
+}
+
+func getMemories(userID snowflake.ID) []string {
+	var memories []string
+
+	rows, err := db.Query(
+		"SELECT memory FROM memories WHERE user_id = ? ORDER BY created_at DESC LIMIT 35",
+		userID.String(),
+	)
+	if err != nil {
+		slog.Error("failed to get memories", slog.Any("err", err))
+		return memories
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var memory string
+		if err := rows.Scan(&memory); err != nil {
+			slog.Error("failed to scan memory", slog.Any("err", err))
+			continue
+		}
+		memories = append(memories, memory)
+	}
+
+	if err := rows.Err(); err != nil {
+		slog.Error("rows iteration error", slog.Any("err", err))
+	}
+
+	return memories
+}
+
 func init() {
 	var err error
 	db, err = sql.Open("sqlite3", "x3.db")
@@ -803,6 +885,19 @@ func init() {
 		panic(err)
 	}
 
+	// memories
+	_, err = db.Exec(`
+		CREATE TABLE IF NOT EXISTS memories (
+			user_id TEXT,
+			memory TEXT,
+			created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+			PRIMARY KEY (user_id, memory)
+		)
+	`)
+	if err != nil {
+		panic(err)
+	}
+
 	// default db state
 	addToWhitelist(890686470556356619)
 
@@ -875,6 +970,13 @@ func main() {
 		r.Command("/new", handleQuoteNew)
 		r.Autocomplete("/remove", handleQuoteGetAutocomplete)
 		r.Command("/remove", handleQuoteRemove)
+	})
+
+	// memory
+	r.Route("/memory", func(r handler.Router) {
+		r.Use()
+		r.Command("/list", handleMemoryList)
+		r.Command("/clear", handleMemoryClear)
 	})
 
 	// image
@@ -993,10 +1095,16 @@ func getLobotomyAmountFromMessage(msg discord.Message) int {
 }
 
 // returns amount of messages from GetMessages, map of all usernames, and the message struct of the last response (if any)
-func addContextMessagesIfPossible(client bot.Client, llmer *llm.Llmer, channelID, messageID snowflake.ID, contextLen int) (int, map[string]bool, *discord.Message, snowflake.ID) {
+func addContextMessagesIfPossible(
+	client bot.Client,
+	llmer *llm.Llmer,
+	channelID,
+	messageID snowflake.ID,
+	contextLen int,
+) (int, map[string]bool, *discord.Message, snowflake.ID, snowflake.ID) {
 	messages, err := client.Rest().GetMessages(channelID, 0, messageID, 0, contextLen)
 	if err != nil {
-		return len(messages), nil, nil, 0
+		return len(messages), nil, nil, 0, 0
 	}
 
 	latestImageAttachmentIdx := -1
@@ -1015,6 +1123,7 @@ outer:
 	usernames := map[string]bool{}
 	var lastResponseMessage *discord.Message
 	var lastAssistantMessageID snowflake.ID
+	var lastUserID snowflake.ID
 
 	// discord returns surrounding message history from newest to oldest, but we want oldest to newest
 	for i := len(messages) - 1; i >= 0; i-- {
@@ -1061,6 +1170,7 @@ outer:
 				reference = nil
 			}
 			content = formatMsg(content, msg.Author.EffectiveName(), reference)
+			lastUserID = msg.Author.ID
 		}
 		llmer.AddMessage(role, content, msg.ID)
 
@@ -1072,7 +1182,7 @@ outer:
 		usernames[msg.Author.EffectiveName()] = true
 	}
 
-	return len(messages), usernames, lastResponseMessage, lastAssistantMessageID
+	return len(messages), usernames, lastResponseMessage, lastAssistantMessageID, lastUserID
 }
 
 func sendMessageSplits(
@@ -1167,13 +1277,49 @@ func sendMessageSplits(
 	return botMessage, nil
 }
 
-func replaceNewMessagesWithNewlines(response string) string {
+func replaceLlmTagsWithNewlines(response string, userID snowflake.ID) string {
 	var b strings.Builder
-	for content := range strings.SplitSeq(response, "<new_message>") {
-		b.WriteString(strings.TrimSpace(content))
+	messages, memories := splitLlmTags(response)
+	if err := handleMemories(userID, memories); err != nil {
+		slog.Error("failed to handle memories", slog.Any("err", err))
+	}
+	for _, message := range messages {
+		b.WriteString(message)
 		b.WriteRune('\n')
 	}
-	return strings.TrimSpace(b.String())
+	return b.String()
+}
+
+func splitLlmTags(response string) (messages []string, memories []string) {
+	// 1. go through every <new_message>
+	for content := range strings.SplitSeq(response, "<new_message>") {
+		// 2. extract text within <memory></memory> tags and remove them, if any
+		startIdx := strings.Index(content, "<memory>")
+		endIdx := strings.Index(content, "</memory>")
+
+		if startIdx != -1 && endIdx != -1 && startIdx < endIdx {
+			// extract memory
+			memory := strings.TrimSpace(content[startIdx+len("<memory>") : endIdx])
+			if memory != "" {
+				memories = append(memories, memory)
+			}
+
+			// remove memory tag and extract remaining content
+			remainingContent := strings.TrimSpace(content[endIdx+len("</memory>"):])
+			content = strings.TrimSpace(content[:startIdx])
+
+			if content != "" {
+				messages = append(messages, content)
+			}
+			if remainingContent != "" {
+				messages = append(messages, remainingContent)
+			}
+		} else {
+			messages = append(messages, strings.TrimSpace(content))
+		}
+	}
+
+	return
 }
 
 func handleLlm(event *handler.CommandEvent, m *model.Model) error {
@@ -1203,7 +1349,7 @@ func handleLlm(event *handler.CommandEvent, m *model.Model) error {
 	}
 
 	// set persona
-	persona := persona.GetPersonaByMeta(cache.PersonaMeta)
+	persona := persona.GetPersonaByMeta(cache.PersonaMeta, getMemories(event.User().ID), event.User().EffectiveName())
 	llmer.SetPersona(persona)
 	if m == nil {
 		model := model.GetModelByName(cache.PersonaMeta.Model)
@@ -1214,7 +1360,7 @@ func handleLlm(event *handler.CommandEvent, m *model.Model) error {
 	lastMessage := event.Channel().MessageChannel.LastMessageID()
 	var usernames map[string]bool
 	if !useCache && lastMessage != nil {
-		_, usernames, _, _ = addContextMessagesIfPossible(event.Client(), llmer, event.Channel().ID(), *lastMessage, cache.ContextLength)
+		_, usernames, _, _, _ = addContextMessagesIfPossible(event.Client(), llmer, event.Channel().ID(), *lastMessage, cache.ContextLength)
 
 		// and we also want the last message in the channel
 		msg, err := event.Client().Rest().GetMessage(event.Channel().ID(), *lastMessage)
@@ -1274,14 +1420,17 @@ func handleLlm(event *handler.CommandEvent, m *model.Model) error {
 
 	if useCache || ephemeral {
 		// can't use sendMessageSplits, so we need to replace <new_message> with newlines
-		response = replaceNewMessagesWithNewlines(response)
+		response = replaceLlmTagsWithNewlines(response, event.User().ID)
 	}
 
 	var botMessage *discord.Message
 	responseRunes := []rune(response)
 	if !useCache && !ephemeral {
 		event2 := event
-		messages := strings.Split(response, "<new_message>")
+		messages, memories := splitLlmTags(response)
+		if err := handleMemories(event.User().ID, memories); err != nil {
+			slog.Error("failed to handle memories", slog.Any("err", err))
+		}
 		for i, content := range messages {
 			content = strings.TrimSpace(content)
 			botMessage, err = sendMessageSplits(
@@ -1446,6 +1595,7 @@ func handleLlmInteraction(event *events.MessageCreate, eraseX3 bool) error {
 		event.MessageID,
 		content,
 		event.Message.Author.EffectiveName(),
+		event.Message.Author.ID,
 		event.Message.Attachments,
 		false,
 		false,
@@ -1494,6 +1644,7 @@ func handleLlmInteraction2(
 	messageID snowflake.ID,
 	content string,
 	username string,
+	userID snowflake.ID,
 	attachments []discord.Attachment,
 	timeInteraction,
 	isRegenerate bool, // whether to regenerate the last response
@@ -1510,16 +1661,17 @@ func handleLlmInteraction2(
 		return "", nil
 	}
 
-	persona := persona.GetPersonaByMeta(cache.PersonaMeta)
-
 	llmer := llm.NewLlmer()
-	numCtxMessages, usernames, lastResponseMessage, lastAssistantMessageID := addContextMessagesIfPossible(
+
+	// fetch surrounding messages
+	numCtxMessages, usernames, lastResponseMessage, lastAssistantMessageID, lastUserID := addContextMessagesIfPossible(
 		client,
 		llmer,
 		channelID,
 		messageID,
 		cache.ContextLength,
 	)
+	slog.Debug("interaction; added context messages", slog.Int("added", numCtxMessages), slog.Int("count", llmer.NumMessages()))
 	if timeInteraction && numCtxMessages == 0 {
 		return "", errTimeInteractionNoMessages
 	}
@@ -1527,7 +1679,11 @@ func handleLlmInteraction2(
 		// trying to regenerate a message but there is no previous message from x3
 		return "", errRegenerateNoMessage
 	}
-	slog.Debug("interaction; added context messages", slog.Int("added", numCtxMessages), slog.Int("count", llmer.NumMessages()))
+	if timeInteraction && userID == 0 {
+		userID = lastUserID // initiateDMInteraction expects us to infer this
+	}
+
+	persona := persona.GetPersonaByMeta(cache.PersonaMeta, getMemories(userID), username)
 
 	// content can be empty if we are regenerating
 	if content != "" {
@@ -1592,7 +1748,7 @@ func handleLlmInteraction2(
 	var jumpURL string
 	if isRegenerate {
 		// replace <new_message> with newlines
-		response = replaceNewMessagesWithNewlines(response)
+		response = replaceLlmTagsWithNewlines(response, userID)
 
 		// edit the last response (lastResponseMessage is non-nil at this point)
 		builder := discord.NewMessageUpdateBuilder().SetAllowedMentions(&discord.AllowedMentions{RepliedUser: false})
@@ -1614,7 +1770,10 @@ func handleLlmInteraction2(
 		}
 		jumpURL = lastResponseMessage.JumpURL()
 	} else {
-		messages := strings.Split(response, "<new_message>")
+		messages, memories := splitLlmTags(response)
+		if err := handleMemories(userID, memories); err != nil {
+			slog.Error("failed to handle memories", slog.Any("err", err))
+		}
 		for i, content := range messages {
 			content = strings.TrimSpace(content)
 			if _, err := sendMessageSplits(client, messageID, nil, 0, channelID, []rune(content), files, i != len(messages)-1); err != nil {
@@ -1925,7 +2084,7 @@ func handlePersona(event *handler.CommandEvent) error {
 	// update persona meta in channel cache
 	prevMeta := cache.PersonaMeta
 	if prevMeta.System == "" {
-		prevMeta.System = persona.GetPersonaByMeta(cache.PersonaMeta).System
+		prevMeta.System = persona.GetPersonaByMeta(cache.PersonaMeta, nil, "").System
 	}
 	cache.PersonaMeta = personaMeta
 	if dataPersona != "" {
@@ -2612,6 +2771,7 @@ func initiateDMInteraction(client bot.Client) {
 			0,
 			"<you are encouraged to interact with the user after some inactivity>",
 			"system message",
+			0, // user id will be determined in handleLlmInteraction2
 			nil,
 			true,  // timeInteraction
 			false, // isRegenerate
@@ -2656,6 +2816,7 @@ func handleRegenerate(event *handler.CommandEvent) error {
 		0,  // determined by handleLlmInteraction2
 		"", // empty because we are regenerating
 		"", // we don't need the username, we're only regenerating the response
+		0,  // don't save memories for regenerations
 		nil,
 		false, // timeInteraction
 		true,  // isRegenerate
@@ -2707,4 +2868,78 @@ func handleBlacklist(event *handler.CommandEvent) error {
 			SetEphemeral(ephemeral).
 			Build(),
 	)
+}
+
+func pluralize(count int, singular string) string {
+	plural := singular + "s"
+
+	// Handle special cases (basic English rules)
+	if strings.HasSuffix(singular, "y") && !strings.ContainsAny(string(singular[len(singular)-2]), "aeiou") {
+		plural = singular[:len(singular)-1] + "ies"
+	} else if strings.HasSuffix(singular, "ch") || strings.HasSuffix(singular, "sh") || strings.HasSuffix(singular, "x") || strings.HasSuffix(singular, "s") || strings.HasSuffix(singular, "z") {
+		plural = singular + "es"
+	}
+
+	if count == 1 {
+		return fmt.Sprintf("%d %s", count, singular)
+	}
+	return fmt.Sprintf("%d %s", count, plural)
+}
+
+func handleMemoryList(event *handler.CommandEvent) error {
+	memories := getMemories(event.User().ID)
+
+	if len(memories) == 0 {
+		return event.CreateMessage(
+			discord.NewMessageCreateBuilder().
+				SetEmbeds(discord.NewEmbedBuilder().
+					SetTitle("Memories").
+					SetColor(0x0085ff).
+					SetDescription("No memories saved").
+					SetFooter("x3", x3Icon).
+					SetTimestamp(time.Now()).
+					Build()).
+				SetEphemeral(true).
+				Build(),
+		)
+	}
+
+	var b strings.Builder
+	for i, memory := range memories {
+		b.WriteString(strconv.Itoa(i + 1))
+		b.WriteString(". ")
+		b.WriteString(memory)
+		b.WriteRune('\n')
+	}
+
+	builder := discord.NewEmbedBuilder().
+		SetTitle("Memories").
+		SetColor(0x0085ff).
+		SetDescription("Listing "+pluralize(len(memories), "memory")).
+		SetFooter("x3", x3Icon).
+		SetTimestamp(time.Now()).
+		AddField("List", b.String(), false)
+
+	return event.CreateMessage(
+		discord.NewMessageCreateBuilder().
+			SetEmbeds(builder.Build()).
+			SetEphemeral(true).
+			Build(),
+	)
+}
+
+func deleteMemories(userID snowflake.ID) error {
+	_, err := db.Exec("DELETE FROM memories WHERE user_id = ?", userID.String())
+	if err != nil {
+		slog.Error("failed to delete memories", slog.Any("err", err))
+	}
+	return err
+}
+
+func handleMemoryClear(event *handler.CommandEvent) error {
+	err := deleteMemories(event.User().ID)
+	if err != nil {
+		return sendInteractionError(event, err.Error(), true)
+	}
+	return event.CreateMessage(discord.NewMessageCreateBuilder().SetContent("Cleared memories").SetEphemeral(true).Build())
 }
