@@ -64,7 +64,7 @@ func main() {
 			if err := db.DB.Close(); err != nil {
 				slog.Error("error closing database", slog.Any("err", err))
 			} else {
-				slog.Info("Database connection closed.")
+				slog.Info("database connection closed")
 			}
 		}
 	}()

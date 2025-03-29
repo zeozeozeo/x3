@@ -3,6 +3,7 @@ package db
 import (
 	"errors"
 	"log/slog"
+	"slices"
 	"strings"
 
 	"github.com/disgoorg/snowflake/v2"
@@ -74,12 +75,7 @@ func GetMemories(userID snowflake.ID) []string {
 	}
 
 	// Reverse the slice so older memories come first (as expected by LLM context)
-	// slices.Reverse(memories) // Assuming Go 1.21+, otherwise implement manually
-
-	// Manual reverse for compatibility
-	for i, j := 0, len(memories)-1; i < j; i, j = i+1, j-1 {
-		memories[i], memories[j] = memories[j], memories[i]
-	}
+	slices.Reverse(memories)
 
 	return memories
 }

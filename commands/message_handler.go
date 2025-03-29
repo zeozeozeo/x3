@@ -23,14 +23,8 @@ var (
 // //go:embed ../media/sigma-boy.mp4
 // var sigmaBoyMp4 []byte
 
-// stripX3 removes "x3" (case-insensitive) from a string, trimming whitespace.
-func stripX3(s string) string {
-	cleaned := containsX3Regex.ReplaceAllString(s, "$1$2") // Keep the boundary characters
-	return strings.TrimSpace(cleaned)
-}
-
 // handleLlmInteraction is called by OnMessageCreate for non-command LLM triggers (mentions, replies, "x3").
-func handleLlmInteraction(event *events.MessageCreate, eraseX3 bool) error {
+func handleLlmInteraction(event *events.MessageCreate) error {
 	// Send typing indicator while processing
 	var wg sync.WaitGroup
 	wg.Add(1)
@@ -38,9 +32,6 @@ func handleLlmInteraction(event *events.MessageCreate, eraseX3 bool) error {
 
 	// Get message content, potentially stripping "x3"
 	content := getMessageContentNoWhitelist(event.Message) // getMessageContentNoWhitelist is in llm_context.go
-	if eraseX3 {
-		content = stripX3(content)
-	}
 
 	// Call the core LLM interaction logic
 	// handleLlmInteraction2 is in llm_interact.go
@@ -81,8 +72,7 @@ func OnMessageCreate(event *events.MessageCreate) {
 	if event.GuildID == nil {
 		// Direct Message
 		slog.Debug("Handling DM interaction")
-		// Call handleLlmInteraction, don't erase "x3" in DMs
-		handleLlmInteraction(event, false)
+		handleLlmInteraction(event)
 		return // Stop processing after handling DM
 	}
 
@@ -92,7 +82,7 @@ func OnMessageCreate(event *events.MessageCreate) {
 	for _, user := range event.Message.Mentions {
 		if user.ID == event.Client().ID() {
 			slog.Debug("Handling @mention interaction")
-			handleLlmInteraction(event, false) // Don't erase "x3" on direct mention
+			handleLlmInteraction(event)
 			return
 		}
 	}
@@ -101,8 +91,8 @@ func OnMessageCreate(event *events.MessageCreate) {
 	if event.Message.ReferencedMessage != nil && event.Message.ReferencedMessage.Author.ID == event.Client().ID() {
 		// Don't trigger on replies to /lobotomy or /persona confirmations etc.
 		if !isLobotomyMessage(*event.Message.ReferencedMessage) && !isCardMessage(*event.Message.ReferencedMessage) {
-			slog.Debug("Handling reply interaction")
-			handleLlmInteraction(event, false) // Don't erase "x3" on reply
+			slog.Debug("handling reply interaction")
+			handleLlmInteraction(event)
 			return
 		}
 	}
@@ -115,23 +105,22 @@ func OnMessageCreate(event *events.MessageCreate) {
 			trimmed == "x3 quote this" ||
 			strings.HasSuffix(trimmed, " x3 quote") ||
 			strings.HasSuffix(trimmed, " x3 quote this") {
-			slog.Debug("Handling 'x3 quote' reply trigger")
+			slog.Debug("handling 'x3 quote' reply trigger")
 			if err := HandleQuoteReply(event); err != nil { // HandleQuoteReply is in quote.go
-				// Error already sent by HandleQuoteReply or sendPrettyError
 				slog.Error("HandleQuoteReply failed", slog.Any("err", err))
 			}
 			return // Stop processing, quote handled
 		}
 
 		// Otherwise, treat as LLM trigger, erasing "x3"
-		slog.Debug("Handling 'x3' keyword interaction")
-		handleLlmInteraction(event, true)
+		slog.Debug("handling 'x3' keyword interaction")
+		handleLlmInteraction(event)
 		return
 	}
 
 	// Check for "protogen" keyword
 	if containsProtogenRegex.MatchString(event.Message.Content) {
-		slog.Debug("Handling 'protogen' keyword")
+		slog.Debug("handling 'protogen' keyword")
 		_, err := event.Client().Rest().CreateMessage(
 			event.ChannelID,
 			discord.NewMessageCreateBuilder().
@@ -148,7 +137,7 @@ func OnMessageCreate(event *events.MessageCreate) {
 
 	// Check for "sigma" keyword
 	if containsSigmaRegex.MatchString(event.Message.Content) {
-		slog.Debug("Handling 'sigma' keyword")
+		slog.Debug("handling 'sigma' keyword")
 		// Use the package variable commands.SigmaBoyMp4
 		if len(SigmaBoyMp4) == 0 {
 			slog.Error("SigmaBoyMp4 data is empty!") // Log error if data wasn't loaded

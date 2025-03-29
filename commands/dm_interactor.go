@@ -40,19 +40,15 @@ func InitiateDMInteraction(client bot.Client) {
 
 		// --- Conditions to skip this channel ---
 		if cache.Llmer != nil {
-			slog.Debug("Skipping DM interaction: channel has active llmer cache", slog.String("channel_id", id.String()))
 			continue // Skip channels with active LLM cache (likely non-DM or complex state)
 		}
 		if cache.KnownNonDM {
-			// slog.Debug("Skipping DM interaction: known non-DM channel", slog.String("channel_id", id.String()))
 			continue // Skip channels previously identified as non-DM
 		}
 		if cache.IsLastRandomDM {
-			slog.Debug("Skipping DM interaction: last interaction was random DM", slog.String("channel_id", id.String()))
 			continue // Skip if the last message *sent* by the bot was a random DM
 		}
 		if cache.NoRandomDMs {
-			slog.Debug("Skipping DM interaction: user opted out", slog.String("channel_id", id.String()))
 			continue // Skip if user opted out
 		}
 
@@ -65,7 +61,7 @@ func InitiateDMInteraction(client bot.Client) {
 			respondTime := cache.LastInteraction.Add(randomWait)
 
 			if !time.Now().After(respondTime) {
-				// slog.Debug("Skipping DM interaction: too soon since last interaction", slog.String("channel_id", id.String()), slog.Time("last_interaction", cache.LastInteraction), slog.Time("respond_after", respondTime))
+				// slog.Debug("skipping DM interaction: too soon since last interaction", slog.String("channel_id", id.String()), slog.Time("last_interaction", cache.LastInteraction), slog.Time("respond_after", respondTime))
 				continue // Skip if not enough time has passed
 			}
 		}

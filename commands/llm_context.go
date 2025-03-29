@@ -11,6 +11,8 @@ import (
 	"strings"
 	"unicode/utf8"
 
+	"slices"
+
 	"github.com/disgoorg/disgo/bot"
 	"github.com/disgoorg/disgo/discord"
 	"github.com/disgoorg/snowflake/v2"
@@ -108,7 +110,7 @@ func getMessageContent(message discord.Message, isWhitelisted bool) string {
 			maxSize = 256 * 1024
 		}
 		if attachment.Size > maxSize {
-			slog.Debug("Skipping large attachment", slog.String("id", attachment.ID.String()), slog.Int("size", attachment.Size))
+			slog.Debug("skipping large attachment", slog.String("id", attachment.ID.String()), slog.Int("size", attachment.Size))
 			continue
 		}
 
@@ -127,10 +129,10 @@ func getMessageContent(message discord.Message, isWhitelisted bool) string {
 		// Try reading from cache first
 		if b, ok := readTxtCache(attachment.ID); ok {
 			body = b
-			slog.Debug("Read attachment from cache", slog.String("id", attachment.ID.String()))
+			slog.Debug("read attachment from cache", slog.String("id", attachment.ID.String()))
 		} else {
 			// Download if not cached
-			slog.Debug("Downloading attachment", slog.String("url", attachment.URL))
+			slog.Debug("downloading attachment", slog.String("url", attachment.URL))
 			resp, err := http.Get(attachment.URL)
 			if err != nil {
 				slog.Error("failed to fetch attachment", slog.Any("err", err), slog.String("url", attachment.URL))
@@ -146,13 +148,13 @@ func getMessageContent(message discord.Message, isWhitelisted bool) string {
 				continue // Skip this attachment on read error
 			}
 			if len(body) > maxSize {
-				slog.Warn("Attachment body exceeded size limit after download", slog.String("id", attachment.ID.String()), slog.Int("size", len(body)))
+				slog.Warn("attachment body exceeded size limit after download", slog.String("id", attachment.ID.String()), slog.Int("size", len(body)))
 				continue // Skip if somehow larger than limit
 			}
 
 			// Validate UTF-8
 			if !utf8.Valid(body) {
-				slog.Warn("Attachment body is not valid utf8", slog.String("id", attachment.ID.String()))
+				slog.Warn("attachment body is not valid utf8", slog.String("id", attachment.ID.String()))
 				continue // Skip invalid UTF-8
 			}
 
@@ -174,7 +176,6 @@ func getMessageContent(message discord.Message, isWhitelisted bool) string {
 	for _, channel := range message.MentionChannels {
 		content = strings.ReplaceAll(content, fmt.Sprintf("<#%d>", channel.ID), "#"+channel.Name)
 	}
-	// TODO: Add role mention handling?
 
 	return content
 }
@@ -203,7 +204,7 @@ func addContextMessagesIfPossible(
 	// Fetch messages *before* the given messageID
 	messages, err := client.Rest().GetMessages(channelID, 0, messageID, 0, contextLen)
 	if err != nil {
-		slog.Error("Failed to get context messages", slog.Any("err", err), slog.String("channel_id", channelID.String()))
+		slog.Error("failed to get context messages", slog.Any("err", err), slog.String("channel_id", channelID.String()))
 		return 0, make(map[string]bool), nil, 0, 0
 	}
 
@@ -211,11 +212,8 @@ func addContextMessagesIfPossible(
 	latestImageAttachmentIdx := -1
 	for i, msg := range messages { // newest to oldest
 		if len(msg.Attachments) > 0 {
-			for _, attachment := range msg.Attachments {
-				if isImageAttachment(attachment) {
-					latestImageAttachmentIdx = i // Store index of newest message with an image
-					break                        // Only need the newest one
-				}
+			if slices.ContainsFunc(msg.Attachments, isImageAttachment) {
+				latestImageAttachmentIdx = i // Only need the newest one
 			}
 			if latestImageAttachmentIdx == i {
 				break // Found the newest image, no need to check older messages
@@ -242,7 +240,7 @@ func addContextMessagesIfPossible(
 			if isLobotomyMessage(msg) {
 				amount := getLobotomyAmountFromMessage(msg)
 				llmer.Lobotomize(amount)
-				slog.Debug("Handled lobotomy message in context", slog.Int("amount", amount), slog.Int("num_messages", llmer.NumMessages()))
+				slog.Debug("handled lobotomy message in context", slog.Int("amount", amount), slog.Int("num_messages", llmer.NumMessages()))
 				continue // Don't add the lobotomy confirmation itself to context
 			} else if isCardMessage(msg) {
 				// For card messages, extract the actual content after the header
@@ -253,32 +251,26 @@ func addContextMessagesIfPossible(
 					content = msg.Content // Fallback if format is unexpected
 				}
 				// Remove the user's trigger message that led to this card message
-				// This assumes the trigger message is immediately before the card message in history.
-				// Might need refinement if that assumption isn't always true.
 				llmer.Lobotomize(1)
 			} else if msg.EditedTimestamp != nil && strings.HasPrefix(msg.Content, "**") && strings.Count(msg.Content, "**") >= 2 {
-				// Handle regenerated message with prefill (remove leading/trailing **)
-				content = strings.TrimPrefix(msg.Content, "**")
-				content = strings.TrimSuffix(content, "**") // May need more robust ** removal
+				// Handle regenerated message with prefill
+				content = strings.Replace(msg.Content, "**", "", 2)
 			} else {
 				content = getMessageContentNoWhitelist(msg) // Get content normally for other bot messages
 			}
 
 			// Store the message object if it's a reply target
 			if msg.ReferencedMessage != nil {
-				// Check if it references the message *before* it (common reply pattern)
-				if i > 0 && msg.ReferencedMessage.ID == messages[i-1].ID {
-					lastResponseMessage = &msg
-				}
+				lastResponseMessage = &msg
 			}
 
 			// Handle potential message splitting indicator (\u200B)
 			if strings.HasSuffix(content, "\u200B") {
 				content = strings.TrimSuffix(content, "\u200B") + " <new_message> "
 			}
+
 			// Remove random DM reminder if present
 			content = strings.TrimSuffix(content, interactionReminder)
-
 		} else {
 			// --- Process User Message ---
 			role = llm.RoleUser
@@ -289,7 +281,7 @@ func addContextMessagesIfPossible(
 			if promptErr == nil && interactionPrompt != "" {
 				// Use the cached interaction prompt instead of the message content
 				content = interactionPrompt
-				slog.Debug("Using cached interaction prompt for message", slog.String("msg_id", msg.ID.String()))
+				slog.Debug("using cached interaction prompt for message", slog.String("msg_id", msg.ID.String()))
 			} else {
 				// Get regular message content (including attachments)
 				content = getMessageContentNoWhitelist(msg)

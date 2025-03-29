@@ -136,20 +136,20 @@ func handleLlmInteraction2(
 
 	// --- Input Validation and Error Handling ---
 	if timeInteraction && numCtxMessages == 0 {
-		slog.Warn("Time interaction triggered in empty channel", slog.String("channel_id", channelID.String()))
+		slog.Warn("time interaction triggered in empty channel", slog.String("channel_id", channelID.String()))
 		return "", errTimeInteractionNoMessages
 	}
 	if isRegenerate && lastResponseMessage == nil {
-		slog.Warn("Regenerate called but no previous assistant message found", slog.String("channel_id", channelID.String()))
+		slog.Warn("regenerate called but no previous assistant message found", slog.String("channel_id", channelID.String()))
 		return "", errRegenerateNoMessage
 	}
 	if timeInteraction && userID == 0 {
 		if lastUserID == 0 {
-			slog.Error("Time interaction failed: cannot determine target user ID", slog.String("channel_id", channelID.String()))
+			slog.Error("rime interaction failed: cannot determine target user ID", slog.String("channel_id", channelID.String()))
 			return "", errors.New("cannot determine target user for time interaction")
 		}
 		userID = lastUserID // Use the ID of the last user who sent a message
-		slog.Debug("Inferred user ID for time interaction", slog.String("user_id", userID.String()))
+		slog.Debug("inferred user ID for time interaction", slog.String("user_id", userID.String()))
 	}
 	// --- End Validation ---
 
@@ -174,7 +174,7 @@ func handleLlmInteraction2(
 	if isRegenerate {
 		// Remove messages up to (but not including) the message being regenerated
 		llmer.LobotomizeUntilID(lastResponseMessage.ID)
-		slog.Debug("Regenerating: Lobotomized history", slog.String("until_id", lastResponseMessage.ID.String()), slog.Int("remaining_messages", llmer.NumMessages()))
+		slog.Debug("regenerating: lobotomized history", slog.String("until_id", lastResponseMessage.ID.String()), slog.Int("remaining_messages", llmer.NumMessages()))
 	}
 
 	llmer.SetPersona(persona)
@@ -189,7 +189,7 @@ func handleLlmInteraction2(
 
 	// --- Generate LLM Response ---
 	m := model.GetModelByName(cache.PersonaMeta.Model)
-	slog.Debug("Requesting LLM completion",
+	slog.Debug("requesting LLM completion",
 		slog.String("model", m.Name),
 		slog.Int("num_messages", llmer.NumMessages()),
 		slog.Bool("is_regenerate", isRegenerate),
@@ -219,7 +219,7 @@ func handleLlmInteraction2(
 		thinking, answer = llm.ExtractThinking(response)
 		if thinking != "" && answer != "" {
 			response = answer
-			slog.Debug("Extracted reasoning", slog.Int("thinking_len", len(thinking)), slog.Int("answer_len", len(response)))
+			slog.Debug("extracted reasoning", slog.Int("thinking_len", len(thinking)), slog.Int("answer_len", len(response)))
 		}
 	}
 
@@ -262,10 +262,10 @@ func handleLlmInteraction2(
 			}
 		}
 
-		slog.Debug("Updating message for regeneration", slog.String("message_id", lastResponseMessage.ID.String()))
+		slog.Debug("updating message for regeneration", slog.String("message_id", lastResponseMessage.ID.String()))
 		_, err = client.Rest().UpdateMessage(channelID, lastResponseMessage.ID, builder.Build())
 		if err != nil {
-			slog.Error("Failed to update message for regeneration", slog.Any("err", err))
+			slog.Error("failed to update message for regeneration", slog.Any("err", err))
 			return "", fmt.Errorf("failed to update message: %w", err)
 		}
 		jumpURL = lastResponseMessage.JumpURL()
@@ -321,11 +321,11 @@ func handleLlmInteraction2(
 	cache.UpdateInteractionTime()
 	if err := cache.Write(channelID); err != nil {
 		// Log error but don't fail the interaction
-		slog.Error("Failed to write channel cache after interaction", slog.Any("err", err), slog.String("channel_id", channelID.String()))
+		slog.Error("failed to write channel cache after interaction", slog.Any("err", err), slog.String("channel_id", channelID.String()))
 	}
 	if err := db.UpdateGlobalStats(usage); err != nil {
 		// Log error but don't fail the interaction
-		slog.Error("Failed to update global stats after interaction", slog.Any("err", err))
+		slog.Error("failed to update global stats after interaction", slog.Any("err", err))
 	}
 
 	return jumpURL, nil

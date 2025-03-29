@@ -85,7 +85,7 @@ func (cache ChannelCache) Write(id snowflake.ID) error {
 	}
 	_, err = DB.Exec("INSERT OR REPLACE INTO channel_cache (channel_id, cache) VALUES (?, ?)", id.String(), data)
 	if err != nil {
-		slog.Error("Failed to write channel cache to DB", slog.Any("err", err), slog.String("channel_id", id.String()))
+		slog.Error("failed to write channel cache to DB", slog.Any("err", err), slog.String("channel_id", id.String()))
 	}
 	return err
 }

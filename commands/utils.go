@@ -92,7 +92,6 @@ func sendTypingWithLog(client bot.Client, channelID snowflake.ID, wg *sync.WaitG
 	}
 }
 
-
 // toTitle capitalizes the first letter of a string.
 func toTitle(str string) string {
 	if len(str) == 0 {
@@ -176,7 +175,7 @@ func sendMessageSplits(
 
 	var firstBotMessage *discord.Message // Store the first message sent/updated
 
-	for i := 0; i < numMessages; i++ {
+	for i := range numMessages {
 		start := i * maxLen
 		end := min(start+maxLen, messageLen)
 		segment := ""

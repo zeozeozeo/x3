@@ -111,6 +111,6 @@ func RegisterHandlers(r handler.Router) error {
 	// Not Found Handler (using the asserted mux)
 	mux.NotFound(HandleNotFound)
 
-	slog.Info("Command handlers registered")
+	slog.Info("command handlers registered")
 	return nil
 }

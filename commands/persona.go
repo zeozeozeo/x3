@@ -20,8 +20,8 @@ import (
 	"github.com/zeozeozeo/x3/persona"
 )
 
-// ftoheap converts a float64 to a pointer to float64.
-func ftoheap(v float64) *float64 {
+// ptr is a helper function to create a pointer to a value.
+func ptr[T any](v T) *T {
 	return &v
 }
 
@@ -98,22 +98,22 @@ var PersonaCommand = discord.SlashCommandCreate{
 			Name:        "temperature",
 			Description: "Controls randomness in LLM predictions; 0 or 1 to reset",
 			Required:    false,
-			MinValue:    ftoheap(0.0),
-			MaxValue:    ftoheap(2.0),
+			MinValue:    ptr(0.0),
+			MaxValue:    ptr(2.0),
 		},
 		discord.ApplicationCommandOptionFloat{
 			Name:        "top_p",
 			Description: "Controls cumulative probability of token selection; 0 or 1 to reset",
 			Required:    false,
-			MinValue:    ftoheap(0.0),
-			MaxValue:    ftoheap(1.0),
+			MinValue:    ptr(0.0),
+			MaxValue:    ptr(1.0),
 		},
 		discord.ApplicationCommandOptionFloat{
 			Name:        "frequency_penalty",
 			Description: "Penalizes frequent tokens to reduce repetition; 0 to reset",
 			Required:    false,
-			MinValue:    ftoheap(-2.0),
-			MaxValue:    ftoheap(2.0),
+			MinValue:    ptr(-2.0),
+			MaxValue:    ptr(2.0),
 		},
 		discord.ApplicationCommandOptionInt{
 			Name:        "seed",

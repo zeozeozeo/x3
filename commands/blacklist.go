@@ -23,7 +23,19 @@ var BlacklistCommand = discord.SlashCommandCreate{
 			Name:        "channel",
 			Description: "Channel to blacklist. If already in the blacklist, removes it instead",
 			Required:    true,
-			// TODO: Add ChannelTypes constraint if possible/needed (e.g., only text channels)
+			ChannelTypes: []discord.ChannelType{
+				discord.ChannelTypeGuildText,
+				discord.ChannelTypeGuildVoice,
+				discord.ChannelTypeGuildCategory,
+				discord.ChannelTypeGuildNews,
+				discord.ChannelTypeGuildNewsThread,
+				discord.ChannelTypeGuildPublicThread,
+				discord.ChannelTypeGuildPrivateThread,
+				discord.ChannelTypeGuildStageVoice,
+				discord.ChannelTypeGuildDirectory,
+				discord.ChannelTypeGuildForum,
+				discord.ChannelTypeGuildMedia,
+			},
 		},
 		discord.ApplicationCommandOptionBool{
 			Name:        "ephemeral",

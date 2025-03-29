@@ -38,7 +38,6 @@ func makeGptCommand(name, desc string) discord.SlashCommandCreate {
 				Description: "If the response should only be visible to you",
 				Required:    false,
 			},
-			// TODO: Add attachment option if needed for vision models directly in slash command?
 		},
 	}
 }
@@ -96,16 +95,16 @@ func HandleLlm(event *handler.CommandEvent, m *model.Model) error {
 	useCache := event.GuildID() == nil || (event.AppPermissions() != nil && !event.AppPermissions().Has(discord.PermissionReadMessageHistory))
 
 	if useCache {
-		slog.Debug("Using channel cache for LLM context", slog.String("channel_id", event.Channel().ID().String()))
+		slog.Debug("using channel cache for LLM context", slog.String("channel_id", event.Channel().ID().String()))
 		llmer = cache.Llmer
 		if llmer == nil {
-			slog.Debug("No llmer in cache; creating new", slog.String("channel_id", event.Channel().ID().String()))
+			slog.Debug("no llmer in cache; creating new", slog.String("channel_id", event.Channel().ID().String()))
 			llmer = llm.NewLlmer()
 			// Don't write cache here, wait until after successful interaction
 		}
 	} else {
 		// Not using cache, fetch history
-		slog.Debug("Fetching message history for LLM context", slog.String("channel_id", event.Channel().ID().String()))
+		slog.Debug("fetching message history for LLM context", slog.String("channel_id", event.Channel().ID().String()))
 		llmer = llm.NewLlmer()
 		lastMessage := event.Channel().MessageChannel.LastMessageID()
 		if lastMessage != nil {
@@ -128,26 +127,25 @@ func HandleLlm(event *handler.CommandEvent, m *model.Model) error {
 			}
 		}
 	}
-	slog.Debug("Prepared initial context", slog.Int("num_messages", llmer.NumMessages()))
+	slog.Debug("prepared initial context", slog.Int("num_messages", llmer.NumMessages()))
 
 	// Set the final persona for the actual request
 	currentPersona := persona.GetPersonaByMeta(cache.PersonaMeta, db.GetMemories(event.User().ID), event.User().EffectiveName())
 	llmer.SetPersona(currentPersona)
 
 	// Add the user's prompt from the slash command
-	// TODO: Handle attachments provided directly in the slash command if that becomes an option
 	llmer.AddMessage(llm.RoleUser, formatMsg(prompt, event.User().EffectiveName(), nil), 0) // ID 0 for interaction message
 
 	// Defer response (required within 3s)
 	err := event.DeferCreateMessage(ephemeral)
 	if err != nil {
-		slog.Error("Failed to defer interaction response", slog.Any("err", err))
+		slog.Error("failed to defer interaction response", slog.Any("err", err))
 		// Attempt to send an immediate error message if defer fails
-		return sendInteractionError(event, "Failed to acknowledge command.", true)
+		return sendInteractionError(event, "failed to acknowledge command", true)
 	}
 
 	// --- Execute LLM Request ---
-	slog.Debug("Requesting LLM completion via slash command",
+	slog.Debug("requesting LLM completion via slash command",
 		slog.String("model", targetModel.Name),
 		slog.Int("num_messages", llmer.NumMessages()),
 		slog.String("prepend", cache.PersonaMeta.Prepend),
@@ -164,7 +162,7 @@ func HandleLlm(event *handler.CommandEvent, m *model.Model) error {
 	cache.Usage = cache.Usage.Add(usage)
 	cache.LastUsage = usage
 	if err := db.UpdateGlobalStats(usage); err != nil {
-		slog.Error("Failed to update global stats", slog.Any("err", err)) // Log error but continue
+		slog.Error("failed to update global stats", slog.Any("err", err)) // Log error but continue
 	}
 
 	// Process response (thinking tags, memory tags, splitting)
@@ -200,7 +198,7 @@ func HandleLlm(event *handler.CommandEvent, m *model.Model) error {
 		// Send single message (potentially truncated or as file)
 		update := discord.NewMessageUpdateBuilder().SetFlags(flagsFromEphemeral(ephemeral)) // Get flags
 		if len(responseRunes) > 2000 {
-			update.SetContent("Response too long, see attached file.")
+			update.SetContent("")
 			update.AddFiles(&discord.File{
 				Name:   fmt.Sprintf("response-%v.txt", event.ID()),
 				Reader: strings.NewReader(response),
@@ -251,10 +249,10 @@ func HandleLlm(event *handler.CommandEvent, m *model.Model) error {
 				i != len(messages)-1, // Add separator if not the last message
 			)
 			if splitErr != nil {
-				slog.Error("Failed to send message split", slog.Any("splitErr", splitErr), slog.Int("split_index", i))
+				slog.Error("failed to send message split", slog.Any("splitErr", splitErr), slog.Int("split_index", i))
 				// If the first split fails, update interaction with error. Otherwise, log and continue?
 				if i == 0 {
-					return updateInteractionError(event, fmt.Sprintf("Failed to send response: %s", splitErr.Error()))
+					return updateInteractionError(event, fmt.Sprintf("failed to send response: %s", splitErr.Error()))
 				}
 				break // Stop sending further splits if one fails
 			}
@@ -266,14 +264,15 @@ func HandleLlm(event *handler.CommandEvent, m *model.Model) error {
 		// If botMessage is still nil after loop (e.g., all splits were empty), handle potential error or no-op?
 		if botMessage == nil && len(messages) > 0 {
 			// This case might occur if all message parts were empty strings after splitting/trimming
-			slog.Warn("No message was sent despite having non-zero message parts after splitting tags.")
+			slog.Warn("no message was sent despite having non-zero message parts after splitting tags")
 			// Send a fallback message?
+			fallbackEmptyResponse := "<empty response>"
 			_, err = event.UpdateInteractionResponse(discord.MessageUpdate{Content: &fallbackEmptyResponse})
 		}
 	}
 
 	if err != nil {
-		slog.Error("Failed to send/update interaction response", slog.Any("err", err))
+		slog.Error("failed to send/update interaction response", slog.Any("err", err))
 		// Don't return error here as we already tried updating interaction
 		return nil
 	}
@@ -281,7 +280,7 @@ func HandleLlm(event *handler.CommandEvent, m *model.Model) error {
 	// Cache the interaction prompt only if a message was successfully sent/updated
 	if botMessage != nil {
 		if err := db.WriteMessageInteractionPrompt(botMessage.ID, prompt); err != nil {
-			slog.Error("Failed to write message interaction prompt cache", slog.Any("err", err))
+			slog.Error("failed to write message interaction prompt cache", slog.Any("err", err))
 		}
 	}
 
@@ -289,24 +288,22 @@ func HandleLlm(event *handler.CommandEvent, m *model.Model) error {
 	if useCache {
 		cache.Llmer = llmer // Store the updated llmer state
 		if err := cache.Write(event.Channel().ID()); err != nil {
-			slog.Error("Failed to save channel cache", slog.Any("err", err))
+			slog.Error("failed to save channel cache", slog.Any("err", err))
 		}
 	} else {
 		// Even if not using cache for context, update usage stats and interaction time
 		if err := cache.Write(event.Channel().ID()); err != nil {
-			slog.Error("Failed to save channel cache after non-cached interaction", slog.Any("err", err))
+			slog.Error("failed to save channel cache after non-cached interaction", slog.Any("err", err))
 		}
 	}
 
 	return nil
 }
 
-// Helper to get flags from ephemeral bool
+// flagsFromEphemeral returns the appropriate message flags based on ephemeral.
 func flagsFromEphemeral(ephemeral bool) discord.MessageFlags {
 	if ephemeral {
 		return discord.MessageFlagEphemeral
 	}
 	return discord.MessageFlagsNone
 }
-
-var fallbackEmptyResponse = "<empty response>"
