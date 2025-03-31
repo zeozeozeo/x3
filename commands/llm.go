@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log/slog"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/disgoorg/disgo/discord"
 	"github.com/disgoorg/disgo/handler"
@@ -192,12 +193,11 @@ func HandleLlm(event *handler.CommandEvent, m *model.Model) error {
 
 	// --- Send/Update Response ---
 	var botMessage *discord.Message
-	responseRunes := []rune(response)
 
 	if ephemeral || useCache {
 		// Send single message (potentially truncated or as file)
 		update := discord.NewMessageUpdateBuilder().SetFlags(flagsFromEphemeral(ephemeral)) // Get flags
-		if len(responseRunes) > 2000 {
+		if utf8.RuneCountInString(response) > 2000 {
 			update.SetContent("")
 			update.AddFiles(&discord.File{
 				Name:   fmt.Sprintf("response-%v.txt", event.ID()),

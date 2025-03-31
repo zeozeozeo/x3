@@ -236,7 +236,7 @@ func handleLlmInteraction2(
 		builder := discord.NewMessageUpdateBuilder().SetAllowedMentions(&discord.AllowedMentions{RepliedUser: false})
 		if utf8.RuneCountInString(response) > 2000 {
 			// If too long, send as file attachment
-			builder.SetContent("Response too long, see attached file.") // Clear original content
+			builder.SetContent("")
 			builder.AddFiles(&discord.File{
 				Reader: strings.NewReader(response),
 				Name:   fmt.Sprintf("response-%v.txt", lastResponseMessage.ID),
