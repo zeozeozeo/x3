@@ -8,7 +8,7 @@ import (
 	"sync"
 
 	// "time" // Removed unused import
-	"unicode"
+
 	"unicode/utf8"
 
 	"github.com/disgoorg/disgo/bot"
@@ -24,14 +24,6 @@ var (
 	errTimeInteractionNoMessages = errors.New("empty dm channel for time interaction")
 	errRegenerateNoMessage       = errors.New("cannot find last response to regenerate")
 )
-
-// endsWithWhitespace checks if a string ends with a whitespace character.
-func endsWithWhitespace(s string) bool {
-	if len(s) == 0 {
-		return false
-	}
-	return unicode.IsSpace(rune(s[len(s)-1]))
-}
 
 // replaceLlmTagsWithNewlines replaces <new_message> tags with newlines and handles <memory> tags.
 func replaceLlmTagsWithNewlines(response string, userID snowflake.ID) string {
@@ -52,8 +44,7 @@ func replaceLlmTagsWithNewlines(response string, userID snowflake.ID) string {
 
 // splitLlmTags splits the response by <new_message> and extracts <memory> tags.
 func splitLlmTags(response string) (messages []string, memories []string) {
-	parts := strings.Split(response, "<new_message>")
-	for _, content := range parts {
+	for content := range strings.SplitSeq(response, "<new_message>") {
 		content = strings.TrimSpace(content)
 		if content == "" {
 			continue

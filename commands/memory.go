@@ -4,6 +4,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/disgoorg/disgo/discord"
 	"github.com/disgoorg/disgo/handler"
@@ -60,7 +61,7 @@ func HandleMemoryList(event *handler.CommandEvent) error {
 
 		builder.SetDescription("Here are the things I remember about you (newest first):")
 		// AddField has limits, check if content fits
-		if len(listContent) <= 1024 {
+		if utf8.RuneCountInString(listContent) <= 1024 {
 			builder.AddField("List", listContent, false)
 		} else {
 			builder.AddField("List (truncated)", ellipsisTrim(listContent, 1024), false)

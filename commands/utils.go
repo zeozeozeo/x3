@@ -102,6 +102,14 @@ func toTitle(str string) string {
 	return string(runes)
 }
 
+// endsWithWhitespace checks if a string ends with a whitespace character.
+func endsWithWhitespace(s string) bool {
+	if len(s) == 0 {
+		return false
+	}
+	return unicode.IsSpace(rune(s[len(s)-1]))
+}
+
 // ftoa converts a float32 to a string.
 func ftoa(f float32) string {
 	return strconv.FormatFloat(float64(f), 'f', -1, 32)
