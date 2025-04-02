@@ -44,8 +44,20 @@ var GenerateCommand = discord.SlashCommandCreate{
 		},
 		discord.ApplicationCommandOptionInt{
 			Name:        "steps",
-			Description: "Number of steps to use for this image",
+			Description: "Number of steps to use for this image (20..50 is recommended)",
 			Required:    false,
+			MinValue:    ptr(0),
+		},
+		discord.ApplicationCommandOptionInt{
+			Name:        "n",
+			Description: "Number of images to generate (1..10)",
+			MinValue:    ptr(1),
+			MaxValue:    ptr(10),
+		},
+		discord.ApplicationCommandOptionFloat{
+			Name:        "cfg_scale",
+			Description: "How close the image should be to the prompt (7..14 is recommended)",
+			MinValue:    ptr(0.0),
 		},
 		discord.ApplicationCommandOptionBool{
 			Name:        "ephemeral",
@@ -95,13 +107,25 @@ func HandleGenerate(event *handler.CommandEvent) error {
 	prompt := data.String("prompt")
 	negative := data.String("negative")
 	steps := data.Int("steps")
+	n := data.Int("n")
+	cfgScale := data.Float("cfg_scale")
 	ephemeral := data.Bool("ephemeral")
+	isNSFW := true // in dms
+
+	// check if its an nsfw channel; if it's not we'll rely on stablehorde to censor nsfw content
+	channel, err := event.Client().Rest().GetChannel(event.Channel().ID())
+	if err != nil {
+		return err
+	}
+	if guildChannel, ok := channel.(discord.GuildMessageChannel); ok {
+		isNSFW = guildChannel.NSFW()
+	}
 
 	if err := event.DeferCreateMessage(ephemeral); err != nil {
 		return err
 	}
 
-	id, err := horder.GetHorder().Generate(model, prompt, negative, steps, true)
+	id, err := horder.GetHorder().Generate(model, prompt, negative, steps, n, cfgScale, isNSFW)
 	if err != nil {
 		return updateInteractionError(event, err.Error())
 	}
@@ -111,7 +135,9 @@ func HandleGenerate(event *handler.CommandEvent) error {
 	firstWaitTime := 0
 	impossibleWaitTime := 30
 	impossibleFail := false
+	numDots := 2
 	for {
+		numDots++
 		status, err := horder.GetHorder().GetStatus(id)
 		if err != nil {
 			if failures >= 10 {
@@ -126,7 +152,10 @@ func HandleGenerate(event *handler.CommandEvent) error {
 			break
 		}
 
-		message := fmt.Sprintf("Waiting for %s; %d restarted", pluralize(status.Processing, "job"), status.Restarted)
+		message := "Waiting for job to start" + strings.Repeat(".", numDots)
+		if status.Processing != 0 && status.Restarted != 0 {
+			message = fmt.Sprintf("Waiting for %s; %d restarted", pluralize(status.Processing, "job"), status.Restarted)
+		}
 		if status.QueuePosition > 0 {
 			if firstQueuePos == 0 {
 				firstQueuePos = status.QueuePosition

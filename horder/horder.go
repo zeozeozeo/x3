@@ -32,6 +32,7 @@ var (
 		"NTR MIX IL-Noob XL",
 		"Cetus-Mix",
 		//"Anything v5",
+		"Hassaku",
 		"Nova Anime XL",
 		"MeinaMix",
 		"WAI-CUTE Pony",
@@ -199,10 +200,14 @@ func ptr[T any](value T) *T {
 	return &value
 }
 
-func (h *Horder) Generate(model, prompt, negative string, steps int, nsfw bool) (string, error) {
+func (h *Horder) Generate(model, prompt, negative string, steps, n int, cfgScale float64, nsfw bool) (string, error) {
 	if steps == 0 {
 		steps = 20
 	}
+	if cfgScale == 0 {
+		cfgScale = 7
+	}
+	n = max(n, 1)
 
 	var postProcessing []aihorde.ModelGenerationInputPostProcessingType
 	if h.isAnimeModel(model) {
@@ -218,13 +223,13 @@ func (h *Horder) Generate(model, prompt, negative string, steps int, nsfw bool) 
 				ModelPayloadStyleStable: aihorde.ModelPayloadStyleStable{
 					SamplerName:    aihorde.SamplerKEulerA,
 					PostProcessing: postProcessing,
-					CfgScale:       ptr(7.0),
+					CfgScale:       ptr(cfgScale),
 					Width:          ptr(832),
 					Height:         ptr(1216),
 				},
 			},
 			Steps: ptr(steps),
-			N:     ptr(1),
+			N:     ptr(n),
 		},
 		Models: []string{
 			model,
