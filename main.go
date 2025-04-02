@@ -142,7 +142,7 @@ func main() {
 	}()
 
 	// Start narrator mainloop
-	go commands.GetNarrator().Run()
+	//go commands.GetNarrator().Run()
 
 	// Connect to gateway
 	if err = client.OpenShardManager(context.TODO()); err != nil {

@@ -1,7 +1,6 @@
 package commands
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -321,11 +320,12 @@ func handleLlmInteraction2(
 	}
 
 	// --- Queue stable narration ---
-	handleNarration(*llmer)
+	//handleNarration(*llmer)
 
 	return jumpURL, nil
 }
 
+/*
 func handleNarration(llmer llm.Llmer) {
 	const prepend = "```json\n{\n  \"tags\":"
 	GetNarrator().QueueNarration(llmer, prepend, func(llmer *llm.Llmer, response string) {
@@ -357,3 +357,4 @@ func handleNarration(llmer llm.Llmer) {
 		slog.Info("narration callback", slog.String("tags", t.Tags))
 	})
 }
+*/
