@@ -417,7 +417,7 @@ func HandlePersonaModelAutocomplete(event *handler.AutocompleteEvent) error {
 			break
 		}
 		choices = append(choices, discord.AutocompleteChoiceString{
-			Name:  match.Target,
+			Name:  ellipsisTrim(match.Target, 100),
 			Value: model.AllModels[match.OriginalIndex].Name,
 		})
 	}

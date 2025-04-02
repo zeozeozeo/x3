@@ -1,6 +1,7 @@
 package commands
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -319,5 +320,40 @@ func handleLlmInteraction2(
 		slog.Error("failed to update global stats after interaction", slog.Any("err", err))
 	}
 
+	// --- Queue stable narration ---
+	handleNarration(*llmer)
+
 	return jumpURL, nil
+}
+
+func handleNarration(llmer llm.Llmer) {
+	const prepend = "```json\n{\n  \"tags\":"
+	GetNarrator().QueueNarration(llmer, prepend, func(llmer *llm.Llmer, response string) {
+		response = strings.TrimPrefix(strings.Replace(response, "**", "", 2), prepend)
+		replacer := strings.NewReplacer(
+			"**", "",
+			"_", " ",
+			"```json", "",
+			"```", "",
+		)
+		response = replacer.Replace(response)
+
+		// unmarshal json ({"tags": "tag1, tag2, tag3, ..."})
+		var t struct {
+			Tags string `json:"tags"`
+		}
+		if err := json.Unmarshal([]byte(response), &t); err != nil {
+			// perhaps the model just wanted to yap about something
+			slog.Error("narrator: failed to unmarshal json", slog.Any("err", err), slog.String("response", response))
+			return
+		}
+
+		t.Tags = strings.TrimSpace(t.Tags)
+		if t.Tags == "" {
+			slog.Info("narrator: model deemed text irrelevant", slog.String("response", response))
+			return
+		}
+
+		slog.Info("narration callback", slog.String("tags", t.Tags))
+	})
 }

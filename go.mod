@@ -2,7 +2,10 @@ module github.com/zeozeozeo/x3
 
 go 1.24.1
 
-require github.com/disgoorg/disgo v0.18.13
+require (
+	github.com/disgoorg/disgo v0.18.13
+	github.com/zeozeozeo/aihorde-go v0.0.0-20250402140353-8cc7927c847f
+)
 
 require (
 	github.com/dlclark/regexp2 v1.9.0 // indirect

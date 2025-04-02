@@ -27,7 +27,8 @@ func GetAllCommandDefs() []discord.ApplicationCommandCreate {
 		RegenerateCommand,
 		BlacklistCommand,
 		MemoryCommand,
-		ChatCommand, // Add the generic /chat command
+		ChatCommand, // generic /chat command
+		GenerateCommand,
 	}
 
 	// Add model-specific LLM commands
@@ -103,6 +104,9 @@ func RegisterHandlers(r handler.Router) error {
 		r.Command("/list", HandleMemoryList)
 		r.Command("/clear", HandleMemoryClear)
 	})
+
+	r.Autocomplete("/generate", HandleGenerateModelAutocomplete)
+	r.Command("/generate", HandleGenerate)
 
 	// Image Commands (Registered via imagecmd package)
 	// Pass the asserted *handler.Mux to imagecmd

@@ -141,6 +141,9 @@ func main() {
 		}
 	}()
 
+	// Start narrator mainloop
+	go commands.GetNarrator().Run()
+
 	// Connect to gateway
 	if err = client.OpenShardManager(context.TODO()); err != nil {
 		slog.Error("error while connecting to gateway", slog.Any("err", err))
