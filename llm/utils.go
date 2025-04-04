@@ -9,13 +9,19 @@ var thinkingTags = [][2]string{
 	{"<reasoning>", "</reasoning>"},
 }
 
+// ExtractThinking returns the thinking content and the rest of the response (thinking, response)
 func ExtractThinking(response string) (string, string) {
+	foundAnyStartTag := false
 	for _, tag := range thinkingTags {
 		startTag := tag[0]
 		endTag := tag[1]
 
 		startIdx := strings.Index(response, startTag)
 		endIdx := strings.Index(response, endTag)
+
+		if startIdx != -1 {
+			foundAnyStartTag = true
+		}
 
 		if startIdx == -1 || endIdx == -1 || startIdx > endIdx {
 			continue
@@ -25,5 +31,8 @@ func ExtractThinking(response string) (string, string) {
 		return thinkingContent, strings.TrimSpace(response[endIdx+len(endTag):])
 	}
 
+	if foundAnyStartTag {
+		return response, ""
+	}
 	return "", response
 }
