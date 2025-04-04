@@ -112,7 +112,7 @@ func endsWithWhitespace(s string) bool {
 
 // ftoa converts a float32 to a string.
 func ftoa(f float32) string {
-	return strconv.FormatFloat(float64(f), 'f', -1, 32)
+	return strconv.FormatFloat(float64(f), 'g', 6, 32)
 }
 
 // zifnil returns 0 if the int pointer is nil, otherwise returns the dereferenced value.
