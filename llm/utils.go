@@ -11,32 +11,26 @@ var thinkingTags = [][2]string{
 
 // ExtractThinking returns the thinking content and the rest of the response (thinking, response)
 func ExtractThinking(response string) (string, string) {
-	foundAnyStartTag := false
-	foundAnyEndTag := false
+	response = strings.TrimSpace(response)
+
 	for _, tag := range thinkingTags {
 		startTag := tag[0]
 		endTag := tag[1]
 
-		startIdx := strings.Index(response, startTag)
-		endIdx := strings.Index(response, endTag)
+		if strings.HasPrefix(response, startTag) {
+			relativeEndIdx := strings.Index(response[len(startTag):], endTag)
 
-		if startIdx != -1 && !foundAnyEndTag {
-			foundAnyStartTag = true
+			if relativeEndIdx != -1 {
+				endIdx := relativeEndIdx + len(startTag)
+				thinkingContent := strings.TrimSpace(response[len(startTag):endIdx])
+				remainingResponse := strings.TrimSpace(response[endIdx+len(endTag):])
+				return thinkingContent, remainingResponse
+			} else {
+				// found a start tag but no end tag
+				return response, ""
+			}
 		}
-		if endIdx != -1 {
-			foundAnyEndTag = true
-		}
-
-		if startIdx == -1 || endIdx == -1 || startIdx > endIdx {
-			continue
-		}
-
-		thinkingContent := strings.TrimSpace(response[startIdx+len(startTag) : endIdx])
-		return thinkingContent, strings.TrimSpace(response[endIdx+len(endTag):])
 	}
 
-	if foundAnyStartTag && !foundAnyEndTag {
-		return response, ""
-	}
 	return "", response
 }
