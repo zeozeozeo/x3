@@ -281,15 +281,20 @@ type InferenceSettings struct {
 	Seed             *int    `json:"seed,omitempty"`
 }
 
+func (s *InferenceSettings) Remap() {
+	s.Temperature = max(0.0, s.Temperature-0.4) // 1.0 -> 0.6
+	s.TopP = max(0.0, s.TopP-0.1)               // 1.0 -> 0.9
+}
+
 func (s InferenceSettings) Fixup() InferenceSettings {
 	if s.Seed != nil && *s.Seed == 0 {
 		s.Seed = nil
 	}
-	if s.Temperature == 0.0 {
-		s.Temperature = 1.0
+	if s.Temperature < 0.4 {
+		s.Temperature = 1.0 // maps to 0.6
 	}
-	if s.TopP == 0.0 {
-		s.TopP = 1.0
+	if s.TopP < 0.1 {
+		s.TopP = 1.0 // maps to 0.9
 	}
 	return s
 }

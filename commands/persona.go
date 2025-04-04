@@ -135,6 +135,8 @@ func handlePersonaInfo(event *handler.CommandEvent, ephemeral bool) error {
 	meta, _ := persona.GetMetaByName(cache.PersonaMeta.Name)
 
 	settings := cache.PersonaMeta.Settings.Fixup()
+	remappedSettings := settings
+	remappedSettings.Remap()
 
 	builder := discord.NewEmbedBuilder().
 		SetTitle("Persona").
@@ -144,8 +146,8 @@ func handlePersonaInfo(event *handler.CommandEvent, ephemeral bool) error {
 		SetTimestamp(time.Now()).
 		AddField("Name", cache.PersonaMeta.Name, true).
 		AddField("Description", meta.Desc, true).
-		AddField("Temperature", ftoa(settings.Temperature), true).
-		AddField("Top P", ftoa(settings.TopP), true).
+		AddField("Temperature", fmt.Sprintf("%s (remapped to %s)", ftoa(settings.Temperature), ftoa(remappedSettings.Temperature)), true).
+		AddField("Top P", fmt.Sprintf("%s (remapped to %s)", ftoa(settings.TopP), ftoa(remappedSettings.TopP)), true).
 		AddField("Frequency Penalty", ftoa(settings.FrequencyPenalty), true).
 		AddField("Model", model.GetModelByName(cache.PersonaMeta.Model).Name, false)
 
@@ -302,6 +304,8 @@ func HandlePersona(event *handler.CommandEvent) error {
 	}
 
 	var sb strings.Builder
+	remappedSettings := cache.PersonaMeta.Settings
+	remappedSettings.Remap()
 	if cache.PersonaMeta.Name != prevMeta.Name && cache.PersonaMeta.Name != "" {
 		didWhat = append(didWhat, fmt.Sprintf("set persona to `%s`", cache.PersonaMeta.Name))
 	}
@@ -315,10 +319,10 @@ func HandlePersona(event *handler.CommandEvent) error {
 		didWhat = append(didWhat, fmt.Sprintf("updated context length %d → %d", prevContextLen, cache.ContextLength))
 	}
 	if cache.PersonaMeta.Settings.Temperature != prevMeta.Settings.Temperature {
-		didWhat = append(didWhat, fmt.Sprintf("updated temperature %s → %s", ftoa(prevMeta.Settings.Temperature), ftoa(cache.PersonaMeta.Settings.Temperature)))
+		didWhat = append(didWhat, fmt.Sprintf("updated temperature %s → %s (remapped to %s)", ftoa(prevMeta.Settings.Temperature), ftoa(cache.PersonaMeta.Settings.Temperature), ftoa(remappedSettings.Temperature)))
 	}
 	if cache.PersonaMeta.Settings.TopP != prevMeta.Settings.TopP {
-		didWhat = append(didWhat, fmt.Sprintf("updated top_p %s → %s", ftoa(prevMeta.Settings.TopP), ftoa(cache.PersonaMeta.Settings.TopP)))
+		didWhat = append(didWhat, fmt.Sprintf("updated top_p %s → %s (remapped to %s)", ftoa(prevMeta.Settings.TopP), ftoa(cache.PersonaMeta.Settings.TopP), ftoa(remappedSettings.TopP)))
 	}
 	if cache.PersonaMeta.Settings.FrequencyPenalty != prevMeta.Settings.FrequencyPenalty {
 		didWhat = append(didWhat, fmt.Sprintf("updated frequency_penalty %s → %s", ftoa(prevMeta.Settings.FrequencyPenalty), ftoa(cache.PersonaMeta.Settings.FrequencyPenalty)))

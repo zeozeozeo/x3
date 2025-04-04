@@ -407,6 +407,8 @@ func (l *Llmer) requestCompletionInternal(
 }
 
 func (l *Llmer) RequestCompletion(m model.Model, usernames map[string]bool, settings persona.InferenceSettings, prepend string) (res string, usage Usage, err error) {
+	settings.Remap() // remap values (1.0 temp -> 0.6 temp)
+
 	for _, provider := range model.ScoreProviders(m.Reasoning) {
 		retries := 0
 	retry:
