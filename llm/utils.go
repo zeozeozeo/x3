@@ -24,7 +24,6 @@ func ExtractThinking(response string) (string, string) {
 			foundAnyStartTag = true
 		}
 		if endIdx != -1 {
-			foundAnyStartTag = false
 			foundAnyEndTag = true
 		}
 
