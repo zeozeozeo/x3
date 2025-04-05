@@ -1155,7 +1155,7 @@ var (
 		ModelQwQAbliterated,
 		ModelDeepSeekR1Uncensored,
 		ModelCommandRplus,
-		ModelGpt45,
+		//ModelGpt45,
 		ModelO1,
 		ModelGrok2,
 		ModelGrok3,
