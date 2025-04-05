@@ -352,7 +352,7 @@ func HandleGenerateCancel(data discord.ButtonInteractionData, event *handler.Com
 	if userID != event.User().ID.String() {
 		return event.CreateMessage(
 			discord.NewMessageCreateBuilder().
-				SetContent("❌ Cannot cancel generation of other user").
+				SetContent("❌ Cannot cancel generation of another user").
 				SetEphemeral(true).
 				Build(),
 		)
