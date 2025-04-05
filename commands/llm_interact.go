@@ -307,6 +307,13 @@ func handleLlmInteraction2(
 	}
 	// --- End Send ---
 
+	{
+		// since this function may run for seconds,
+		// the persona may have changed, refetch it for good measure
+		newCache := db.GetChannelCache(channelID)
+		cache.PersonaMeta = newCache.PersonaMeta
+	}
+
 	// Update cache and global stats after successful send/edit
 	cache.IsLastRandomDM = timeInteraction
 	cache.UpdateInteractionTime()
