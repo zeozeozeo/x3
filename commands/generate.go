@@ -2,12 +2,8 @@ package commands
 
 import (
 	"bytes"
-	"encoding/base64"
 	"fmt"
-	"io"
 	"log/slog"
-	"net/http"
-	"path/filepath"
 	"sort"
 	"strings"
 	"time"
@@ -152,7 +148,7 @@ func HandleGenerate(event *handler.CommandEvent) error {
 	if err != nil {
 		return updateInteractionError(event, err.Error())
 	}
-	defer horder.GetHorder().Stop() // decrements the active request counter
+	defer horder.GetHorder().Done() // decrements the active request counter
 
 	failures := 0
 	firstQueuePos := 0
@@ -264,47 +260,16 @@ func HandleGenerate(event *handler.CommandEvent) error {
 
 	var files []*discord.File
 	for i, gen := range finalStatus.Generations {
-		if strings.HasPrefix(gen.Img, "https://") || strings.HasPrefix(gen.Img, "http://") {
-			// fetch image
-			resp, err := http.Get(gen.Img)
-			if err != nil {
-				return updateInteractionError(event, err.Error())
-			}
-			defer resp.Body.Close()
-
-			body, err := io.ReadAll(resp.Body)
-			if err != nil {
-				return updateInteractionError(event, err.Error())
-			}
-
-			filename, err := extractFilenameFromURL(gen.Img)
-			if err != nil {
-				slog.Warn("HandleGenerate: failed to extract filename from URL", slog.Any("err", err), slog.String("url", gen.Img))
-				filename = ""
-			}
-			// get extension
-			ext := filepath.Ext(filename)
-			if ext == "" {
-				ext = ".webp"
-			}
-
-			files = append(files, &discord.File{
-				Reader: bytes.NewReader(body),
-				Name:   fmt.Sprintf("%d%s", i+1, ext),
-			})
-		} else {
-			// b64 encoded webp
-			decoded, err := base64.StdEncoding.DecodeString(gen.Img)
-			if err != nil {
-				slog.Warn("HandleGenerate: failed to decode b64", slog.Any("err", err), slog.Int("len", len(gen.Img)))
-				return updateInteractionError(event, err.Error())
-			}
-
-			files = append(files, &discord.File{
-				Reader: bytes.NewReader(decoded),
-				Name:   fmt.Sprintf("%d.webp", i+1),
-			})
+		imgData, filename, err := processImageData(gen.Img, fmt.Sprintf("%d", i+1))
+		if err != nil {
+			slog.Error("HandleGenerate: failed to process image data", slog.Any("err", err), slog.String("img_src", gen.Img))
+			continue
 		}
+
+		files = append(files, &discord.File{
+			Reader: bytes.NewReader(imgData),
+			Name:   filename,
+		})
 	}
 
 	var sb strings.Builder

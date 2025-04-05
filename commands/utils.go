@@ -1,15 +1,20 @@
 package commands
 
 import (
+	"encoding/base64"
 	"fmt"
+	"io"
 	"log/slog"
+	"net/http"
 	"net/url"
 	"path/filepath"
+	"regexp"
 	"strconv"
-	"strings" // Added back import
+	"strings"
 	"sync"
 	"time"
 	"unicode"
+	"unicode/utf8"
 
 	"github.com/disgoorg/disgo/bot"
 	"github.com/disgoorg/disgo/discord"
@@ -272,4 +277,93 @@ func extractFilenameFromURL(rawURL string) (string, error) {
 	}
 
 	return filename, nil
+}
+
+var sanitizeRe1 = regexp.MustCompile(`[<>:"/\\|?*]`)
+var sanitizeRe2 = regexp.MustCompile(`_+`)
+
+// sanitizeFilename removes invalid characters and replaces spaces for filenames.
+func sanitizeFilename(name string) string {
+	sanitized := sanitizeRe1.ReplaceAllString(name, "")
+	sanitized = strings.ReplaceAll(sanitized, " ", "_")
+	sanitized = sanitizeRe2.ReplaceAllString(sanitized, "_")
+	sanitized = strings.Trim(sanitized, "_")
+	sanitized = strings.ToLower(sanitized)
+	return sanitized
+}
+
+// truncateFilename ensures the filename base (without extension) doesn't exceed a rune limit.
+func truncateFilename(name string, maxRunes int) string {
+	if utf8.RuneCountInString(name) <= maxRunes {
+		return name
+	}
+	runes := []rune(name)
+	return string(runes[:maxRunes])
+}
+
+// processImageData fetches or decodes image data and determines a safe filename.
+// It prioritizes the filename from the URL, falling back to a sanitized/truncated promptHint.
+func processImageData(imgSrc string, promptHint string) ([]byte, string, error) {
+	const maxFilenameRunes = 100
+
+	var body []byte
+	var filename string
+	var ext string
+	var err error
+
+	if strings.HasPrefix(imgSrc, "https://") || strings.HasPrefix(imgSrc, "http://") {
+		resp, err := http.Get(imgSrc)
+		if err != nil {
+			return nil, "", fmt.Errorf("failed to fetch image URL %s: %w", imgSrc, err)
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusOK {
+			return nil, "", fmt.Errorf("failed to fetch image URL %s: status %d", imgSrc, resp.StatusCode)
+		}
+
+		body, err = io.ReadAll(resp.Body)
+		if err != nil {
+			return nil, "", fmt.Errorf("failed to read image body from %s: %w", imgSrc, err)
+		}
+
+		// try to get filename from URL
+		urlFilename, _ := extractFilenameFromURL(imgSrc)
+		if urlFilename != "" {
+			ext = filepath.Ext(urlFilename)
+			filename = strings.TrimSuffix(urlFilename, ext)
+		}
+
+	} else {
+		// base64 encoded webp
+		body, err = base64.StdEncoding.DecodeString(imgSrc)
+		if err != nil {
+			return nil, "", fmt.Errorf("failed to decode base64 image: %w", err)
+		}
+	}
+
+	if ext == "" {
+		ext = ".webp"
+	}
+
+	if filename == "" {
+		if promptHint == "" {
+			filename = "image"
+		} else {
+			filename = sanitizeFilename(promptHint)
+			filename = truncateFilename(filename, maxFilenameRunes)
+			if filename == "" {
+				filename = "image"
+			}
+		}
+	} else {
+		filename = sanitizeFilename(filename)
+		filename = truncateFilename(filename, maxFilenameRunes)
+		if filename == "" {
+			filename = "image"
+		}
+	}
+
+	finalFilename := filename + ext
+	return body, finalFilename, nil
 }

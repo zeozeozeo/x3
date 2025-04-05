@@ -10,7 +10,7 @@ import (
 	"github.com/zeozeozeo/x3/persona"
 )
 
-const ratelimit = 10 * time.Second
+const ratelimit = 30 * time.Second
 
 var narrator *Narrator = NewNarrator()
 
@@ -36,6 +36,8 @@ type Narrator struct {
 func NewNarrator() *Narrator {
 	return &Narrator{ticker: time.NewTicker(ratelimit)}
 }
+
+func (n *Narrator) LastInteractionTime() time.Time { return n.lastInteraction }
 
 func (n *Narrator) QueueNarration(llmer llm.Llmer, prepend string, cb narrationCallback) {
 	slog.Info("narrator: queueing narration", slog.String("prepend", prepend), slog.Int("queue_len", len(n.queue)), slog.Int("num_messages", llmer.NumMessages()))

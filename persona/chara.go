@@ -153,6 +153,11 @@ func (meta *PersonaMeta) ApplyJsonChara(data []byte, user string) (TavernCardV2,
 		firstMessagesArr = append(firstMessagesArr, card.formatField(greeting, user))
 	}
 
+	meta.Name = "<character card>"
+	if card.Data.Name != "" {
+		meta.Name = card.Data.Name
+	}
+	meta.Desc = "<none>"
 	meta.System = b.String()
 	meta.FirstMes = firstMessagesArr
 	meta.IsFirstMes = len(firstMessagesArr) > 0

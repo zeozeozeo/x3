@@ -1,20 +1,24 @@
 package commands
 
 import (
+	"bytes"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
+	"slices"
 	"strings"
 	"sync"
-
-	// "time" // Removed unused import
+	"time"
 
 	"unicode/utf8"
 
 	"github.com/disgoorg/disgo/bot"
 	"github.com/disgoorg/disgo/discord"
 	"github.com/disgoorg/snowflake/v2"
+	"github.com/zeozeozeo/aihorde-go"
 	"github.com/zeozeozeo/x3/db"
+	"github.com/zeozeozeo/x3/horder"
 	"github.com/zeozeozeo/x3/llm"
 	"github.com/zeozeozeo/x3/model"
 	"github.com/zeozeozeo/x3/persona"
@@ -23,6 +27,10 @@ import (
 var (
 	errTimeInteractionNoMessages = errors.New("empty dm channel for time interaction")
 	errRegenerateNoMessage       = errors.New("cannot find last response to regenerate")
+)
+
+const (
+	narratorImageModel = "Nova Anime XL"
 )
 
 // replaceLlmTagsWithNewlines replaces <new_message> tags with newlines and handles <memory> tags.
@@ -145,7 +153,7 @@ func handleLlmInteraction2(
 	// --- End Validation ---
 
 	// Get persona using the determined userID
-	persona := persona.GetPersonaByMeta(cache.PersonaMeta, db.GetMemories(userID), username)
+	p := persona.GetPersonaByMeta(cache.PersonaMeta, db.GetMemories(userID), username)
 
 	// Add the current user message/interaction content if provided
 	if content != "" {
@@ -168,7 +176,7 @@ func handleLlmInteraction2(
 		slog.Debug("regenerating: lobotomized history", slog.String("until_id", lastResponseMessage.ID.String()), slog.Int("remaining_messages", llmer.NumMessages()))
 	}
 
-	llmer.SetPersona(persona)
+	llmer.SetPersona(p)
 
 	// Determine prepend text for the assistant response
 	var prepend string
@@ -229,6 +237,7 @@ func handleLlmInteraction2(
 	}
 
 	var jumpURL string
+	var botMessage *discord.Message
 	if isRegenerate {
 		// Edit the previous message for regeneration
 		response = replaceLlmTagsWithNewlines(response, userID) // Handle tags before sending
@@ -289,7 +298,7 @@ func handleLlmInteraction2(
 			}
 
 			// Send the split
-			botMessage, err := sendMessageSplits(client, replyMessageID, nil, 0, channelID, []rune(content), currentFiles, i != len(messages)-1)
+			botMessage, err = sendMessageSplits(client, replyMessageID, nil, 0, channelID, []rune(content), currentFiles, i != len(messages)-1)
 			if err != nil {
 				slog.Error("failed to send message split", slog.Any("err", err), slog.Int("split_index", i))
 				// Attempt to continue sending other splits? Or return error?
@@ -326,14 +335,28 @@ func handleLlmInteraction2(
 		slog.Error("failed to update global stats after interaction", slog.Any("err", err))
 	}
 
-	// --- Queue stable narration ---
-	//handleNarration(*llmer)
+	// maybe queue narration + generation
+	{
+		realMeta, _ := persona.GetMetaByName(cache.PersonaMeta.Name)
+		disableRandomNarrations := realMeta.DisableImages
+		if strings.Contains(response, "<generate_image>") ||
+			(!disableRandomNarrations &&
+				horder.GetHorder().IsFree() &&
+				time.Since(GetNarrator().LastInteractionTime()) > 2*time.Minute) {
+			narrationMessageID := messageID
+			if botMessage != nil {
+				narrationMessageID = botMessage.ID
+			}
+			handleNarration(client, channelID, narrationMessageID, *llmer)
+		} else {
+			slog.Debug("narrator: skipping narration", slog.Bool("disableImages", disableRandomNarrations), slog.Bool("timeSinceLastInteraction", time.Since(GetNarrator().LastInteractionTime()) > 2*time.Minute), slog.Bool("isFree", horder.GetHorder().IsFree()))
+		}
+	}
 
 	return jumpURL, nil
 }
 
-/*
-func handleNarration(llmer llm.Llmer) {
+func handleNarration(client bot.Client, channelID snowflake.ID, messageID snowflake.ID, llmer llm.Llmer) {
 	const prepend = "```json\n{\n  \"tags\":"
 	GetNarrator().QueueNarration(llmer, prepend, func(llmer *llm.Llmer, response string) {
 		response = strings.TrimPrefix(strings.Replace(response, "**", "", 2), prepend)
@@ -356,12 +379,127 @@ func handleNarration(llmer llm.Llmer) {
 		}
 
 		t.Tags = strings.TrimSpace(t.Tags)
-		if t.Tags == "" {
-			slog.Info("narrator: model deemed text irrelevant", slog.String("response", response))
+		if t.Tags == "" || !strings.Contains(t.Tags, ",") {
+			slog.Info("narrator: model deemed text irrelevant (no tags)", slog.String("response", response))
 			return
 		}
 
 		slog.Info("narration callback", slog.String("tags", t.Tags))
+
+		go handleNarrationGenerate(client, channelID, messageID, t.Tags)
 	})
 }
-*/
+
+// handleNarrationGenerate generates an image based on LLM-provided tags and sends it as a reply.
+func handleNarrationGenerate(client bot.Client, channelID snowflake.ID, messageID snowflake.ID, tags string) {
+	if tags == "" {
+		slog.Warn("handleNarrationGenerate called with empty tags")
+		return
+	}
+
+	h := horder.GetHorder()
+	if h == nil {
+		slog.Error("handleNarrationGenerate: Horder not initialized")
+		return
+	}
+	models, err := h.FetchImageModels()
+	if err != nil {
+		slog.Error("failed to fetch image models", slog.Any("err", err))
+		return
+	}
+	if !slices.ContainsFunc(models, func(model aihorde.ActiveModel) bool {
+		return model.Name == narratorImageModel
+	}) {
+		slog.Warn("narrator image model not available; skipping generation", slog.String("model", narratorImageModel))
+		return
+	}
+
+	isNSFW := true
+	channel, err := client.Rest().GetChannel(channelID)
+	if err != nil {
+		slog.Error("handleNarrationGenerate: failed to get channel details", slog.Any("err", err), slog.String("channel_id", channelID.String()))
+	} else if guildChannel, ok := channel.(discord.GuildMessageChannel); ok {
+		isNSFW = guildChannel.NSFW()
+	}
+
+	model := narratorImageModel
+	prompt := tags
+	//negativePrompt := "worst quality, low quality, blurry, deformed"
+	steps := 20
+	n := 1
+	cfgScale := 7.0
+	clipSkip := 2
+
+	slog.Info("starting narration image generation", slog.String("model", model), slog.String("prompt", prompt), slog.String("channel_id", channelID.String()))
+
+	id, err := h.Generate(model, prompt, "", steps, n, cfgScale, clipSkip, isNSFW)
+	if err != nil {
+		slog.Error("handleNarrationGenerate: failed to start generation", slog.Any("err", err))
+		return
+	}
+	defer h.Done()
+
+	failures := 0
+	//i := 0
+	for {
+		//i++
+		status, err := h.GetStatus(id)
+		if err != nil {
+			slog.Error("handleNarrationGenerate: failed to get generation status", slog.Any("err", err), slog.String("id", id))
+			failures++
+			if failures > 8 {
+				return
+			}
+			time.Sleep(5 * time.Second)
+			continue
+		}
+
+		if status.Done || status.Faulted {
+			slog.Info("narration generation finished", slog.Bool("done", status.Done), slog.Bool("faulted", status.Faulted), slog.String("id", id))
+			break
+		}
+
+		/*
+			if i > 3 && status.WaitTime > 150 {
+				// too long, give up
+				slog.Warn("narration generation will take too long, giving up", slog.Int("wait_time", status.WaitTime), slog.String("id", id))
+				h.Cancel(id)
+				return
+			}
+		*/
+
+		slog.Info("narration generation progress", slog.Int("queue_pos", status.QueuePosition), slog.Int("wait_time", status.WaitTime), slog.String("id", id))
+		time.Sleep(5 * time.Second)
+	}
+
+	finalStatus, err := h.GetFinalStatus(id)
+	if err != nil {
+		slog.Error("handleNarrationGenerate: failed to get final status", slog.Any("err", err), slog.String("id", id))
+		return
+	}
+
+	if len(finalStatus.Generations) == 0 || finalStatus.Generations[0].Img == "" {
+		slog.Warn("handleNarrationGenerate: no image generated or generation faulted", slog.String("id", id))
+		return
+	}
+
+	// n=1
+	imgData, filename, err := processImageData(finalStatus.Generations[0].Img, tags)
+	if err != nil {
+		slog.Error("handleNarrationGenerate: failed to process image data", slog.Any("err", err), slog.String("id", id))
+		return
+	}
+
+	// send the image as a reply
+	_, err = client.Rest().CreateMessage(channelID, discord.NewMessageCreateBuilder().
+		SetFiles(&discord.File{Name: filename, Reader: bytes.NewReader(imgData)}).
+		SetMessageReference(&discord.MessageReference{MessageID: &messageID, ChannelID: &channelID}).
+		SetAllowedMentions(&discord.AllowedMentions{RepliedUser: false}).
+		Build())
+
+	if err != nil {
+		slog.Error("handleNarrationGenerate: failed to send image reply", slog.Any("err", err), slog.String("channel_id", channelID.String()), slog.String("message_id", messageID.String()))
+	} else {
+		slog.Info("narration image sent successfully", slog.String("channel_id", channelID.String()), slog.String("message_id", messageID.String()))
+	}
+}

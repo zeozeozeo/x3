@@ -91,6 +91,10 @@ response: <memory>prefers mecha over fantasy</memory> mecha is peak tbh
 - user: just upgraded my pc, got a 4080 now
 - response: <memory>recently got a 4080 gpu</memory> u rich or something
 
+**Image Generation:**
+
+x3 is allowed to generate images. When a user asks you to generate an image, you should describe it in detail, and add the "<generate_image>" tag at the end of your message.
+
 **Knowledge:**
 
 here are some memes for you to use. NEVER use them in combination with other messages, only as a singular response. When sending these links, they must be right after a <new_message> tag and match exactly.
@@ -298,15 +302,16 @@ func (s InferenceSettings) Fixup() InferenceSettings {
 }
 
 type PersonaMeta struct {
-	Name       string            `json:"name,omitempty"`
-	Desc       string            `json:"-"`
-	Model      string            `json:"model,omitempty"`
-	System     string            `json:"system,omitempty"`
-	FirstMes   []string          `json:"first_mes,omitempty"`
-	NextMes    *int              `json:"next_mes,omitempty"`
-	IsFirstMes bool              `json:"is_first_mes,omitempty"`
-	Settings   InferenceSettings `json:"settings"`
-	Prepend    string            `json:"prepend,omitempty"` // prefill assistant response
+	Name          string            `json:"name,omitempty"`
+	Desc          string            `json:"-"`
+	Model         string            `json:"model,omitempty"`
+	System        string            `json:"system,omitempty"`
+	FirstMes      []string          `json:"first_mes,omitempty"`
+	NextMes       *int              `json:"next_mes,omitempty"`
+	IsFirstMes    bool              `json:"is_first_mes,omitempty"`
+	Settings      InferenceSettings `json:"settings"`
+	Prepend       string            `json:"prepend,omitempty"`        // prefill assistant response
+	DisableImages bool              `json:"disable_images,omitempty"` // disable random image narrations
 }
 
 func (meta PersonaMeta) String() string {
@@ -320,12 +325,21 @@ func (meta PersonaMeta) String() string {
 }
 
 var (
-	PersonaDefault = PersonaMeta{Name: "Default", Desc: "Use the default system prompt of a model"}
-	PersonaX3      = PersonaMeta{Name: "x3 Assistant", Desc: "Helpful, but boring. Not suitable for RP"}
-	PersonaProto   = PersonaMeta{
-		Name:  "x3 Protogen (Default)",
-		Desc:  "x3 as a furry protogen. Suitable for RP",
-		Model: model.DefaultModel.Name,
+	PersonaDefault = PersonaMeta{
+		Name:          "Default",
+		Desc:          "Use the default system prompt of a model",
+		DisableImages: true,
+	}
+	PersonaX3 = PersonaMeta{
+		Name:          "x3 Assistant",
+		Desc:          "Helpful, but boring. Not suitable for RP",
+		DisableImages: true,
+	}
+	PersonaProto = PersonaMeta{
+		Name:          "x3 Protogen (Default)",
+		Desc:          "x3 as a furry protogen. Suitable for RP",
+		Model:         model.DefaultModel.Name,
+		DisableImages: true,
 	}
 	PersonaStableNarrator = PersonaMeta{
 		Name:  "Stable Narrator",

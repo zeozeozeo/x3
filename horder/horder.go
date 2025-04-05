@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/zeozeozeo/aihorde-go"
@@ -54,7 +55,8 @@ type Horder struct {
 	modelCacheAge  time.Time
 	modelsData     ModelsData
 	mu             sync.Mutex
-	activeRequests int
+	wg             sync.WaitGroup
+	activeRequests atomic.Int32
 }
 
 func NewHorder(modelsData ModelsData) *Horder {
@@ -67,7 +69,7 @@ func NewHorder(modelsData ModelsData) *Horder {
 	}
 }
 
-func (h *Horder) fetchImageModels() ([]aihorde.ActiveModel, error) {
+func (h *Horder) FetchImageModels() ([]aihorde.ActiveModel, error) {
 	if len(h.cachedModels) > 0 && time.Since(h.modelCacheAge) < 2*time.Minute {
 		return h.cachedModels, nil
 	}
@@ -172,7 +174,7 @@ func (h *Horder) scoreModel(model aihorde.ActiveModel, originalIndex int) Scored
 }
 
 func (h *Horder) ScoreModels() []ScoredModel {
-	models, err := h.fetchImageModels()
+	models, err := h.FetchImageModels()
 	if err != nil {
 		slog.Error("failed to fetch image models", slog.Any("err", err))
 		return nil
@@ -202,6 +204,8 @@ func ptr[T any](value T) *T {
 }
 
 func (h *Horder) Generate(model, prompt, negative string, steps, n int, cfgScale float64, clipSkip int, nsfw bool) (string, error) {
+	h.wg.Add(1)
+
 	if steps == 0 {
 		steps = 20
 	}
@@ -246,9 +250,11 @@ func (h *Horder) Generate(model, prompt, negative string, steps, n int, cfgScale
 
 	req, err := h.horde.PostAsyncImageGenerate(input)
 	if err != nil {
+		h.wg.Done()
 		slog.Error("horder: failed to queue image", slog.Any("err", err))
 		return "", err
 	}
+	h.activeRequests.Add(1)
 
 	slog.Info(
 		"horder: queued image for generation",
@@ -261,27 +267,24 @@ func (h *Horder) Generate(model, prompt, negative string, steps, n int, cfgScale
 		slog.Any("warnings", req.Warnings),
 	)
 
-	h.mu.Lock()
-	h.activeRequests++ // should be stopped in defer
-	h.mu.Unlock()
-
 	return req.ID, nil
 }
 
-// Stop decrements the active request counter. Use this in combination with `defer` after calling Generate.
-func (h *Horder) Stop() {
-	if h.activeRequests == 0 {
-		slog.Warn("horder: activeRequests is 0 in Stop; missing defer?")
-		return
+// Done decrements the active request counter. Use this in combination with `defer` after calling Generate.
+func (h *Horder) Done() {
+	if h.activeRequests.Load() <= 0 {
+		slog.Error("horder: decrementing active requests below 0")
+	} else {
+		h.activeRequests.Add(-1)
 	}
-	h.mu.Lock()
-	h.activeRequests--
-	h.mu.Unlock()
+	h.wg.Done()
 }
 
-func (h *Horder) ActiveRequests() int {
-	return h.activeRequests
-}
+// Wait blocks until all active requests have finished.
+func (h *Horder) Wait() { h.wg.Wait() }
+
+// IsFree returns true if there are no active requests.
+func (h *Horder) IsFree() bool { return h.activeRequests.Load() == 0 }
 
 func (h *Horder) GetStatus(id string) (*aihorde.RequestStatusCheck, error) {
 	return h.horde.GetAsyncGenerationCheck(id)
