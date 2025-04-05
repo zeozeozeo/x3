@@ -386,24 +386,57 @@ func (l *Llmer) requestCompletionInternal(
 		slog.Info("    message", slog.String("role", msg.Role), slog.String("content", msg.Content), slog.Int("images", len(msg.Images)))
 	}
 
-	client, codenames := m.Client(provider)
-	if client == nil {
-		return "", Usage{}, errors.New("no client")
+	baseUrls, tokens, codenames := m.Client(provider)
+	if len(baseUrls) == 0 || len(tokens) == 0 || len(codenames) == 0 {
+		return "", Usage{}, fmt.Errorf("no valid client configurations for provider %s", provider)
 	}
 
-	for _, codename := range codenames {
-		res, usage, err := l.requestCompletionInternal2(m, codename, provider, usernames, settings, client, prepend)
-		if err == nil {
-			// we got a response, but if we used a prefill, we should indicate that it was used
-			// (prepend it to the response in bold)
-			if prepend != "" {
-				res = fmt.Sprintf("**%s** %s", strings.ReplaceAll(strings.TrimSpace(prepend), "**", ""), res)
+	// Validate Cloudflare configuration: must have 1 base URL or matching number of URLs and tokens
+	if provider == model.ProviderCloudflare && len(baseUrls) != 1 && len(baseUrls) != len(tokens) {
+		return "", Usage{}, fmt.Errorf("invalid Cloudflare config: must have 1 base URL or matching number of base URLs (%d) and tokens (%d)", len(baseUrls), len(tokens))
+	}
+
+	var lastErr error
+	for i, baseUrl := range baseUrls {
+		tokensToTry := tokens // Default: try all tokens with this base URL
+
+		// Special Cloudflare logic: if multiple URLs match multiple tokens, use only the corresponding token for that URL index
+		if provider == model.ProviderCloudflare && len(baseUrls) > 1 && len(baseUrls) == len(tokens) {
+			if i < len(tokens) {
+				tokensToTry = []string{tokens[i]} // Only use the token matching this specific base URL index
+			} else {
+				// Should not happen due to validation above, but skip defensively
+				continue
 			}
-			return res, usage, nil
+		}
+
+		for _, token := range tokensToTry {
+			config := openai.DefaultConfig(token)
+			config.BaseURL = baseUrl
+			if provider == model.ProviderGithub { // Handle Github special case
+				config = openai.DefaultAzureConfig(token, baseUrl)
+				config.APIType = openai.APITypeOpenAI
+			}
+			client := openai.NewClientWithConfig(config)
+
+			for _, codename := range codenames {
+				slog.Info("attempting request", "provider", provider, "baseUrl", baseUrl, "codename", codename)
+				res, usage, err := l.requestCompletionInternal2(m, codename, provider, usernames, settings, client, prepend)
+				if err == nil {
+					// we got a response, but if we used a prefill, we should indicate that it was used
+					// (prepend it to the response in bold)
+					if prepend != "" {
+						res = fmt.Sprintf("**%s** %s", strings.ReplaceAll(strings.TrimSpace(prepend), "**", ""), res)
+					}
+					return res, usage, nil
+				}
+				lastErr = err // Store the last error encountered
+				slog.Warn("request failed, trying next config", "provider", provider, "baseUrl", baseUrl, "codename", codename, "error", err)
+			}
 		}
 	}
 
-	return "", Usage{}, nil // all codenames errored, retry
+	return "", Usage{}, fmt.Errorf("all configurations for provider %s failed: %w", provider, lastErr) // all baseUrls/tokens/codenames errored
 }
 
 func (l *Llmer) RequestCompletion(m model.Model, usernames map[string]bool, settings persona.InferenceSettings, prepend string) (res string, usage Usage, err error) {

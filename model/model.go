@@ -3,29 +3,34 @@ package model
 import (
 	"os"
 	"sort"
+	"strings"
 	"time"
 
-	openai "github.com/sashabaranov/go-openai"
 	"github.com/tiktoken-go/tokenizer"
 )
 
+// Helper function to split env vars and filter empty strings
+func getEnvList(key string) []string {
+	val := os.Getenv(key)
+	if val == "" {
+		return nil
+	}
+	list := strings.Split(val, ";")
+	filtered := make([]string, 0, len(list))
+	for _, item := range list {
+		trimmed := strings.TrimSpace(item)
+		if trimmed != "" {
+			filtered = append(filtered, trimmed)
+		}
+	}
+	if len(filtered) == 0 {
+		return nil
+	}
+	return filtered
+}
+
 var (
-	githubToken     = os.Getenv("X3_GITHUB_TOKEN")
-	zjToken         = os.Getenv("X3_ZJ_TOKEN")
-	hmToken         = os.Getenv("X3_HM_TOKEN")
-	fresedToken     = os.Getenv("X3_FRESED_TOKEN")
-	groqToken       = os.Getenv("X3_GROQ_TOKEN")
-	googleToken     = os.Getenv("X3_GOOGLE_AISTUDIO_TOKEN")
-	openRouterToken = os.Getenv("X3_OPENROUTER_TOKEN")
-	g4fToken        = os.Getenv("X3_G4F_TOKEN")
-	crofToken       = os.Getenv("X3_CROF_TOKEN")
-	electronToken   = os.Getenv("X3_ELECTRONHUB_TOKEN")
-	cablyToken      = os.Getenv("X3_CABLYAI_TOKEN")
-	meowToken       = os.Getenv("X3_MEOWAPI_TOKEN")
-	cfBaseURL       = os.Getenv("X3_CLOUDFLARE_API_BASE")
-	cfToken         = os.Getenv("X3_CLOUDFLARE_API_TOKEN")
-	cohereToken     = os.Getenv("X3_COHERE_TOKEN")
-	mnnToken        = os.Getenv("X3_MNN_TOKEN")
+	githubToken = os.Getenv("X3_GITHUB_TOKEN")
 )
 
 const (
@@ -1159,11 +1164,11 @@ var (
 		{Name: ProviderGithub},
 		{Name: ProviderGoogle},
 		{Name: ProviderCrof, PreferReasoning: true}, // above groq when reasoning
-		{Name: ProviderZukijourney},
-		{Name: ProviderOpenRouter},
-		{Name: ProviderCably},
-		{Name: ProviderMeow},
 		{Name: ProviderCloudflare},
+		{Name: ProviderZukijourney},
+		{Name: ProviderCably},
+		//{Name: ProviderMeow},
+		{Name: ProviderOpenRouter},
 		{Name: ProviderFresed},
 		{Name: ProviderMNN},
 		{Name: ProviderElectron},
@@ -1217,53 +1222,64 @@ func GetModelByName(name string) Model {
 	return DefaultModel
 }
 
-func (m Model) Client(provider string) (*openai.Client, []string) {
+// Client returns lists of base URLs, tokens, and codenames for the given provider.
+// For most providers, the base URL and token lists will contain only one element.
+// For Cloudflare, it can return multiple base URLs and corresponding tokens.
+func (m Model) Client(provider string) (baseUrls []string, tokens []string, codenames []string) {
+	p, ok := m.Providers[provider]
+	if !ok {
+		return nil, nil, nil
+	}
+	codenames = p.Codenames
+
 	if provider == ProviderGithub {
-		// github marketplace requires special tweaks
-		config := openai.DefaultAzureConfig(githubToken, azureBaseURL)
-		config.APIType = openai.APITypeOpenAI
-		return openai.NewClientWithConfig(config), m.Providers[provider].Codenames
+		baseUrls = []string{azureBaseURL}
+		tokens = []string{githubToken}
+		return
 	}
 
-	var token, api string
+	var tokenEnvKey, apiVar string
 	switch provider {
 	case ProviderZukijourney:
-		token, api = zjToken, zjBaseURL
+		tokenEnvKey, apiVar = "X3_ZJ_TOKEN", zjBaseURL
 	case ProviderFresed:
-		token, api = fresedToken, fresedBaseURL
+		tokenEnvKey, apiVar = "X3_FRESED_TOKEN", fresedBaseURL
 	case ProviderHelixmind:
-		token, api = hmToken, hmBaseURL
+		tokenEnvKey, apiVar = "X3_HM_TOKEN", hmBaseURL
 	case ProviderGroq:
-		token, api = groqToken, groqBaseURL
+		tokenEnvKey, apiVar = "X3_GROQ_TOKEN", groqBaseURL
 	case ProviderGoogle:
-		token, api = googleToken, googleBaseURL
+		tokenEnvKey, apiVar = "X3_GOOGLE_AISTUDIO_TOKEN", googleBaseURL
 	case ProviderOpenRouter:
-		token, api = openRouterToken, openRouterBaseURL
+		tokenEnvKey, apiVar = "X3_OPENROUTER_TOKEN", openRouterBaseURL
 	case ProviderG4F:
-		token, api = g4fToken, g4fBaseURL
+		tokenEnvKey, apiVar = "X3_G4F_TOKEN", g4fBaseURL
 	case ProviderCrof:
-		token, api = crofToken, crofBaseURL
+		tokenEnvKey, apiVar = "X3_CROF_TOKEN", crofBaseURL
 	case ProviderElectron:
-		token, api = electronToken, electronBaseURL
+		tokenEnvKey, apiVar = "X3_ELECTRONHUB_TOKEN", electronBaseURL
 	case ProviderCably:
-		token, api = cablyToken, cablyBaseURL
+		tokenEnvKey, apiVar = "X3_CABLYAI_TOKEN", cablyBaseURL
 	case ProviderMeow:
-		token, api = meowToken, meowBaseURL
+		tokenEnvKey, apiVar = "X3_MEOWAPI_TOKEN", meowBaseURL
 	case ProviderCloudflare:
-		token, api = cfToken, cfBaseURL
+		baseUrls = getEnvList("X3_CLOUDFLARE_API_BASE")
+		tokens = getEnvList("X3_CLOUDFLARE_API_TOKEN")
+		if len(baseUrls) != len(tokens) {
+			panic("X3_CLOUDFLARE_API_BASE and X3_CLOUDFLARE_API_TOKEN lists must be the same length")
+		}
+		return
 	case ProviderCohere:
-		token, api = cohereToken, cohereBaseURL
+		tokenEnvKey, apiVar = "X3_COHERE_TOKEN", cohereBaseURL
 	case ProviderMNN:
-		token, api = mnnToken, mnnBaseURL
+		tokenEnvKey, apiVar = "X3_MNN_TOKEN", mnnBaseURL
 	default:
-		token, api = githubToken, azureBaseURL
+		return nil, nil, nil
 	}
 
-	p := m.Providers[provider]
-
-	config := openai.DefaultConfig(token)
-	config.BaseURL = api
-	return openai.NewClientWithConfig(config), p.Codenames
+	baseUrls = []string{apiVar}
+	tokens = getEnvList(tokenEnvKey)
+	return
 }
 
 func (m Model) Tokenizer() tokenizer.Codec {
