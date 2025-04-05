@@ -107,6 +107,7 @@ func RegisterHandlers(r handler.Router) error {
 
 	r.Autocomplete("/generate", HandleGenerateModelAutocomplete)
 	r.Command("/generate", HandleGenerate)
+	r.ButtonComponent("/cancel/{id}", HandleGenerateCancel)
 
 	// Image Commands (Registered via imagecmd package)
 	// Pass the asserted *handler.Mux to imagecmd

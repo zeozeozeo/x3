@@ -27,13 +27,13 @@ var (
 	}
 	// https://raw.githubusercontent.com/Haidra-Org/AI-Horde-image-model-reference/refs/heads/main/stable_diffusion.json
 	featuredModels = []string{
+		"Nova Anime XL",
 		"Pony Diffusion XL",
 		"WAI-ANI-NSFW-PONYXL",
 		"NTR MIX IL-Noob XL",
 		"Cetus-Mix",
-		//"Anything v5",
+		"Anything v5",
 		"Hassaku",
-		"Nova Anime XL",
 		"MeinaMix",
 		"WAI-CUTE Pony",
 		"Lawlas's yiff mix",
@@ -49,11 +49,12 @@ func GetHorder() *Horder {
 }
 
 type Horder struct {
-	horde         *aihorde.AIHorde
-	cachedModels  []aihorde.ActiveModel
-	modelCacheAge time.Time
-	modelsData    ModelsData
-	mu            sync.Mutex
+	horde          *aihorde.AIHorde
+	cachedModels   []aihorde.ActiveModel
+	modelCacheAge  time.Time
+	modelsData     ModelsData
+	mu             sync.Mutex
+	activeRequests int
 }
 
 func NewHorder(modelsData ModelsData) *Horder {
@@ -200,12 +201,15 @@ func ptr[T any](value T) *T {
 	return &value
 }
 
-func (h *Horder) Generate(model, prompt, negative string, steps, n int, cfgScale float64, nsfw bool) (string, error) {
+func (h *Horder) Generate(model, prompt, negative string, steps, n int, cfgScale float64, clipSkip int, nsfw bool) (string, error) {
 	if steps == 0 {
 		steps = 20
 	}
 	if cfgScale == 0 {
 		cfgScale = 7
+	}
+	if clipSkip == 0 {
+		clipSkip = 2
 	}
 	n = max(n, 1)
 
@@ -226,6 +230,7 @@ func (h *Horder) Generate(model, prompt, negative string, steps, n int, cfgScale
 					CfgScale:       ptr(cfgScale),
 					Width:          ptr(832),
 					Height:         ptr(1216),
+					ClipSkip:       ptr(clipSkip),
 				},
 			},
 			Steps: ptr(steps),
@@ -256,7 +261,26 @@ func (h *Horder) Generate(model, prompt, negative string, steps, n int, cfgScale
 		slog.Any("warnings", req.Warnings),
 	)
 
+	h.mu.Lock()
+	h.activeRequests++ // should be stopped in defer
+	h.mu.Unlock()
+
 	return req.ID, nil
+}
+
+// Stop decrements the active request counter. Use this in combination with `defer` after calling Generate.
+func (h *Horder) Stop() {
+	if h.activeRequests == 0 {
+		slog.Warn("horder: activeRequests is 0 in Stop; missing defer?")
+		return
+	}
+	h.mu.Lock()
+	h.activeRequests--
+	h.mu.Unlock()
+}
+
+func (h *Horder) ActiveRequests() int {
+	return h.activeRequests
 }
 
 func (h *Horder) GetStatus(id string) (*aihorde.RequestStatusCheck, error) {

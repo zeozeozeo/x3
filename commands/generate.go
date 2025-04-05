@@ -1,8 +1,13 @@
 package commands
 
 import (
+	"bytes"
+	"encoding/base64"
 	"fmt"
+	"io"
 	"log/slog"
+	"net/http"
+	"path/filepath"
 	"sort"
 	"strings"
 	"time"
@@ -59,6 +64,11 @@ var GenerateCommand = discord.SlashCommandCreate{
 			Description: "How close the image should be to the prompt (7..14 is recommended)",
 			MinValue:    ptr(0.0),
 		},
+		discord.ApplicationCommandOptionInt{
+			Name:        "clip_skip",
+			Description: "CLIP layer to skip to (use 2 for Pony)",
+			MinValue:    ptr(1),
+		},
 		discord.ApplicationCommandOptionBool{
 			Name:        "ephemeral",
 			Description: "If the response should only be visible to you",
@@ -97,7 +107,7 @@ func progressBar(message string, current, total, barWidth int) string {
 		bar = fmt.Sprintf("[%s]", emptyPart)
 	}
 
-	return fmt.Sprintf("%s: `%s` %d/%d ", message, bar, current, total)
+	return fmt.Sprintf("%s: `%s` %d/%d", message, bar, current, total)
 }
 
 // HandleGenerate handles the /generate command
@@ -109,8 +119,21 @@ func HandleGenerate(event *handler.CommandEvent) error {
 	steps := data.Int("steps")
 	n := data.Int("n")
 	cfgScale := data.Float("cfg_scale")
+	clipSkip := data.Int("clip_skip")
 	ephemeral := data.Bool("ephemeral")
 	isNSFW := true // in dms
+
+	// default values
+	if steps == 0 {
+		steps = 20
+	}
+	if cfgScale == 0 {
+		cfgScale = 7
+	}
+	if clipSkip == 0 {
+		clipSkip = 2
+	}
+	n = max(n, 1)
 
 	// check if its an nsfw channel; if it's not we'll rely on stablehorde to censor nsfw content
 	channel, err := event.Client().Rest().GetChannel(event.Channel().ID())
@@ -125,10 +148,11 @@ func HandleGenerate(event *handler.CommandEvent) error {
 		return err
 	}
 
-	id, err := horder.GetHorder().Generate(model, prompt, negative, steps, n, cfgScale, isNSFW)
+	id, err := horder.GetHorder().Generate(model, prompt, negative, steps, n, cfgScale, clipSkip, isNSFW)
 	if err != nil {
 		return updateInteractionError(event, err.Error())
 	}
+	defer horder.GetHorder().Stop() // decrements the active request counter
 
 	failures := 0
 	firstQueuePos := 0
@@ -136,6 +160,8 @@ func HandleGenerate(event *handler.CommandEvent) error {
 	impossibleWaitTime := 30
 	impossibleFail := false
 	numDots := 2
+	wasDiffusing := false
+	diffuseStart := time.Time{}
 	for {
 		numDots++
 		status, err := horder.GetHorder().GetStatus(id)
@@ -152,21 +178,36 @@ func HandleGenerate(event *handler.CommandEvent) error {
 			break
 		}
 
-		message := "Waiting for job to start" + strings.Repeat(".", numDots)
+		message := "Waiting for job to start"
+		addETA := !wasDiffusing
+		if wasDiffusing {
+			message = "Final touches"
+		}
+		message += strings.Repeat(".", numDots)
 		if status.Processing != 0 && status.Restarted != 0 {
 			message = fmt.Sprintf("Waiting for %s; %d restarted", pluralize(status.Processing, "job"), status.Restarted)
 		}
 		if status.QueuePosition > 0 {
+			numDots = 2
+			addETA = true
 			if firstQueuePos == 0 {
 				firstQueuePos = status.QueuePosition
 			}
-			message = progressBar("Queued", firstQueuePos-status.QueuePosition, firstQueuePos, 50)
+			message = progressBar("Queued", firstQueuePos-status.QueuePosition, firstQueuePos, 25)
 		} else if status.WaitTime > 0 {
+			numDots = 2
+			addETA = true
+			if !wasDiffusing {
+				diffuseStart = time.Now()
+			}
+			wasDiffusing = true
 			if firstWaitTime == 0 {
 				firstWaitTime = status.WaitTime
 			}
-			message = progressBar("Diffusing", firstWaitTime-status.WaitTime, firstWaitTime, 50)
+			message = progressBar("Diffusing", firstWaitTime-status.WaitTime, firstWaitTime, 25)
 		} else if !status.IsPossible {
+			numDots = 2
+			addETA = false
 			if impossibleWaitTime == 0 {
 				impossibleFail = true
 				break
@@ -175,7 +216,9 @@ func HandleGenerate(event *handler.CommandEvent) error {
 			impossibleWaitTime--
 		}
 
-		message += fmt.Sprintf(" (eta: %ds)", status.WaitTime)
+		if addETA {
+			message += fmt.Sprintf(" (eta: %ds)", status.WaitTime)
+		}
 
 		slog.Info(
 			"HandleGenerate: progress",
@@ -183,6 +226,7 @@ func HandleGenerate(event *handler.CommandEvent) error {
 			slog.Int("wait_time", status.WaitTime),
 			slog.Bool("done", status.Done),
 			slog.Bool("faulted", status.Faulted),
+			slog.Float64("kudos", status.Kudos),
 			slog.String("id", id),
 		)
 		event.UpdateInteractionResponse(discord.NewMessageUpdateBuilder().
@@ -194,7 +238,7 @@ func HandleGenerate(event *handler.CommandEvent) error {
 						Emoji: &discord.ComponentEmoji{
 							Name: "❌",
 						},
-						CustomID: fmt.Sprintf("cancel_%s", id),
+						CustomID: fmt.Sprintf("/cancel/%s:%d", id, event.User().ID),
 					},
 				),
 			).
@@ -212,16 +256,79 @@ func HandleGenerate(event *handler.CommandEvent) error {
 		return updateInteractionError(event, err.Error())
 	}
 
-	var sb strings.Builder
+	if len(finalStatus.Generations) == 0 {
+		return event.DeleteInteractionResponse()
+	}
+
+	diffuseElapsed := time.Since(diffuseStart)
+
+	var files []*discord.File
 	for i, gen := range finalStatus.Generations {
-		sb.WriteString(gen.Img)
-		if i < len(finalStatus.Generations)-1 {
-			sb.WriteRune('\n')
+		if strings.HasPrefix(gen.Img, "https://") || strings.HasPrefix(gen.Img, "http://") {
+			// fetch image
+			resp, err := http.Get(gen.Img)
+			if err != nil {
+				return updateInteractionError(event, err.Error())
+			}
+			defer resp.Body.Close()
+
+			body, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return updateInteractionError(event, err.Error())
+			}
+
+			filename, err := extractFilenameFromURL(gen.Img)
+			if err != nil {
+				slog.Warn("HandleGenerate: failed to extract filename from URL", slog.Any("err", err), slog.String("url", gen.Img))
+				filename = ""
+			}
+			// get extension
+			ext := filepath.Ext(filename)
+			if ext == "" {
+				ext = ".webp"
+			}
+
+			files = append(files, &discord.File{
+				Reader: bytes.NewReader(body),
+				Name:   fmt.Sprintf("%d%s", i+1, ext),
+			})
+		} else {
+			// b64 encoded webp
+			decoded, err := base64.StdEncoding.DecodeString(gen.Img)
+			if err != nil {
+				slog.Warn("HandleGenerate: failed to decode b64", slog.Any("err", err), slog.Int("len", len(gen.Img)))
+				return updateInteractionError(event, err.Error())
+			}
+
+			files = append(files, &discord.File{
+				Reader: bytes.NewReader(decoded),
+				Name:   fmt.Sprintf("%d.webp", i+1),
+			})
 		}
 	}
 
+	var sb strings.Builder
+	sb.WriteString("Image")
+	if len(files) > 1 {
+		sb.WriteRune('s')
+	}
+	sb.WriteString(" generated by model `")
+	sb.WriteString(model)
+	sb.WriteString("` in ")
+	sb.WriteString(fmt.Sprintf("%.1fs", diffuseElapsed.Seconds()))
+	sb.WriteString(".\n### Prompt:\n```\n")
+	sb.WriteString(prompt)
+	sb.WriteString("\n```")
+	if negative != "" {
+		sb.WriteString("\n### Negative prompt:\n```\n")
+		sb.WriteString(negative)
+		sb.WriteString("\n```")
+	}
+	sb.WriteString(fmt.Sprintf("\n-# steps=%d, n=%d, cfg_scale=%s, clip_skip=%d", steps, n, dtoa(cfgScale), clipSkip))
+
 	event.UpdateInteractionResponse(discord.NewMessageUpdateBuilder().
 		SetContent(sb.String()).
+		SetFiles(files...).
 		SetContainerComponents().
 		Build())
 
@@ -229,19 +336,40 @@ func HandleGenerate(event *handler.CommandEvent) error {
 }
 
 func HandleGenerateCancel(data discord.ButtonInteractionData, event *handler.ComponentEvent) error {
-	_, id, ok := strings.Cut(data.CustomID(), ":")
+	_, customID, ok := strings.Cut(data.CustomID()[1:], "/")
+	slog.Debug("HandleGenerateCancel", slog.String("id", customID), slog.String("custom_id", data.CustomID()))
 	if !ok {
+		slog.Warn("HandleGenerateCancel: invalid custom id", slog.String("custom_id", data.CustomID()))
 		return fmt.Errorf("invalid custom id: %s", data.CustomID())
 	}
 
+	id, userID, ok := strings.Cut(customID, ":")
+	if !ok {
+		slog.Warn("HandleGenerateCancel: invalid custom id (no user)", slog.String("custom_id", data.CustomID()))
+		return fmt.Errorf("invalid custom id: %s", data.CustomID())
+	}
+
+	if userID != event.User().ID.String() {
+		return event.CreateMessage(
+			discord.NewMessageCreateBuilder().
+				SetContent("❌ Cannot cancel generation of other user").
+				SetEphemeral(true).
+				Build(),
+		)
+	}
+
+	event.DeferUpdateMessage()
+
 	if err := horder.GetHorder().Cancel(id); err != nil {
 		slog.Error("HandleGenerateCancel: failed to cancel", slog.Any("err", err))
+		// TODO: should we update or create here? doubt this is documented
 		_, err := event.UpdateInteractionResponse(discord.NewMessageUpdateBuilder().
-			SetContent(err.Error()).
+			SetContent("❌ " + err.Error()).
 			Build())
 		return err
 	}
 
+	slog.Info("HandleGenerateCancel: canceled", slog.String("id", id))
 	return event.DeleteInteractionResponse()
 }
 

@@ -3,6 +3,8 @@ package commands
 import (
 	"fmt"
 	"log/slog"
+	"net/url"
+	"path/filepath"
 	"strconv"
 	"strings" // Added back import
 	"sync"
@@ -113,6 +115,11 @@ func endsWithWhitespace(s string) bool {
 // ftoa converts a float32 to a string.
 func ftoa(f float32) string {
 	return strconv.FormatFloat(float64(f), 'g', 6, 32)
+}
+
+// dtoa converts a float64 to a string.
+func dtoa(f float64) string {
+	return strconv.FormatFloat(f, 'g', 6, 64)
 }
 
 // zifnil returns 0 if the int pointer is nil, otherwise returns the dereferenced value.
@@ -245,4 +252,24 @@ func sendMessageSplits(
 	}
 
 	return firstBotMessage, nil
+}
+
+func extractFilenameFromURL(rawURL string) (string, error) {
+	// parse to exclude query params
+	parsedURL, err := url.Parse(rawURL)
+	if err != nil {
+		return "", fmt.Errorf("failed to parse URL '%s': %w", rawURL, err)
+	}
+
+	urlPath := parsedURL.Path
+	if urlPath == "" || urlPath == "/" {
+		return "", fmt.Errorf("URL '%s' has no path component to extract a filename from", rawURL)
+	}
+
+	filename := filepath.Base(urlPath)
+	if filename == "." || filename == "/" {
+		return "", fmt.Errorf("could not extract a valid filename from path '%s'", urlPath)
+	}
+
+	return filename, nil
 }
