@@ -193,7 +193,7 @@ User: She bites her lip, her fingers teasing herself as she lays back.
 ` + "```" + `
 **AI Output:**
 ` + "```" + `json
-{"tags": "1girl solo fingerself biting_lip flushed expression full_body erotic_lighting sensual pose nsfw"}
+{"tags": "1girl, solo, fingerself, biting_lip, flushed, expression, full_body, erotic_lighting, sensual, pose, nsfw"}
 ` + "```" + `  
 
 #### **Example 6 (Futanari, Dripping, POV Shot)**
@@ -203,7 +203,7 @@ User: She smirks, her thick length pressing against her thigh, already dripping.
 ` + "```" + `
 **AI Output:**
 ` + "```" + `json
-{"tags": "1girl futanari smirk thigh_highs dripping pre_cum pov lewd nsfw"}
+{"tags": "1girl, futanari, smirk, thigh_highs, dripping, pre_cum, pov, lewd, nsfw"}
 ` + "```" + `
 
 ### **Expanded Tagging Guidelines for Stable Diffusion:**
