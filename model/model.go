@@ -465,6 +465,18 @@ var (
 		},
 	}
 
+	ModelLlamaScout = Model{
+		Name:    "Meta Llama 4 Scout 109B/17A",
+		Command: "scout",
+		// no need for llamahacks, proper multimodality
+		Vision: true,
+		Providers: map[string]ModelProvider{
+			ProviderGroq: {
+				Codenames: []string{"meta-llama/llama-4-scout-17b-16e-instruct"},
+			},
+		},
+	}
+
 	ModelGigaChatPro = Model{
 		Name:    "Sberbank GigaChat Pro (Russian)",
 		Command: "gigachat",
@@ -1099,10 +1111,10 @@ var (
 		ModelGeminiPro,           // too expensive
 		ModelMistralLarge,        // uncensored; i wish i could make this the default, but it's very slow
 		ModelMistralSmall,
+		ModelLlamaScout,
 		ModelLlama405b, // unstable api
 		ModelLlama90b,  // very bad vision capabilities
 		ModelLlama70b,  // default - fastest with specdec, mostly uncensored, good for RP
-		ModelLlama11b,  // even worse vision capabilities
 		ModelRogueRose, // good RP model
 		ModelGemma9b,
 		ModelGemma27b,   // this is balls
@@ -1149,6 +1161,7 @@ var (
 		ModelGrok3,
 		ModelMistralSaba,
 		ModelLlama8b,
+		ModelLlama11b,
 
 		// TODO:
 		//ModelClaude3Haiku, // unstable api

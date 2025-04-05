@@ -342,7 +342,7 @@ func handleLlmInteraction2(
 		if strings.Contains(response, "<generate_image>") ||
 			(!disableRandomNarrations &&
 				horder.GetHorder().IsFree() &&
-				time.Since(GetNarrator().LastInteractionTime()) > 2*time.Minute) {
+				time.Since(GetNarrator().LastInteractionTime()) >= time.Minute) {
 			narrationMessageID := messageID
 			if botMessage != nil {
 				narrationMessageID = botMessage.ID
