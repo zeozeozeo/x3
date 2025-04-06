@@ -503,14 +503,16 @@ func handleNarrationGenerate(client bot.Client, channelID snowflake.ID, messageI
 	if err != nil {
 		slog.Error("handleNarrationGenerate: failed to send image reply", slog.Any("err", err), slog.String("channel_id", channelID.String()), slog.String("message_id", messageID.String()))
 	} else {
-		slog.Info("narration image sent successfully", slog.String("channel_id", channelID.String()), slog.String("message_id", messageID.String()), slog.String("model", model), slog.String("prompt", prompt))
+		slog.Info("handleNarrationGenerate: narration image sent successfully", slog.String("channel_id", channelID.String()), slog.String("message_id", messageID.String()), slog.String("model", model), slog.String("prompt", prompt))
 
 		stats, err := db.GetGlobalStats()
-		if err != nil {
+		if err == nil {
 			stats.ImagesGenerated++
 			if err := stats.Write(); err != nil {
 				slog.Error("handleNarrationGenerate: failed to write global stats", slog.Any("err", err))
 			}
+		} else {
+			slog.Error("handleNarrationGenerate: failed to get global stats", slog.Any("err", err))
 		}
 	}
 }

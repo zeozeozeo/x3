@@ -147,7 +147,7 @@ func HandleGenerate(event *handler.CommandEvent) error {
 		model = defaultImageModel
 	}
 	isImplicitAutoTag := false
-	if model != "Flux.1-Schnell fp8 (Compact)" && !strings.Contains(prompt, ",") {
+	if !autoTag && model != "Flux.1-Schnell fp8 (Compact)" && !strings.Contains(prompt, ",") {
 		// no commas = likely no tags, need to auto-tag
 		autoTag = true
 		isImplicitAutoTag = true
@@ -356,9 +356,9 @@ func HandleGenerate(event *handler.CommandEvent) error {
 		SetContainerComponents().
 		Build())
 
-	if err != nil {
+	if err == nil {
 		stats, err := db.GetGlobalStats()
-		if err != nil {
+		if err == nil {
 			stats.ImagesGenerated++
 			if err := stats.Write(); err != nil {
 				slog.Error("handleNarrationGenerate: failed to write global stats", slog.Any("err", err))
