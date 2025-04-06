@@ -16,6 +16,7 @@ type GlobalStats struct {
 	// total number of messages processed
 	MessageCount    uint      `json:"message_count"`
 	LastMessageTime time.Time `json:"last_message_time"`
+	ImagesGenerated uint      `json:"images_generated"`
 }
 
 // UnmarshalGlobalStats decodes JSON data into a GlobalStats struct.

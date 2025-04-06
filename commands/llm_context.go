@@ -255,6 +255,10 @@ func addContextMessagesIfPossible(
 			} else if msg.EditedTimestamp != nil && strings.HasPrefix(msg.Content, "**") && strings.Count(msg.Content, "**") >= 2 {
 				// Handle regenerated message with prefill
 				content = strings.Replace(msg.Content, "**", "", 2)
+			} else if slices.ContainsFunc(msg.Attachments, func(a discord.Attachment) bool {
+				return strings.HasPrefix(a.Filename, "narration") && a.ContentType != nil && strings.HasPrefix(*a.ContentType, "image/")
+			}) {
+				continue // skip narration images from handleNarrationGenerate
 			} else {
 				content = getMessageContentNoWhitelist(msg) // Get content normally for other bot messages
 			}

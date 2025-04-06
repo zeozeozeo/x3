@@ -11,7 +11,9 @@ import (
 	"github.com/disgoorg/disgo/discord"
 	"github.com/disgoorg/disgo/handler"
 	"github.com/lithammer/fuzzysearch/fuzzy"
+	"github.com/zeozeozeo/x3/db"
 	"github.com/zeozeozeo/x3/horder"
+	"github.com/zeozeozeo/x3/llm"
 )
 
 var GenerateCommand = discord.SlashCommandCreate{
@@ -28,15 +30,15 @@ var GenerateCommand = discord.SlashCommandCreate{
 	},
 	Options: []discord.ApplicationCommandOption{
 		discord.ApplicationCommandOptionString{
-			Name:         "model",
-			Description:  "Model to use for this image",
-			Autocomplete: true,
-			Required:     true,
-		},
-		discord.ApplicationCommandOptionString{
 			Name:        "prompt",
 			Description: "Prompt to use for this image",
 			Required:    true,
+		},
+		discord.ApplicationCommandOptionString{
+			Name:         "model",
+			Description:  "Model to use for this image",
+			Autocomplete: true,
+			Required:     false,
 		},
 		discord.ApplicationCommandOptionString{
 			Name:        "negative",
@@ -66,12 +68,23 @@ var GenerateCommand = discord.SlashCommandCreate{
 			MinValue:    ptr(1),
 		},
 		discord.ApplicationCommandOptionBool{
+			Name:        "auto_tag",
+			Description: "Automatically convert the prompt to a sequence of Danbooru tags",
+			Required:    false,
+		},
+		discord.ApplicationCommandOptionBool{
 			Name:        "ephemeral",
 			Description: "If the response should only be visible to you",
 			Required:    false,
 		},
 	},
 }
+
+const (
+	defaultNegativePrompt = "modern, recent, old, oldest, cartoon, graphic, text, painting, crayon, graphite, abstract, glitch, deformed, mutated, ugly, disfigured, long body, lowres, bad anatomy, bad hands, missing fingers, extra fingers, extra digits, fewer digits, cropped, very displeasing, (worst quality, bad quality:1.2), sketch, jpeg artifacts, signature, watermark, username, (censored, bar_censor, mosaic_censor:1.2), simple background, conjoined, bad ai-generated"
+	defaultPromptPrepend  = "masterpiece, best quality, amazing quality, very aesthetic, high resolution, ultra-detailed, absurdres, newest, scenery, "
+	defaultImageModel     = "Nova Anime XL"
+)
 
 func progressBar(message string, current, total, barWidth int) string {
 	if total <= 0 {
@@ -116,6 +129,7 @@ func HandleGenerate(event *handler.CommandEvent) error {
 	n := data.Int("n")
 	cfgScale := data.Float("cfg_scale")
 	clipSkip := data.Int("clip_skip")
+	autoTag := data.Bool("auto_tag")
 	ephemeral := data.Bool("ephemeral")
 	isNSFW := true // in dms
 
@@ -128,6 +142,15 @@ func HandleGenerate(event *handler.CommandEvent) error {
 	}
 	if clipSkip == 0 {
 		clipSkip = 2
+	}
+	if model == "" {
+		model = defaultImageModel
+	}
+	isImplicitAutoTag := false
+	if model != "Flux.1-Schnell fp8 (Compact)" && !strings.Contains(prompt, ",") {
+		// no commas = likely no tags, need to auto-tag
+		autoTag = true
+		isImplicitAutoTag = true
 	}
 	n = max(n, 1)
 
@@ -142,6 +165,39 @@ func HandleGenerate(event *handler.CommandEvent) error {
 
 	if err := event.DeferCreateMessage(ephemeral); err != nil {
 		return err
+	}
+
+	if autoTag {
+		if negative == "" {
+			negative = defaultNegativePrompt
+		}
+		tagChan := make(chan string)
+
+		llmer := llm.NewLlmer()
+		llmer.AddMessage(llm.RoleUser, prompt, 0)
+		GetNarrator().QueueNarration(*llmer, stableNarratorPrepend, func(llmer *llm.Llmer, response string) {
+			tags, err := parseStableNarratorTags(response)
+			if err != nil {
+				tagChan <- ""
+				return
+			}
+			slog.Info("HandleGenerate: got prompt improvement narrator tags", slog.String("tags", tags))
+			tagChan <- tags
+		})
+
+		msg := "Auto-tagging prompt..."
+		if isImplicitAutoTag {
+			msg = "Auto-tagging prompt (no Danbooru tags detected)..."
+		}
+		event.UpdateInteractionResponse(discord.NewMessageUpdateBuilder().
+			SetContent(msg).
+			Build())
+
+		tags := <-tagChan
+		if tags == "" {
+			return updateInteractionError(event, "failed to auto-tag prompt, try again later or with a different prompt")
+		}
+		prompt = defaultPromptPrepend + tags
 	}
 
 	id, err := horder.GetHorder().Generate(model, prompt, negative, steps, n, cfgScale, clipSkip, isNSFW)
@@ -175,7 +231,10 @@ func HandleGenerate(event *handler.CommandEvent) error {
 		}
 
 		message := "Waiting for job to start"
-		addETA := !wasDiffusing
+		if autoTag {
+			message += fmt.Sprintf(" (improved prompt: `%s`)", prompt)
+		}
+		addETA := false
 		if wasDiffusing {
 			message = "Final touches"
 		}
@@ -291,13 +350,23 @@ func HandleGenerate(event *handler.CommandEvent) error {
 	}
 	sb.WriteString(fmt.Sprintf("\n-# steps=%d, n=%d, cfg_scale=%s, clip_skip=%d", steps, n, dtoa(cfgScale), clipSkip))
 
-	event.UpdateInteractionResponse(discord.NewMessageUpdateBuilder().
+	_, err = event.UpdateInteractionResponse(discord.NewMessageUpdateBuilder().
 		SetContent(sb.String()).
 		SetFiles(files...).
 		SetContainerComponents().
 		Build())
 
-	return nil
+	if err != nil {
+		stats, err := db.GetGlobalStats()
+		if err != nil {
+			stats.ImagesGenerated++
+			if err := stats.Write(); err != nil {
+				slog.Error("handleNarrationGenerate: failed to write global stats", slog.Any("err", err))
+			}
+		}
+	}
+
+	return err
 }
 
 func HandleGenerateCancel(data discord.ButtonInteractionData, event *handler.ComponentEvent) error {

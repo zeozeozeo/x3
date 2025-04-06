@@ -29,10 +29,6 @@ var (
 	errRegenerateNoMessage       = errors.New("cannot find last response to regenerate")
 )
 
-const (
-	narratorImageModel = "Nova Anime XL"
-)
-
 // replaceLlmTagsWithNewlines replaces <new_message> tags with newlines and handles <memory> tags.
 func replaceLlmTagsWithNewlines(response string, userID snowflake.ID) string {
 	var b strings.Builder
@@ -356,46 +352,55 @@ func handleLlmInteraction2(
 	return jumpURL, nil
 }
 
+const stableNarratorPrepend = "```json\n{\n  \"tags\":"
+
+func parseStableNarratorTags(response string) (string, error) {
+	response = strings.TrimPrefix(strings.Replace(response, "**", "", 2), stableNarratorPrepend)
+	replacer := strings.NewReplacer(
+		"**", "",
+		"_", " ",
+		"```json", "",
+		"```", "",
+	)
+	response = replacer.Replace(response)
+
+	// unmarshal json ({"tags": "tag1, tag2, tag3, ..."})
+	var t struct {
+		Tags string `json:"tags"`
+	}
+	if err := json.Unmarshal([]byte(response), &t); err != nil {
+		// perhaps the model just wanted to yap about something
+		slog.Error("narrator: failed to unmarshal json", slog.Any("err", err), slog.String("response", response))
+		return "", err
+	}
+
+	t.Tags = strings.TrimSpace(t.Tags)
+	if t.Tags == "" || !strings.Contains(t.Tags, ",") {
+		slog.Info("narrator: model deemed text irrelevant (no tags)", slog.String("response", response))
+		return "", fmt.Errorf("narrator: model deemed text irrelevant (no tags)")
+	}
+
+	return t.Tags, nil
+}
+
 func handleNarration(client bot.Client, channelID snowflake.ID, messageID snowflake.ID, llmer llm.Llmer) {
-	const prepend = "```json\n{\n  \"tags\":"
-	GetNarrator().QueueNarration(llmer, prepend, func(llmer *llm.Llmer, response string) {
-		response = strings.TrimPrefix(strings.Replace(response, "**", "", 2), prepend)
-		replacer := strings.NewReplacer(
-			"**", "",
-			"_", " ",
-			"```json", "",
-			"```", "",
-		)
-		response = replacer.Replace(response)
-
-		// unmarshal json ({"tags": "tag1, tag2, tag3, ..."})
-		var t struct {
-			Tags string `json:"tags"`
-		}
-		if err := json.Unmarshal([]byte(response), &t); err != nil {
-			// perhaps the model just wanted to yap about something
-			slog.Error("narrator: failed to unmarshal json", slog.Any("err", err), slog.String("response", response))
+	GetNarrator().QueueNarration(llmer, stableNarratorPrepend, func(llmer *llm.Llmer, response string) {
+		tags, err := parseStableNarratorTags(response)
+		if err != nil {
 			return
 		}
-
-		t.Tags = strings.TrimSpace(t.Tags)
-		if t.Tags == "" || !strings.Contains(t.Tags, ",") {
-			slog.Info("narrator: model deemed text irrelevant (no tags)", slog.String("response", response))
-			return
-		}
-
-		slog.Info("narration callback", slog.String("tags", t.Tags))
-
-		go handleNarrationGenerate(client, channelID, messageID, t.Tags)
+		slog.Info("narration callback", slog.String("tags", tags))
+		go handleNarrationGenerate(client, channelID, messageID, tags)
 	})
 }
 
 // handleNarrationGenerate generates an image based on LLM-provided tags and sends it as a reply.
 func handleNarrationGenerate(client bot.Client, channelID snowflake.ID, messageID snowflake.ID, tags string) {
 	if tags == "" {
-		slog.Warn("handleNarrationGenerate called with empty tags")
 		return
 	}
+
+	tags = defaultPromptPrepend + tags
 
 	h := horder.GetHorder()
 	if h == nil {
@@ -408,9 +413,9 @@ func handleNarrationGenerate(client bot.Client, channelID snowflake.ID, messageI
 		return
 	}
 	if !slices.ContainsFunc(models, func(model aihorde.ActiveModel) bool {
-		return model.Name == narratorImageModel
+		return model.Name == defaultImageModel
 	}) {
-		slog.Warn("narrator image model not available; skipping generation", slog.String("model", narratorImageModel))
+		slog.Warn("narrator image model not available; skipping generation", slog.String("model", defaultImageModel))
 		return
 	}
 
@@ -422,9 +427,8 @@ func handleNarrationGenerate(client bot.Client, channelID snowflake.ID, messageI
 		isNSFW = guildChannel.NSFW()
 	}
 
-	model := narratorImageModel
+	model := defaultImageModel
 	prompt := tags
-	//negativePrompt := "worst quality, low quality, blurry, deformed"
 	steps := 20
 	n := 1
 	cfgScale := 7.0
@@ -432,7 +436,7 @@ func handleNarrationGenerate(client bot.Client, channelID snowflake.ID, messageI
 
 	slog.Info("starting narration image generation", slog.String("model", model), slog.String("prompt", prompt), slog.String("channel_id", channelID.String()))
 
-	id, err := h.Generate(model, prompt, "", steps, n, cfgScale, clipSkip, isNSFW)
+	id, err := h.Generate(model, prompt, defaultNegativePrompt, steps, n, cfgScale, clipSkip, isNSFW)
 	if err != nil {
 		slog.Error("handleNarrationGenerate: failed to start generation", slog.Any("err", err))
 		return
@@ -483,7 +487,7 @@ func handleNarrationGenerate(client bot.Client, channelID snowflake.ID, messageI
 		return
 	}
 
-	// n=1
+	// the filename MUST start with "narration", that's how addContextMessagesIfPossible knows to ignore it
 	imgData, filename, err := processImageData(finalStatus.Generations[0].Img, "narration")
 	if err != nil {
 		slog.Error("handleNarrationGenerate: failed to process image data", slog.Any("err", err), slog.String("id", id))
@@ -492,6 +496,7 @@ func handleNarrationGenerate(client bot.Client, channelID snowflake.ID, messageI
 
 	// send the image as a reply
 	_, err = client.Rest().CreateMessage(channelID, discord.NewMessageCreateBuilder().
+		SetContentf("-# %s", prompt).
 		SetFiles(&discord.File{Name: filename, Reader: bytes.NewReader(imgData)}).
 		SetMessageReference(&discord.MessageReference{MessageID: &messageID, ChannelID: &channelID}).
 		SetAllowedMentions(&discord.AllowedMentions{RepliedUser: false}).
@@ -500,6 +505,14 @@ func handleNarrationGenerate(client bot.Client, channelID snowflake.ID, messageI
 	if err != nil {
 		slog.Error("handleNarrationGenerate: failed to send image reply", slog.Any("err", err), slog.String("channel_id", channelID.String()), slog.String("message_id", messageID.String()))
 	} else {
-		slog.Info("narration image sent successfully", slog.String("channel_id", channelID.String()), slog.String("message_id", messageID.String()))
+		slog.Info("narration image sent successfully", slog.String("channel_id", channelID.String()), slog.String("message_id", messageID.String()), slog.String("model", model), slog.String("prompt", prompt))
+
+		stats, err := db.GetGlobalStats()
+		if err != nil {
+			stats.ImagesGenerated++
+			if err := stats.Write(); err != nil {
+				slog.Error("handleNarrationGenerate: failed to write global stats", slog.Any("err", err))
+			}
+		}
 	}
 }

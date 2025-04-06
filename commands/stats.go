@@ -101,6 +101,7 @@ func HandleStats(event *handler.CommandEvent) error {
 					AddField("Bot uptime", upSince, true).
 					AddField("Messages processed", humanize.Comma(int64(stats.MessageCount)), true).
 					AddField("Last message processed", lastProcessed, true).
+					AddField("Images generated", humanize.Comma(int64(stats.ImagesGenerated)), true).
 					Build(),
 			).
 			SetEphemeral(ephemeral).
