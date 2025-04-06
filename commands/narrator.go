@@ -10,7 +10,7 @@ import (
 	"github.com/zeozeozeo/x3/persona"
 )
 
-const ratelimit = 30 * time.Second
+const ratelimit = 10 * time.Second
 
 var narrator *Narrator = NewNarrator()
 
@@ -44,16 +44,10 @@ func (n *Narrator) QueueNarration(llmer llm.Llmer, prepend string, cb narrationC
 	n.mu.Lock()
 	defer n.mu.Unlock()
 	n.queue = append(n.queue, queuedNarration{llmer: llmer, prepend: prepend, callback: cb})
-	if time.Since(n.lastInteraction) > ratelimit {
-		n.ticker.Reset(5 * time.Second)
-	}
 }
 
 func (n *Narrator) Run() {
 	slog.Info("narrator: starting mainloop", slog.String("ratelimit", ratelimit.String()))
-	n.mu.Lock()
-	n.ticker.Reset(1)
-	n.mu.Unlock()
 	defer n.ticker.Stop()
 
 	for range n.ticker.C {
