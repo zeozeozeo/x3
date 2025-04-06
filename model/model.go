@@ -474,6 +474,35 @@ var (
 			ProviderGroq: {
 				Codenames: []string{"meta-llama/llama-4-scout-17b-16e-instruct"},
 			},
+			ProviderOpenRouter: {
+				Codenames: []string{"meta-llama/llama-4-scout:free"},
+			},
+			ProviderZukijourney: {
+				Codenames: []string{"llama-4-scout-17b-instruct"},
+			},
+			ProviderElectron: {
+				Codenames: []string{"llama-4-scout-17b-16e-instruct"},
+			},
+			ProviderCloudflare: {
+				Codenames: []string{"@cf/meta/llama-4-scout-17b-16e-instruct"},
+			},
+		},
+	}
+
+	ModelLlamaMaverick = Model{
+		Name:    "Meta Llama 4 Maverick 400B/17A",
+		Command: "maverick",
+		Vision:  true,
+		Providers: map[string]ModelProvider{
+			ProviderOpenRouter: {
+				Codenames: []string{"meta-llama/llama-4-maverick:free"},
+			},
+			ProviderZukijourney: {
+				Codenames: []string{"llama-4-maverick-17b-instruct"},
+			},
+			ProviderElectron: {
+				Codenames: []string{"llama-4-maverick-17b-128e-instruct"},
+			},
 		},
 	}
 
@@ -852,6 +881,9 @@ var (
 			ProviderElectron: {
 				Codenames: []string{"mytho-max-l2-13b"},
 			},
+			ProviderZukijourney: {
+				Codenames: []string{"mythomax-l2-13b"},
+			},
 		},
 	}
 
@@ -1112,8 +1144,8 @@ var (
 		ModelMistralLarge,        // uncensored; i wish i could make this the default, but it's very slow
 		ModelMistralSmall,
 		ModelLlamaScout,
+		ModelLlamaMaverick,
 		ModelLlama405b, // unstable api
-		ModelLlama90b,  // very bad vision capabilities
 		ModelLlama70b,  // default - fastest with specdec, mostly uncensored, good for RP
 		ModelRogueRose, // good RP model
 		ModelGemma9b,
@@ -1162,6 +1194,7 @@ var (
 		ModelMistralSaba,
 		ModelLlama8b,
 		ModelLlama11b,
+		ModelLlama90b,
 
 		// TODO:
 		//ModelClaude3Haiku, // unstable api

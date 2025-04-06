@@ -484,7 +484,7 @@ func handleNarrationGenerate(client bot.Client, channelID snowflake.ID, messageI
 	}
 
 	// n=1
-	imgData, filename, err := processImageData(finalStatus.Generations[0].Img, tags)
+	imgData, filename, err := processImageData(finalStatus.Generations[0].Img, "narration")
 	if err != nil {
 		slog.Error("handleNarrationGenerate: failed to process image data", slog.Any("err", err), slog.String("id", id))
 		return

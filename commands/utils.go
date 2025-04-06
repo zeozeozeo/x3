@@ -8,13 +8,11 @@ import (
 	"net/http"
 	"net/url"
 	"path/filepath"
-	"regexp"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
 	"unicode"
-	"unicode/utf8"
 
 	"github.com/disgoorg/disgo/bot"
 	"github.com/disgoorg/disgo/discord"
@@ -279,35 +277,12 @@ func extractFilenameFromURL(rawURL string) (string, error) {
 	return filename, nil
 }
 
-var sanitizeRe1 = regexp.MustCompile(`[<>:"/\\|?*]`)
-var sanitizeRe2 = regexp.MustCompile(`_+`)
-
-// sanitizeFilename removes invalid characters and replaces spaces for filenames.
-func sanitizeFilename(name string) string {
-	sanitized := sanitizeRe1.ReplaceAllString(name, "")
-	sanitized = strings.ReplaceAll(sanitized, " ", "_")
-	sanitized = sanitizeRe2.ReplaceAllString(sanitized, "_")
-	sanitized = strings.Trim(sanitized, "_")
-	sanitized = strings.ToLower(sanitized)
-	return sanitized
-}
-
-// truncateFilename ensures the filename base (without extension) doesn't exceed a rune limit.
-func truncateFilename(name string, maxRunes int) string {
-	if utf8.RuneCountInString(name) <= maxRunes {
-		return name
-	}
-	runes := []rune(name)
-	return string(runes[:maxRunes])
-}
-
 // processImageData fetches or decodes image data and determines a safe filename.
-// It prioritizes the filename from the URL, falling back to a sanitized/truncated promptHint.
-func processImageData(imgSrc string, promptHint string) ([]byte, string, error) {
-	const maxFilenameRunes = 100
-
+func processImageData(imgSrc string, base string) ([]byte, string, error) {
+	if base == "" {
+		base = "image"
+	}
 	var body []byte
-	var filename string
 	var ext string
 	var err error
 
@@ -331,9 +306,7 @@ func processImageData(imgSrc string, promptHint string) ([]byte, string, error) 
 		urlFilename, _ := extractFilenameFromURL(imgSrc)
 		if urlFilename != "" {
 			ext = filepath.Ext(urlFilename)
-			filename = strings.TrimSuffix(urlFilename, ext)
 		}
-
 	} else {
 		// base64 encoded webp
 		body, err = base64.StdEncoding.DecodeString(imgSrc)
@@ -346,24 +319,5 @@ func processImageData(imgSrc string, promptHint string) ([]byte, string, error) 
 		ext = ".webp"
 	}
 
-	if filename == "" {
-		if promptHint == "" {
-			filename = "image"
-		} else {
-			filename = sanitizeFilename(promptHint)
-			filename = truncateFilename(filename, maxFilenameRunes)
-			if filename == "" {
-				filename = "image"
-			}
-		}
-	} else {
-		filename = sanitizeFilename(filename)
-		filename = truncateFilename(filename, maxFilenameRunes)
-		if filename == "" {
-			filename = "image"
-		}
-	}
-
-	finalFilename := filename + ext
-	return body, finalFilename, nil
+	return body, base + ext, nil
 }
