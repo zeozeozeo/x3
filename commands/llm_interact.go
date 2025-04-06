@@ -336,9 +336,7 @@ func handleLlmInteraction2(
 		realMeta, _ := persona.GetMetaByName(cache.PersonaMeta.Name)
 		disableRandomNarrations := realMeta.DisableImages
 		if strings.Contains(response, "<generate_image>") ||
-			(!disableRandomNarrations &&
-				horder.GetHorder().IsFree() &&
-				time.Since(GetNarrator().LastInteractionTime()) >= time.Minute) {
+			(!disableRandomNarrations && horder.GetHorder().IsFree()) {
 			narrationMessageID := messageID
 			if botMessage != nil {
 				narrationMessageID = botMessage.ID
