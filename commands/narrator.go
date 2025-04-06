@@ -52,12 +52,11 @@ func (n *Narrator) Run() {
 
 	for range n.ticker.C {
 		// check queue
-		n.mu.Lock()
 		if len(n.queue) == 0 {
-			n.mu.Unlock()
 			continue
 		}
 
+		n.mu.Lock()
 		qn := n.queue[0]
 		n.queue = n.queue[1:]
 		n.mu.Unlock()
