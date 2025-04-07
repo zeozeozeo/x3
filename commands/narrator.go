@@ -58,7 +58,6 @@ func (n *Narrator) Run() {
 
 		n.mu.Lock()
 		qn := n.queue[0]
-		n.queue = n.queue[1:]
 		n.mu.Unlock()
 
 		// request completion
@@ -82,5 +81,9 @@ func (n *Narrator) Run() {
 		if qn.callback != nil {
 			qn.callback(&qn.llmer, res)
 		}
+
+		n.mu.Lock()
+		n.queue = n.queue[1:]
+		n.mu.Unlock()
 	}
 }
