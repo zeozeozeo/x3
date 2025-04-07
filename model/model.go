@@ -66,6 +66,7 @@ const (
 	ProviderCloudflare  = "cloudflare"
 	ProviderCohere      = "cohere"
 	ProviderMNN         = "mnn"
+	ProviderSelfhosted  = "selfhosted"
 )
 
 type ModelProvider struct {
@@ -83,6 +84,7 @@ type Model struct {
 	Reasoning bool
 	Encoding  tokenizer.Encoding
 	Providers map[string]ModelProvider
+	IsLunaris bool
 }
 
 type ScoredProvider struct {
@@ -888,9 +890,13 @@ var (
 	}
 
 	ModelLunaris8b = Model{
-		Name:    "Llama 3 Lunaris 8B (RP)",
-		Command: "lunaris",
+		Name:      "Llama 3 Lunaris 8B (Selfhosted, RP)",
+		Command:   "lunaris",
+		IsLunaris: true,
 		Providers: map[string]ModelProvider{
+			ProviderSelfhosted: {
+				Codenames: []string{"L3-8B-Lunaris-v1-Q4_K_M"}, // https://huggingface.co/bartowski/L3-8B-Lunaris-v1-GGUF/blob/main/L3-8B-Lunaris-v1-Q4_K_M.gguf
+			},
 			ProviderElectron: {
 				Codenames: []string{"l3-lunaris-8b"},
 			},
@@ -1136,6 +1142,7 @@ var (
 	}
 
 	AllModels = []Model{
+		ModelLunaris8b,
 		ModelGpt4oMini,           // gptslop
 		ModelGpt4o,               // overly expensive gptslop
 		ModelGeminiFlash,         // this is insanely bad for coding
@@ -1160,10 +1167,9 @@ var (
 		ModelCommandA,
 		ModelDolphin3Mistral, // fully uncensored, good
 		ModelO3MiniLow,       // unstable
-		ModelClaudeSonnet,
 		// discord menu cutoff (25) - only useless models should go below this
+		ModelClaudeSonnet,
 		ModelMistralNemo,
-		ModelLunaris8b, // best 8b rp model
 		ModelAnubisPro105b,
 		ModelEuryale70b, // very unstable api
 		ModelLumimaid70b,
@@ -1206,6 +1212,7 @@ var (
 
 	// default errors are set for default order of trial
 	allProviders = []*ScoredProvider{
+		{Name: ProviderSelfhosted},
 		{Name: ProviderGroq},
 		{Name: ProviderGithub},
 		{Name: ProviderGoogle},
@@ -1319,6 +1326,13 @@ func (m Model) Client(provider string) (baseUrls []string, tokens []string, code
 		tokenEnvKey, apiVar = "X3_COHERE_TOKEN", cohereBaseURL
 	case ProviderMNN:
 		tokenEnvKey, apiVar = "X3_MNN_TOKEN", mnnBaseURL
+	case ProviderSelfhosted:
+		baseUrls = getEnvList("X3_SELFHOSTED_API_BASE")
+		tokens = getEnvList("X3_SELFHOSTED_API_TOKEN")
+		if len(baseUrls) != len(tokens) {
+			panic("X3_SELFHOSTED_API_BASE and X3_SELFHOSTED_API_TOKEN lists must be the same length")
+		}
+		return
 	default:
 		return nil, nil, nil
 	}

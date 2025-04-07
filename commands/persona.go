@@ -99,14 +99,14 @@ var PersonaCommand = discord.SlashCommandCreate{
 			Description: "Controls randomness in LLM predictions; 0 or 1 to reset",
 			Required:    false,
 			MinValue:    ptr(0.0),
-			MaxValue:    ptr(2.0),
+			MaxValue:    ptr(2.0 + 0.4), // remaps to 2.0
 		},
 		discord.ApplicationCommandOptionFloat{
 			Name:        "top_p",
 			Description: "Controls cumulative probability of token selection; 0 or 1 to reset",
 			Required:    false,
 			MinValue:    ptr(0.0),
-			MaxValue:    ptr(1.0),
+			MaxValue:    ptr(1.0 + 0.1), // remaps to 1.0
 		},
 		discord.ApplicationCommandOptionFloat{
 			Name:        "frequency_penalty",
@@ -203,6 +203,17 @@ func HandlePersona(event *handler.CommandEvent) error {
 	}
 
 	m := model.GetModelByName(dataModel)
+
+	// default settings for lunaris (TODO: maybe add per-model default settings instead of this HACK ?):
+	// temp = 1.4, top_p = 0.9
+	if m.IsLunaris {
+		if !hasTemperature {
+			dataTemperature = 1.4 + 0.4 // remaps to 1.4
+		}
+		if !hasTopP {
+			dataTopP = 1.0 // remaps to 0.9
+		}
+	}
 
 	// only query whitelist if we need to
 	inWhitelist := false

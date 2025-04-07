@@ -67,8 +67,8 @@ func OnMessageCreate(event *events.MessageCreate) {
 	if event.Message.Author.Bot || (event.GuildID != nil && db.IsChannelInBlacklist(*event.GuildID)) {
 		return
 	}
-	if event.Message.Content == "" {
-		return
+	if event.Message.Content == "" && len(event.Message.Attachments) == 0 {
+		return // might be a poll/pin message etc
 	}
 
 	// --- DM Handling ---

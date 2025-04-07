@@ -291,7 +291,7 @@ func (l *Llmer) requestCompletionInternal2(
 
 	completionStart := time.Now()
 
-	ctx, cancel := context.WithDeadline(context.Background(), completionStart.Add(20*time.Second))
+	ctx, cancel := context.WithDeadline(context.Background(), completionStart.Add(5*time.Minute))
 	defer cancel()
 
 	stream, err := client.CreateChatCompletionStream(ctx, req)
@@ -303,6 +303,7 @@ func (l *Llmer) requestCompletionInternal2(
 	var text strings.Builder
 	usage := Usage{}
 
+	//tokens := 0
 	for {
 		response, err := stream.Recv()
 		if errors.Is(err, io.EOF) {
@@ -319,9 +320,12 @@ func (l *Llmer) requestCompletionInternal2(
 			}
 		}
 		if len(response.Choices) == 0 {
-			slog.Warn("empty response", slog.Any("response", response))
 			continue
 		}
+		//tokens++
+		//if tokens%10 == 0 {
+		//	slog.Debug("stream progress", slog.Int("tokens", tokens), slog.Duration("in", time.Since(completionStart)), "text", text.String())
+		//}
 		text.WriteString(response.Choices[0].Delta.Content)
 	}
 
