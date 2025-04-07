@@ -243,9 +243,10 @@ func (h *Horder) Generate(model, prompt, negative string, steps, n int, cfgScale
 		Models: []string{
 			model,
 		},
-		NSFW:             ptr(nsfw),
-		CensorNSFW:       ptr(nsfw),
-		ExtraSlowWorkers: ptr(false),
+		NSFW:              ptr(nsfw),
+		CensorNSFW:        ptr(nsfw),
+		ExtraSlowWorkers:  ptr(false),
+		ReplacementFilter: ptr(true),
 	}
 
 	req, err := h.horde.PostAsyncImageGenerate(input)
