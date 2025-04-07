@@ -432,6 +432,11 @@ func handleNarrationGenerate(client bot.Client, channelID snowflake.ID, messageI
 	cfgScale := 7.0
 	clipSkip := 2
 
+	isPromptNSFW := horder.IsPromptNSFW(prompt)
+	if !isNSFW && isPromptNSFW {
+		return // prompt is nsfw, but channel is not
+	}
+
 	slog.Info("starting narration image generation", slog.String("model", model), slog.String("prompt", prompt), slog.String("channel_id", channelID.String()))
 
 	id, err := h.Generate(model, prompt, defaultNegativePrompt, steps, n, cfgScale, clipSkip, isNSFW)
@@ -485,10 +490,18 @@ func handleNarrationGenerate(client bot.Client, channelID snowflake.ID, messageI
 		return
 	}
 
+	slog.Info("finalStatus generation metadata", slog.Any("metadata", finalStatus.Generations[0].GenMetadata))
+
 	nsfw, csam := horder.GetCensorship(finalStatus.Generations[0])
 	if csam {
 		slog.Warn("handleNarrationGenerate: generation contains CSAM", slog.String("id", id), slog.String("prompt", prompt))
 		return
+	}
+	if isPromptNSFW {
+		nsfw = true
+	}
+	if !isNSFW && nsfw {
+		return // don't send nsfw images to non-nsfw channels
 	}
 
 	// the filename MUST start with "narration", that's how addContextMessagesIfPossible knows to ignore it

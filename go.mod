@@ -14,6 +14,7 @@ require (
 
 require (
 	github.com/barasher/go-exiftool v1.10.0
+	github.com/cloudflare/ahocorasick v0.0.0-20240916140611-054963ec9396
 	github.com/disgoorg/json v1.2.0 // indirect
 	github.com/disgoorg/snowflake/v2 v2.0.3
 	github.com/dustin/go-humanize v1.0.1

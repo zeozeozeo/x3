@@ -199,6 +199,11 @@ func HandleGenerate(event *handler.CommandEvent) error {
 		prompt = defaultPromptPrepend + tags
 	}
 
+	isPromptNSFW := horder.IsPromptNSFW(prompt)
+	if isPromptNSFW && !isNSFW {
+		return updateInteractionError(event, "prompt contains NSFW content (this channel is not NSFW)")
+	}
+
 	id, err := horder.GetHorder().Generate(model, prompt, negative, steps, n, cfgScale, clipSkip, isNSFW)
 	if err != nil {
 		return updateInteractionError(event, err.Error())
@@ -328,6 +333,12 @@ func HandleGenerate(event *handler.CommandEvent) error {
 		if csam {
 			slog.Warn("HandleGenerate: generation contains CSAM", slog.String("id", id), slog.String("prompt", prompt))
 			continue
+		}
+		if isPromptNSFW {
+			nsfw = true
+		}
+		if nsfw && !isNSFW {
+			continue // avoid sending NSFW images
 		}
 
 		files = append(files, &discord.File{
