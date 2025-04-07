@@ -156,11 +156,10 @@ func HandleGenerate(event *handler.CommandEvent) error {
 
 	// check if its an nsfw channel; if it's not we'll rely on stablehorde to censor nsfw content
 	channel, err := event.Client().Rest().GetChannel(event.Channel().ID())
-	if err != nil {
-		return err
-	}
-	if guildChannel, ok := channel.(discord.GuildMessageChannel); ok {
-		isNSFW = guildChannel.NSFW()
+	if err == nil {
+		if guildChannel, ok := channel.(discord.GuildMessageChannel); ok {
+			isNSFW = guildChannel.NSFW()
+		}
 	}
 
 	if err := event.DeferCreateMessage(ephemeral); err != nil {
@@ -325,10 +324,21 @@ func HandleGenerate(event *handler.CommandEvent) error {
 			continue
 		}
 
+		nsfw, csam := horder.GetCensorship(gen)
+		if csam {
+			slog.Warn("HandleGenerate: generation contains CSAM", slog.String("id", id), slog.String("prompt", prompt))
+			continue
+		}
+
 		files = append(files, &discord.File{
 			Reader: bytes.NewReader(imgData),
 			Name:   filename,
+			Flags:  makeSpoilerFlag(nsfw),
 		})
+	}
+
+	if len(files) == 0 {
+		return event.DeleteInteractionResponse()
 	}
 
 	var sb strings.Builder

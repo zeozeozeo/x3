@@ -419,10 +419,10 @@ func handleNarrationGenerate(client bot.Client, channelID snowflake.ID, messageI
 
 	isNSFW := true
 	channel, err := client.Rest().GetChannel(channelID)
-	if err != nil {
-		slog.Error("handleNarrationGenerate: failed to get channel details", slog.Any("err", err), slog.String("channel_id", channelID.String()))
-	} else if guildChannel, ok := channel.(discord.GuildMessageChannel); ok {
-		isNSFW = guildChannel.NSFW()
+	if err == nil {
+		if guildChannel, ok := channel.(discord.GuildMessageChannel); ok {
+			isNSFW = guildChannel.NSFW()
+		}
 	}
 
 	model := defaultImageModel
@@ -485,6 +485,12 @@ func handleNarrationGenerate(client bot.Client, channelID snowflake.ID, messageI
 		return
 	}
 
+	nsfw, csam := horder.GetCensorship(finalStatus.Generations[0])
+	if csam {
+		slog.Warn("handleNarrationGenerate: generation contains CSAM", slog.String("id", id), slog.String("prompt", prompt))
+		return
+	}
+
 	// the filename MUST start with "narration", that's how addContextMessagesIfPossible knows to ignore it
 	imgData, filename, err := processImageData(finalStatus.Generations[0].Img, "narration")
 	if err != nil {
@@ -495,7 +501,7 @@ func handleNarrationGenerate(client bot.Client, channelID snowflake.ID, messageI
 	// send the image as a reply
 	_, err = client.Rest().CreateMessage(channelID, discord.NewMessageCreateBuilder().
 		SetContentf("-# %s", prompt).
-		SetFiles(&discord.File{Name: filename, Reader: bytes.NewReader(imgData)}).
+		SetFiles(&discord.File{Name: filename, Reader: bytes.NewReader(imgData), Flags: makeSpoilerFlag(nsfw)}).
 		SetMessageReference(&discord.MessageReference{MessageID: &messageID, ChannelID: &channelID}).
 		SetAllowedMentions(&discord.AllowedMentions{RepliedUser: false}).
 		Build())

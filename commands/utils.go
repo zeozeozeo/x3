@@ -321,3 +321,10 @@ func processImageData(imgSrc string, base string) ([]byte, string, error) {
 
 	return body, base + ext, nil
 }
+
+func makeSpoilerFlag(isSpoiler bool) discord.FileFlags {
+	if isSpoiler {
+		return discord.FileFlagSpoiler
+	}
+	return discord.FileFlagsNone
+}
