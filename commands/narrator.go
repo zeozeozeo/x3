@@ -2,6 +2,7 @@ package commands
 
 import (
 	"log/slog"
+	"strings" // Added for buffering
 	"sync"
 	"time"
 
@@ -65,25 +66,72 @@ func (n *Narrator) Run() {
 		meta := persona.PersonaStableNarrator
 		p := persona.GetPersonaByMeta(meta, nil, "")
 		qn.llmer.SetPersona(p) // TODO: custom personas
-		res, _, err := qn.llmer.RequestCompletion(model.GetModelByName(meta.Model), nil, meta.Settings, qn.prepend)
+		// RequestCompletion now returns (chan llm.StreamChunk, error)
+		llmChan, err := qn.llmer.RequestCompletion(model.GetModelByName(meta.Model), nil, meta.Settings, qn.prepend)
 
 		// update last interaction time
 		n.mu.Lock()
 		n.lastInteraction = time.Now()
 		n.mu.Unlock()
 
-		if err != nil {
-			slog.Error("narrator: failed to request completion", slog.Any("err", err))
+		if err != nil { // Handle immediate error from RequestCompletion
+			slog.Error("narrator: failed to initiate stream request", slog.Any("err", err))
+			// Remove the failed item from the queue before continuing
+			n.mu.Lock()
+			if len(n.queue) > 0 && &n.queue[0] == &qn { // Ensure we remove the correct item
+				n.queue = n.queue[1:]
+			}
+			n.mu.Unlock()
 			continue
 		}
+
+		// Consume stream and buffer response
+		var fullResponse strings.Builder
+		var streamErr error
+		slog.Debug("narrator: consuming stream")
+		for chunk := range llmChan {
+			if chunk.Err != nil {
+				streamErr = chunk.Err
+				slog.Error("narrator: stream error received", slog.Any("err", streamErr))
+				break
+			}
+			if chunk.Content != "" {
+				fullResponse.WriteString(chunk.Content)
+			}
+			if chunk.Done {
+				// We don't need usage info here, just wait for Done
+				break
+			}
+		}
+		slog.Debug("narrator: finished consuming stream")
+
+		// Handle stream error if occurred
+		if streamErr != nil {
+			slog.Error("narrator: stream failed during consumption", slog.Any("err", streamErr))
+			// Remove the failed item from the queue before continuing
+			n.mu.Lock()
+			if len(n.queue) > 0 && &n.queue[0] == &qn { // Ensure we remove the correct item
+				n.queue = n.queue[1:]
+			}
+			n.mu.Unlock()
+			continue
+		}
+
+		// Use the buffered response
+		res := fullResponse.String()
 
 		// callback
 		if qn.callback != nil {
 			qn.callback(&qn.llmer, res)
 		}
 
+		// Remove the processed item from the queue
 		n.mu.Lock()
-		n.queue = n.queue[1:]
+		if len(n.queue) > 0 && &n.queue[0] == &qn { // Ensure we remove the correct item
+			n.queue = n.queue[1:]
+		} else {
+			slog.Warn("narrator: queue state changed unexpectedly during processing")
+		}
 		n.mu.Unlock()
 	}
 }

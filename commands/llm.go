@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log/slog"
 	"strings"
+	// "sync" // Removed unused import
 	"unicode/utf8"
 
 	"github.com/disgoorg/disgo/discord"
@@ -151,13 +152,46 @@ func HandleLlm(event *handler.CommandEvent, m *model.Model) error {
 		slog.Int("num_messages", llmer.NumMessages()),
 		slog.String("prepend", cache.PersonaMeta.Prepend),
 	)
-	response, usage, err := llmer.RequestCompletion(targetModel, nil, cache.PersonaMeta.Settings, cache.PersonaMeta.Prepend) // Pass nil for usernames map as it's not easily available here
+	// RequestCompletion now returns (chan llm.StreamChunk, error)
+	llmChan, err := llmer.RequestCompletion(targetModel, nil, cache.PersonaMeta.Settings, cache.PersonaMeta.Prepend) // Pass nil for usernames map
 	if err != nil {
-		slog.Error("LLM request failed", slog.Any("err", err))
-		return updateInteractionError(event, fmt.Sprintf("LLM request failed: %s", err.Error())) // Use updateInteractionError as we deferred
+		slog.Error("LLM stream request failed immediately", slog.Any("err", err))
+		return updateInteractionError(event, fmt.Sprintf("LLM request failed: %s", err.Error()))
 	}
-	slog.Debug("LLM response received", slog.Int("response_len", len(response)), slog.String("usage", usage.String()))
-	// --- End LLM Request ---
+	slog.Debug("LLM stream channel received for slash command")
+
+	// --- Consume Stream and Buffer Response ---
+	var fullResponse strings.Builder
+	var finalUsage llm.Usage
+	var streamErr error
+	slog.Debug("Starting LLM stream consumption loop for slash command")
+	for chunk := range llmChan {
+		if chunk.Err != nil {
+			streamErr = chunk.Err
+			slog.Error("LLM stream error received during slash command", slog.Any("err", streamErr))
+			break // Stop consuming on error
+		}
+		if chunk.Content != "" {
+			fullResponse.WriteString(chunk.Content)
+		}
+		if chunk.Done {
+			finalUsage = chunk.Usage
+			slog.Debug("LLM stream 'Done' chunk received for slash command", slog.String("usage", finalUsage.String()))
+			break // Stop consuming when done
+		}
+	}
+	slog.Debug("Finished LLM stream consumption loop for slash command")
+
+	// Handle stream error if it occurred
+	if streamErr != nil {
+		return updateInteractionError(event, fmt.Sprintf("LLM stream failed: %s", streamErr.Error()))
+	}
+
+	// Use the buffered response and usage
+	response := fullResponse.String()
+	usage := finalUsage // Rename for consistency with the rest of the function
+	slog.Debug("LLM full response buffered", slog.Int("response_len", len(response)), slog.String("usage", usage.String()))
+	// --- End LLM Request & Buffering ---
 
 	// Update stats
 	cache.Usage = cache.Usage.Add(usage)

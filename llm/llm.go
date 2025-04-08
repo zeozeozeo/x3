@@ -51,6 +51,14 @@ func (u Usage) IsEmpty() bool {
 	return u.PromptTokens == 0 && u.ResponseTokens == 0 && u.TotalTokens == 0
 }
 
+// StreamChunk represents a piece of data received from the LLM stream.
+type StreamChunk struct {
+	Content string
+	Err     error
+	Done    bool // Indicates the stream is finished
+	Usage   Usage // Sent with the final Done chunk
+}
+
 type Llmer struct {
 	Messages []Message `json:"messages"`
 }
@@ -235,7 +243,7 @@ func (l Llmer) convertMessages(hasVision bool, isLlama bool, prepend string) []o
 	return messages
 }
 
-func (l Llmer) estimateUsage(m model.Model) Usage {
+func (l Llmer) EstimateUsage(m model.Model) Usage {
 	start := time.Now()
 	var usage Usage
 	codec := m.Tokenizer()
@@ -274,7 +282,7 @@ func (l *Llmer) requestCompletionInternal2(
 	settings persona.InferenceSettings,
 	client *openai.Client,
 	prepend string,
-) (string, Usage, error) {
+) chan StreamChunk {
 	req := openai.ChatCompletionRequest{
 		Model: codename,
 		// google api doesn't support image URIs, WTF google?
@@ -289,86 +297,74 @@ func (l *Llmer) requestCompletionInternal2(
 		Seed:             settings.Seed,
 	}
 
-	completionStart := time.Now()
+	chunkChan := make(chan StreamChunk, 1) // Buffered channel might help slightly
 
-	ctx, cancel := context.WithDeadline(context.Background(), completionStart.Add(5*time.Minute))
-	defer cancel()
+	go func() {
+		defer close(chunkChan)
+		completionStart := time.Now()
+		ctx, cancel := context.WithDeadline(context.Background(), completionStart.Add(5*time.Minute))
+		defer cancel()
 
-	stream, err := client.CreateChatCompletionStream(ctx, req)
-	if err != nil {
-		return "", Usage{}, err
-	}
-	defer stream.Close()
-
-	var text strings.Builder
-	usage := Usage{}
-
-	//tokens := 0
-	for {
-		response, err := stream.Recv()
-		if errors.Is(err, io.EOF) {
-			break
-		}
+		stream, err := client.CreateChatCompletionStream(ctx, req)
 		if err != nil {
-			return text.String(), Usage{}, err
+			chunkChan <- StreamChunk{Err: fmt.Errorf("failed to create stream: %w", err), Done: true}
+			return
 		}
-		if response.Usage != nil {
-			usage = Usage{
-				PromptTokens:   response.Usage.PromptTokens,
-				ResponseTokens: response.Usage.CompletionTokens,
-				TotalTokens:    response.Usage.TotalTokens,
+		defer stream.Close()
+
+		var finalUsage Usage
+		var fullResponseBuilder strings.Builder // Keep track for logging/debugging if needed
+
+		for {
+			response, err := stream.Recv()
+			if errors.Is(err, io.EOF) {
+				slog.Debug("LLM stream finished", slog.Duration("duration", time.Since(completionStart)), slog.String("model", m.Name), slog.String("provider", provider))
+				// Send final "Done" chunk with usage
+				chunkChan <- StreamChunk{Done: true, Usage: finalUsage}
+				break
+			}
+			if err != nil {
+				chunkChan <- StreamChunk{Err: fmt.Errorf("stream recv error: %w", err), Done: true}
+				return
+			}
+
+			// Process Usage if available
+			if response.Usage != nil {
+				finalUsage = Usage{
+					PromptTokens:   response.Usage.PromptTokens,
+					ResponseTokens: response.Usage.CompletionTokens, // Note: This is CompletionTokens in stream
+					TotalTokens:    response.Usage.TotalTokens,
+				}
+				// Don't send usage mid-stream, only with the final chunk
+			}
+
+			// Process Content if available
+			if len(response.Choices) > 0 {
+				content := response.Choices[0].Delta.Content
+				if content != "" {
+					fullResponseBuilder.WriteString(content) // For potential future logging/debugging
+					chunkChan <- StreamChunk{Content: content}
+				}
 			}
 		}
-		if len(response.Choices) == 0 {
-			continue
-		}
-		//tokens++
-		//if tokens%10 == 0 {
-		//	slog.Debug("stream progress", slog.Int("tokens", tokens), slog.Duration("in", time.Since(completionStart)), "text", text.String())
-		//}
-		text.WriteString(response.Choices[0].Delta.Content)
-	}
+		// Post-stream processing (like unescaping, trimming, history add) is MOVED to the caller.
+		// Logging the full response here might be too verbose for production.
+		// slog.Info("full response received", slog.String("text", fullResponseBuilder.String()), slog.Duration("duration", time.Since(completionStart)), slog.String("model", m.Name), slog.String("provider", provider))
 
-	// if the api provider is retarded enough to use HTML escapes like &lt; in a fucking API,
-	// strip the fuckers off
-	unescaped := html.UnescapeString(text.String())
-	unescaped = strings.TrimSpace(unescaped)
+	}()
 
-	// if the model is dumb enough to prepend usernames, cut them off
-	if usernames == nil {
-		usernames = map[string]bool{}
-	}
-	usernames["x3"] = true
-	for username := range usernames {
-		prefix := username + ": "
-		for strings.HasPrefix(strings.ToLower(unescaped), strings.ToLower(prefix)) {
-			unescaped = unescaped[len(prefix):]
-		}
-	}
+	return chunkChan
+}
 
-	if m.Name == model.ModelLlama90b.Name || m.Name == model.ModelLlama70b.Name {
-		// this model is so stupid that it often ignores the instruction to
-		// not put a space before the tilde
-		replacer := strings.NewReplacer(
-			" ~", "~",
-			">///&", ">///<",
-		)
-		unescaped = replacer.Replace(unescaped)
-	}
-	// Nous Hermes 3 is dumb, too
-	unescaped = strings.TrimSuffix(unescaped, "@ [email protected]")
-	unescaped = strings.TrimSuffix(unescaped, "[email protected] ;")
-	unescaped = strings.TrimSuffix(unescaped, "[email protected];")
-	// and trim spaces again after our checks, for good measure
-	unescaped = strings.TrimSpace(unescaped)
-	slog.Info("response", slog.String("text", text.String()), slog.String("unescaped", unescaped), slog.Duration("duration", time.Since(completionStart)), slog.String("model", m.Name), slog.String("provider", provider))
-
+// AddToHistory adds the completed message content to the LLM's history.
+// This should be called by the consumer after the stream is fully processed and post-processed.
+func (l *Llmer) AddToHistory(content string) {
+	// Note: Merging logic (lines 109-115) might need reconsideration based on how streaming is handled upstream.
+	// Assuming the caller provides the final, processed content for a single assistant turn.
 	l.Messages = append(l.Messages, Message{
 		Role:    RoleAssistant,
-		Content: unescaped,
+		Content: content, // Use the already processed content
 	})
-
-	return unescaped, usage, nil
 }
 
 func (l *Llmer) requestCompletionInternal(
@@ -377,7 +373,7 @@ func (l *Llmer) requestCompletionInternal(
 	usernames map[string]bool,
 	settings persona.InferenceSettings,
 	prepend string,
-) (string, Usage, error) {
+) (chan StreamChunk, error) { // Return error for immediate failures before streaming
 	slog.Info(
 		"request completion.. message history follows..",
 		slog.String("model", m.Name),
@@ -392,12 +388,12 @@ func (l *Llmer) requestCompletionInternal(
 
 	baseUrls, tokens, codenames := m.Client(provider)
 	if len(baseUrls) == 0 || len(tokens) == 0 || len(codenames) == 0 {
-		return "", Usage{}, fmt.Errorf("no valid client configurations for provider %s", provider)
+		return nil, fmt.Errorf("no valid client configurations for provider %s", provider)
 	}
 
 	// Validate Cloudflare configuration: must have 1 base URL or matching number of URLs and tokens
 	if provider == model.ProviderCloudflare && len(baseUrls) != 1 && len(baseUrls) != len(tokens) {
-		return "", Usage{}, fmt.Errorf("invalid Cloudflare config: must have 1 base URL or matching number of base URLs (%d) and tokens (%d)", len(baseUrls), len(tokens))
+		return nil, fmt.Errorf("invalid Cloudflare config: must have 1 base URL or matching number of base URLs (%d) and tokens (%d)", len(baseUrls), len(tokens))
 	}
 
 	var lastErr error
@@ -425,25 +421,20 @@ func (l *Llmer) requestCompletionInternal(
 
 			for _, codename := range codenames {
 				slog.Info("attempting request", "provider", provider, "baseUrl", baseUrl, "codename", codename)
-				res, usage, err := l.requestCompletionInternal2(m, codename, provider, usernames, settings, client, prepend)
-				if err == nil {
-					// we got a response, but if we used a prefill, we should indicate that it was used
-					// (prepend it to the response in bold)
-					if prepend != "" {
-						res = fmt.Sprintf("**%s** %s", strings.ReplaceAll(strings.TrimSpace(prepend), "**", ""), res)
-					}
-					return res, usage, nil
-				}
-				lastErr = err // Store the last error encountered
-				slog.Warn("request failed, trying next config", "provider", provider, "baseUrl", baseUrl, "codename", codename, "error", err)
+				// requestCompletionInternal2 now returns a channel immediately.
+				// Errors during stream setup are handled inside its goroutine and sent via the channel.
+				// We assume setup is successful if we get a channel back.
+				chunkChan := l.requestCompletionInternal2(m, codename, provider, usernames, settings, client, prepend)
+				return chunkChan, nil // Return the channel on the first successful attempt
 			}
 		}
 	}
 
-	return "", Usage{}, fmt.Errorf("all configurations for provider %s failed: %w", provider, lastErr) // all baseUrls/tokens/codenames errored
+	return nil, fmt.Errorf("all configurations for provider %s failed: %w", provider, lastErr) // all baseUrls/tokens/codenames errored
 }
 
-func (l *Llmer) RequestCompletion(m model.Model, usernames map[string]bool, settings persona.InferenceSettings, prepend string) (res string, usage Usage, err error) {
+// RequestCompletion attempts to get a completion stream from the best available provider.
+func (l *Llmer) RequestCompletion(m model.Model, usernames map[string]bool, settings persona.InferenceSettings, prepend string) (chan StreamChunk, error) {
 	settings.Remap() // remap values (1.0 temp -> 0.6 temp)
 
 	for _, provider := range model.ScoreProviders(m.Reasoning) {
@@ -457,37 +448,76 @@ func (l *Llmer) RequestCompletion(m model.Model, usernames map[string]bool, sett
 		}
 		slog.Info("requesting completion", slog.String("provider", provider.Name), slog.Int("providerErrors", provider.Errors), slog.Int("retries", retries))
 
-		res, usage, err = l.requestCompletionInternal(m, provider.Name, usernames, settings.Fixup(), prepend)
-		if res == "" {
-			slog.Warn("got an empty response from requestCompletionInternal", slog.String("provider", provider.Name))
-			retries++
+		// requestCompletionInternal now returns (chan StreamChunk, error)
+		chunkChan, err := l.requestCompletionInternal(m, provider.Name, usernames, settings.Fixup(), prepend)
+
+		// Handle immediate errors from requestCompletionInternal (e.g., config issues)
+		if err != nil {
+			slog.Warn("(provider tests) failed to request completion", slog.String("provider", provider.Name), slog.Any("err", err))
 			provider.Errors++
-			goto retry
+			continue // Try next provider
 		}
 
-		if usage.IsEmpty() {
-			usage = l.estimateUsage(m)
-		} else if usage.ResponseTokens <= 1 {
-			// unrealistic; openrouter api responds with response tokens set to 1
-			estimatedUsage := l.estimateUsage(m)
-			usage.ResponseTokens = estimatedUsage.ResponseTokens
+		// If we got a channel, return it immediately. Stream errors will be handled by the consumer.
+		if chunkChan != nil {
+			return chunkChan, nil
 		}
 
-		slog.Info("request usage", slog.String("usage", usage.String()))
-		if err == nil {
-			return
-		}
-		slog.Warn("(provider tests) failed to request completion", slog.String("provider", provider.Name), slog.Any("err", err))
+		// If chunkChan is nil but err is also nil (shouldn't happen with current logic, but defensively check)
+		slog.Warn("requestCompletionInternal returned nil channel and nil error", slog.String("provider", provider.Name))
+		retries++
 		provider.Errors++
+		goto retry
 	}
 
-	// If we're here, we're probably censored
-	// Not good, especially for a bot that deals with random conversations, which is what we are
-	// so remove the latest message
-	if len(l.Messages) > 0 {
-		slog.Warn("removing last message due to censorship")
-		l.Messages = l.Messages[:len(l.Messages)-1]
+	// If we exhausted all providers without getting a channel
+	finalErr := fmt.Errorf("all providers failed to initiate stream")
+	slog.Error("failed to get LLM stream from any provider", slog.Any("err", finalErr)) // Log the final consolidated error
+
+	// Censorship handling needs rethinking in streaming context.
+	// Maybe check the final error from the channel consumer?
+	// For now, just return the error indicating no stream could be started.
+	// if len(l.Messages) > 0 {
+	// 	slog.Warn("removing last message due to censorship/failure")
+	// 	l.Messages = l.Messages[:len(l.Messages)-1]
+	// }
+
+	return nil, finalErr
+}
+
+// Helper function for post-processing (moved from internal func)
+func PostProcessResponse(text string, usernames map[string]bool, m model.Model) string {
+	// HTML unescape
+	unescaped := html.UnescapeString(text)
+	unescaped = strings.TrimSpace(unescaped)
+
+	// Username prefix trimming
+	if usernames == nil {
+		usernames = map[string]bool{}
+	}
+	usernames["x3"] = true // Ensure bot's own name is checked
+	for username := range usernames {
+		prefix := username + ": "
+		// Case-insensitive check
+		if len(unescaped) >= len(prefix) && strings.EqualFold(unescaped[:len(prefix)], prefix) {
+			unescaped = unescaped[len(prefix):]
+			unescaped = strings.TrimSpace(unescaped) // Trim again after removal
+		}
 	}
 
-	return
+	// Model-specific quirks
+	if m.Name == model.ModelLlama90b.Name || m.Name == model.ModelLlama70b.Name {
+		replacer := strings.NewReplacer(
+			" ~", "~",
+			">///&", ">///<", // Example quirk
+		)
+		unescaped = replacer.Replace(unescaped)
+	}
+	// Other model quirks
+	unescaped = strings.TrimSuffix(unescaped, "@ [email protected]") // Example quirk
+	unescaped = strings.TrimSuffix(unescaped, "[email protected] ;")
+	unescaped = strings.TrimSuffix(unescaped, "[email protected];")
+
+	// Final trim
+	return strings.TrimSpace(unescaped)
 }

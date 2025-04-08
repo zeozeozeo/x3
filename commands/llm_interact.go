@@ -2,6 +2,7 @@ package commands
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -10,7 +11,6 @@ import (
 	"strings"
 	"sync"
 	"time"
-
 	"unicode/utf8"
 
 	"github.com/disgoorg/disgo/bot"
@@ -30,6 +30,7 @@ var (
 )
 
 // replaceLlmTagsWithNewlines replaces <new_message> tags with newlines and handles <memory> tags.
+// This is used for post-processing the *full* response, not during streaming splits.
 func replaceLlmTagsWithNewlines(response string, userID snowflake.ID) string {
 	var b strings.Builder
 	messages, memories := splitLlmTags(response)
@@ -48,64 +49,97 @@ func replaceLlmTagsWithNewlines(response string, userID snowflake.ID) string {
 
 // splitLlmTags splits the response by <new_message> and extracts <memory> tags.
 func splitLlmTags(response string) (messages []string, memories []string) {
-	for content := range strings.SplitSeq(response, "<new_message>") {
-		content = strings.TrimSpace(content)
-		if content == "" {
-			continue
+	// This function is primarily for extracting memories after the full response is received.
+	// The <new_message> splitting for Discord messages is handled during the streaming process itself.
+	currentMessage := ""
+	remaining := response
+
+	for {
+		memStartIdx := strings.Index(remaining, "<memory>")
+		memEndIdx := strings.Index(remaining, "</memory>")
+		tagStartIdx := strings.Index(remaining, "<new_message>") // Also check for new_message
+
+		// Find the earliest tag
+		firstTagIdx := -1
+		firstTagType := "" // "memory" or "new_message"
+
+		if memStartIdx != -1 {
+			firstTagIdx = memStartIdx
+			firstTagType = "memory"
+		}
+		if tagStartIdx != -1 && (firstTagIdx == -1 || tagStartIdx < firstTagIdx) {
+			firstTagIdx = tagStartIdx
+			firstTagType = "new_message"
 		}
 
-		startIdx := strings.Index(content, "<memory>")
-		endIdx := strings.Index(content, "</memory>")
+		if firstTagIdx == -1 {
+			// No more tags found
+			currentMessage += remaining
+			break
+		}
 
-		if startIdx != -1 && endIdx != -1 && startIdx < endIdx {
-			// Extract memory
-			memory := strings.TrimSpace(content[startIdx+len("<memory>") : endIdx])
-			if memory != "" {
-				memories = append(memories, memory)
-			}
+		// Add content before the tag to the current message part
+		currentMessage += remaining[:firstTagIdx]
 
-			// Extract content before and after memory tag
-			beforeMemory := strings.TrimSpace(content[:startIdx])
-			afterMemory := strings.TrimSpace(content[endIdx+len("</memory>"):])
+		if firstTagType == "memory" {
+			if memEndIdx != -1 && memStartIdx < memEndIdx {
+				// Extract memory
+				memory := strings.TrimSpace(remaining[memStartIdx+len("<memory>") : memEndIdx])
+				if memory != "" {
+					memories = append(memories, memory)
+				}
+				// Update remaining content
+				remaining = remaining[memEndIdx+len("</memory>"):]
+			} else {
+				// Malformed memory tag, skip it and continue processing
+				currentMessage += remaining[memStartIdx : memStartIdx+len("<memory>")] // Keep the opening tag
+				remaining = remaining[memStartIdx+len("<memory>"):]
+			}
+		} else { // firstTagType == "new_message"
+			// Finalize the current message part before the tag
+			trimmedMsg := strings.TrimSpace(currentMessage)
+			if trimmedMsg != "" {
+				messages = append(messages, trimmedMsg)
+			}
+			currentMessage = "" // Start a new message part
 
-			if beforeMemory != "" {
-				messages = append(messages, beforeMemory)
-			}
-			if afterMemory != "" {
-				// Recursively split the part after memory in case of multiple tags
-				subMessages, subMemories := splitLlmTags(afterMemory)
-				messages = append(messages, subMessages...)
-				memories = append(memories, subMemories...)
-			}
-		} else {
-			messages = append(messages, content)
+			// Update remaining content
+			remaining = remaining[tagStartIdx+len("<new_message>"):]
 		}
 	}
+
+	// Add the last message part if it's not empty
+	trimmedMsg := strings.TrimSpace(currentMessage)
+	if trimmedMsg != "" {
+		messages = append(messages, trimmedMsg)
+	}
+
+	// If no messages were extracted but the original response wasn't empty (e.g., only memory tags)
+	if len(messages) == 0 && strings.TrimSpace(response) != "" && len(memories) > 0 {
+		// This case means the response only contained memory tags or text within them.
+		// We don't need to add an empty message here as the primary goal is memory extraction.
+	}
+
 	return
 }
 
 // handleLlmInteraction2 handles the core logic for generating and sending LLM responses.
-// It takes various parameters to control context, regeneration, and interaction type.
-// If isRegenerate is true and err is nil, the first return is the jump url to the edited message.
-// Doesn't call SendTyping!
 func handleLlmInteraction2(
 	client bot.Client,
 	channelID,
-	messageID snowflake.ID, // ID of the triggering message (user message or interaction)
-	content string, // Content of the triggering message (can be empty for regenerate/time interaction)
-	username string, // Username of the triggering user
-	userID snowflake.ID, // ID of the triggering user
-	attachments []discord.Attachment, // Attachments from the triggering message
-	timeInteraction bool, // Whether this is a proactive time-based interaction
-	isRegenerate bool, // Whether to regenerate the last response
-	regeneratePrepend string, // Text to prepend to the regenerated response
-	preMsgWg *sync.WaitGroup, // WaitGroup to wait on before sending the message (e.g., for typing indicator)
-	reference *discord.Message, // Message being replied to (if any)
-) (string, error) { // Returns jumpURL (if regenerating) and error
+	messageID snowflake.ID, // ID of the triggering message
+	content string,
+	username string,
+	userID snowflake.ID,
+	attachments []discord.Attachment,
+	timeInteraction bool,
+	isRegenerate bool,
+	regeneratePrepend string,
+	preMsgWg *sync.WaitGroup,
+	reference *discord.Message,
+) (string, error) {
 	cache := db.GetChannelCache(channelID)
 
-	// Handle character card logic first if applicable
-	// Note: handleCard might modify the cache (IsFirstMes, NextMes) and writes it.
 	exit, err := handleCard(client, channelID, messageID, cache, preMsgWg)
 	if err != nil {
 		slog.Error("handleCard failed", slog.Any("err", err), slog.String("channel_id", channelID.String()))
@@ -113,241 +147,578 @@ func handleLlmInteraction2(
 	}
 	if exit {
 		slog.Debug("handleCard indicated exit", slog.String("channel_id", channelID.String()))
-		return "", nil // Card message was sent, no further LLM interaction needed now.
+		return "", nil
 	}
 
 	llmer := llm.NewLlmer()
-
-	// Fetch surrounding messages for context
-	// Note: addContextMessagesIfPossible modifies the llmer by adding messages.
 	numCtxMessages, usernames, lastResponseMessage, lastAssistantMessageID, lastUserID := addContextMessagesIfPossible(
-		client,
-		llmer,
-		channelID,
-		messageID,
-		cache.ContextLength,
+		client, llmer, channelID, messageID, cache.ContextLength,
 	)
 	slog.Debug("interaction; added context messages", slog.Int("added", numCtxMessages), slog.Int("count", llmer.NumMessages()))
 
-	// --- Input Validation and Error Handling ---
+	// --- Input Validation ---
 	if timeInteraction && numCtxMessages == 0 {
-		slog.Warn("time interaction triggered in empty channel", slog.String("channel_id", channelID.String()))
 		return "", errTimeInteractionNoMessages
 	}
 	if isRegenerate && lastResponseMessage == nil {
-		slog.Warn("regenerate called but no previous assistant message found", slog.String("channel_id", channelID.String()))
 		return "", errRegenerateNoMessage
 	}
 	if timeInteraction && userID == 0 {
 		if lastUserID == 0 {
-			slog.Error("rime interaction failed: cannot determine target user ID", slog.String("channel_id", channelID.String()))
 			return "", errors.New("cannot determine target user for time interaction")
 		}
-		userID = lastUserID // Use the ID of the last user who sent a message
+		userID = lastUserID
 		slog.Debug("inferred user ID for time interaction", slog.String("user_id", userID.String()))
 	}
 	// --- End Validation ---
 
-	// Get persona using the determined userID
 	p := persona.GetPersonaByMeta(cache.PersonaMeta, db.GetMemories(userID), username)
 
-	// Add the current user message/interaction content if provided
 	if content != "" {
-		// Avoid formatting reply if the reference is the message we're about to regenerate
 		if reference != nil && isRegenerate && reference.ID == lastResponseMessage.ID {
 			reference = nil
 		}
-		// Avoid formatting reply if the reference is the last assistant message (prevents self-reply formatting)
 		if reference != nil && reference.ID == lastAssistantMessageID {
 			reference = nil
 		}
 		llmer.AddMessage(llm.RoleUser, formatMsg(content, username, reference), messageID)
-		addImageAttachments(llmer, attachments) // Add attachments from the *current* message
+		addImageAttachments(llmer, attachments)
 	}
 
-	// Handle regeneration logic
 	if isRegenerate {
-		// Remove messages up to (but not including) the message being regenerated
 		llmer.LobotomizeUntilID(lastResponseMessage.ID)
 		slog.Debug("regenerating: lobotomized history", slog.String("until_id", lastResponseMessage.ID.String()), slog.Int("remaining_messages", llmer.NumMessages()))
 	}
 
 	llmer.SetPersona(p)
 
-	// Determine prepend text for the assistant response
 	var prepend string
 	if isRegenerate && regeneratePrepend != "" {
 		prepend = regeneratePrepend
 	} else {
-		prepend = cache.PersonaMeta.Prepend // Use persona's default prepend if not regenerating with specific prepend
+		prepend = cache.PersonaMeta.Prepend
 	}
 
-	// --- Generate LLM Response ---
+	// --- Generate LLM Response (Streaming) ---
 	m := model.GetModelByName(cache.PersonaMeta.Model)
-	slog.Debug("requesting LLM completion",
-		slog.String("model", m.Name),
-		slog.Int("num_messages", llmer.NumMessages()),
-		slog.Bool("is_regenerate", isRegenerate),
-		slog.String("prepend", prepend),
-	)
-	response, usage, err := llmer.RequestCompletion(m, usernames, cache.PersonaMeta.Settings, prepend)
+	slog.Debug("requesting LLM completion stream", slog.String("model", m.Name), slog.Int("num_messages", llmer.NumMessages()), slog.Bool("is_regenerate", isRegenerate), slog.String("prepend", prepend))
+
+	llmChan, err := llmer.RequestCompletion(m, usernames, cache.PersonaMeta.Settings, prepend)
 	if err != nil {
-		slog.Error("LLM request failed", slog.Any("err", err))
+		slog.Error("LLM stream request failed immediately", slog.Any("err", err))
 		return "", fmt.Errorf("LLM request failed: %w", err)
 	}
-	slog.Debug("LLM response received", slog.Int("response_len", len(response)), slog.String("usage", usage.String()))
-	// --- End Generation ---
+	slog.Debug("LLM stream channel received")
 
-	// Add random DM reminder if applicable
-	if timeInteraction && !cache.EverUsedRandomDMs && !isRegenerate {
-		response += interactionReminder
+	// --- Stream Processing Setup ---
+	var (
+		responseBuffer        strings.Builder   // Buffer for current message part being built/edited
+		fullResponse          strings.Builder   // Accumulates the entire response for post-processing & history
+		sentMessageIDs        []snowflake.ID    // IDs of messages sent/edited for this response stream
+		lastMessageContentLen int               // Rune count of the last sent/edited message part. Reset to 0 to force new message.
+		remainderAfterTag     string            // Stores content after a <new_message> tag from the previous chunk
+		finalUsage            llm.Usage         // Usage info from the stream
+		streamErr             error             // Error encountered during streaming
+		mu                    sync.Mutex        // Mutex to protect shared state accessed by ticker goroutine
+		wg                    sync.WaitGroup    // WaitGroup for the update goroutine
+		updateInterval        = 3 * time.Second // How often to update Discord
+		discordMessageLimit   = 2000            // Discord message rune limit
+		isStreamComplete      = false           // Flag to indicate stream has finished
+		firstChunkProcessed   = false           // Flag to handle username stripping only on the first content chunk
+		firstUpdateComplete   = false           // Flag to ensure initial message is sent/edited before ticker updates
+		originalEditMessageID = snowflake.ID(0) // ID of the message to edit if regenerating
+	)
+	if isRegenerate && lastResponseMessage != nil {
+		originalEditMessageID = lastResponseMessage.ID
 	}
 
-	// Update channel usage stats (before potentially erroring out on send)
-	cache.Usage = cache.Usage.Add(usage)
-	cache.LastUsage = usage
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 
-	// Extract <think> tags if model supports reasoning
+	ticker := time.NewTicker(updateInterval)
+	defer ticker.Stop()
+
+	// Goroutine to handle Discord updates periodically
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		for {
+			select {
+			case <-ticker.C:
+				mu.Lock()
+				if !isStreamComplete && firstUpdateComplete {
+					updateDiscordMessage(client, channelID, &responseBuffer, &sentMessageIDs, &lastMessageContentLen, isRegenerate, originalEditMessageID, messageID, discordMessageLimit, &mu)
+				}
+				mu.Unlock()
+			case <-ctx.Done():
+				slog.Debug("Update ticker goroutine cancelled")
+				return
+			}
+		}
+	}()
+
+	// --- Consume Stream ---
+	slog.Debug("Starting LLM stream consumption loop")
+	streamLoopStart := time.Now()
+	for chunk := range llmChan {
+		mu.Lock()
+
+		if chunk.Err != nil {
+			streamErr = chunk.Err
+			slog.Error("LLM stream error received", slog.Any("err", streamErr))
+			isStreamComplete = true
+			mu.Unlock()
+			break
+		}
+
+		if chunk.Done {
+			finalUsage = chunk.Usage
+			isStreamComplete = true
+			slog.Debug("LLM stream 'Done' chunk received", slog.String("usage", finalUsage.String()))
+			mu.Unlock()
+			break
+		}
+
+		// Process content chunk
+		if chunk.Content != "" || remainderAfterTag != "" {
+			currentProcessingContent := remainderAfterTag + chunk.Content
+			remainderAfterTag = "" // Clear remainder
+
+			// --- Username Stripping (only on first actual content) ---
+			if !firstChunkProcessed && fullResponse.Len() == 0 && len(currentProcessingContent) > 0 {
+				tempUsernames := usernames
+				if tempUsernames == nil {
+					tempUsernames = map[string]bool{}
+				}
+				tempUsernames["x3"] = true
+				originalLen := len(currentProcessingContent)
+				for username := range tempUsernames {
+					prefix := username + ": "
+					if len(currentProcessingContent) >= len(prefix) && strings.EqualFold(currentProcessingContent[:len(prefix)], prefix) {
+						currentProcessingContent = strings.TrimSpace(currentProcessingContent[len(prefix):])
+						slog.Debug("Stripped username prefix", slog.String("prefix", prefix), slog.String("remaining_content", currentProcessingContent))
+						break
+					}
+				}
+				if originalLen > 0 {
+					firstChunkProcessed = true
+				}
+			}
+
+			// --- <new_message> Tag Handling Loop ---
+			tag := "<new_message>"
+			for {
+				idx := strings.Index(currentProcessingContent, tag)
+				if idx == -1 {
+					// No more tags in this part
+					if currentProcessingContent != "" {
+						responseBuffer.WriteString(currentProcessingContent)
+						fullResponse.WriteString(currentProcessingContent) // Add to full history as well
+					}
+					break // Exit tag loop
+				}
+
+				// Tag found
+				beforeTag := currentProcessingContent[:idx]
+				afterTag := currentProcessingContent[idx+len(tag):]
+				slog.Debug("Found <new_message> tag", slog.String("before", beforeTag), slog.String("after", afterTag))
+
+				// Process content before the tag
+				if beforeTag != "" {
+					responseBuffer.WriteString(beforeTag)
+					fullResponse.WriteString(beforeTag) // Add to full history
+				}
+
+				// Flush message before the tag
+				if responseBuffer.Len() > 0 {
+					slog.Debug("Flushing message before <new_message>")
+					updateDiscordMessage(client, channelID, &responseBuffer, &sentMessageIDs, &lastMessageContentLen, isRegenerate, originalEditMessageID, messageID, discordMessageLimit, &mu)
+					if !firstUpdateComplete {
+						firstUpdateComplete = true
+					}
+				}
+
+				// Signal to start a new message by resetting the length counter
+				slog.Debug("Resetting lastMessageContentLen to force new message")
+				lastMessageContentLen = 0 // Reset length directly
+
+				// The content after the tag becomes the start of the next processing cycle
+				currentProcessingContent = afterTag
+			} // End tag processing loop
+
+			// After processing tags, if there's content in the buffer AND we need to start the first message, send it
+			if !firstUpdateComplete && responseBuffer.Len() > 0 {
+				updateDiscordMessage(client, channelID, &responseBuffer, &sentMessageIDs, &lastMessageContentLen, isRegenerate, originalEditMessageID, messageID, discordMessageLimit, &mu)
+				firstUpdateComplete = true
+			}
+		}
+
+		mu.Unlock()
+	}
+	slog.Debug("Finished LLM stream consumption loop", slog.Duration("duration", time.Since(streamLoopStart)))
+
+	cancel()
+	wg.Wait()
+	slog.Debug("Update ticker goroutine finished")
+
+	mu.Lock()
+	updateDiscordMessage(client, channelID, &responseBuffer, &sentMessageIDs, &lastMessageContentLen, isRegenerate, originalEditMessageID, messageID, discordMessageLimit, &mu)
+	mu.Unlock()
+	slog.Debug("Final Discord message update executed")
+
+	if streamErr != nil {
+		_, errSend := client.Rest().CreateMessage(channelID, discord.NewMessageCreateBuilder().
+			SetContentf("⚠️ Error during response generation: %v", streamErr).
+			SetMessageReference(&discord.MessageReference{MessageID: &messageID}).
+			SetAllowedMentions(&discord.AllowedMentions{}).Build())
+		if errSend != nil {
+			slog.Error("Failed to send stream error message", slog.Any("err", errSend))
+		}
+		return "", fmt.Errorf("LLM stream failed: %w", streamErr)
+	}
+
+	// --- Post-Stream Processing ---
+	slog.Debug("Starting post-stream processing")
+	processedResponse := fullResponse.String() // Use the fully accumulated response
+
+	if timeInteraction && !cache.EverUsedRandomDMs && !isRegenerate {
+		processedResponse += interactionReminder
+	}
+
+	cache.Usage = cache.Usage.Add(finalUsage)
+	cache.LastUsage = finalUsage
+	if finalUsage.IsEmpty() {
+		slog.Warn("LLM stream finished but usage is empty, estimating...")
+		estimatedUsage := llmer.EstimateUsage(m)
+		cache.Usage = cache.Usage.Add(estimatedUsage)
+		cache.LastUsage = estimatedUsage
+	} else if finalUsage.ResponseTokens <= 1 && len(processedResponse) > 10 {
+		slog.Warn("LLM stream usage looks unrealistic, estimating response tokens...", slog.Int("api_resp_tokens", finalUsage.ResponseTokens))
+		estimatedUsage := llmer.EstimateUsage(m)
+		cache.LastUsage.ResponseTokens = estimatedUsage.ResponseTokens
+		cache.Usage = cache.Usage.Add(llm.Usage{ResponseTokens: estimatedUsage.ResponseTokens - finalUsage.ResponseTokens})
+	}
+	slog.Debug("Updated cache usage", slog.String("total_usage", cache.Usage.String()), slog.String("last_usage", cache.LastUsage.String()))
+
 	var thinking string
 	if m.Reasoning {
 		var answer string
-		thinking, answer = llm.ExtractThinking(response)
+		thinking, answer = llm.ExtractThinking(processedResponse)
 		if thinking != "" && answer != "" {
-			response = answer
-			slog.Debug("extracted reasoning", slog.Int("thinking_len", len(thinking)), slog.Int("answer_len", len(response)))
+			processedResponse = answer
+			slog.Debug("Extracted reasoning", slog.Int("thinking_len", len(thinking)), slog.Int("answer_len", len(processedResponse)))
 		}
 	}
 
-	// Prepare reasoning file if present
+	// Extract memories from the full response
+	_, memories := splitLlmTags(processedResponse) // Only need memories now
+	if err := db.HandleMemories(userID, memories); err != nil {
+		slog.Error("Failed to handle memories after stream", slog.Any("err", err))
+	}
+	slog.Debug("Handled memories", slog.Int("count", len(memories)))
+
+	// Perform final post-processing (unescape, trim) on the *full* response
+	// Username stripping was handled during streaming.
+	finalProcessedResponse := llm.PostProcessResponse(fullResponse.String(), nil, m) // Pass nil for usernames
+	slog.Debug("Post-processed final response", slog.Int("original_len", fullResponse.Len()), slog.Int("final_len", len(finalProcessedResponse)))
+
+	llmer.AddToHistory(finalProcessedResponse)
+	slog.Debug("Added final response to LLM history")
+
 	var files []*discord.File
 	if thinking != "" {
-		files = append(files, &discord.File{
-			Name:   "reasoning.txt",
-			Reader: strings.NewReader(thinking),
-		})
+		files = append(files, &discord.File{Name: "reasoning.txt", Reader: strings.NewReader(thinking)})
+		slog.Debug("Prepared reasoning file")
+		if len(sentMessageIDs) > 0 {
+			lastMsgID := sentMessageIDs[len(sentMessageIDs)-1]
+			lastMsg, err := client.Rest().GetMessage(channelID, lastMsgID)
+			if err == nil {
+				// Avoid overwriting content if message is just the reasoning file placeholder
+				contentUpdate := lastMsg.Content
+				if contentUpdate == "" && len(lastMsg.Attachments) == 0 { // Check if message is empty before adding file
+					// If the message was empty, maybe don't set content? Or set a placeholder?
+					// For now, let's keep existing content (which might be empty)
+				}
+				updateBuilder := discord.NewMessageUpdateBuilder().SetContent(contentUpdate).AddFiles(files...)
+				_, err = client.Rest().UpdateMessage(channelID, lastMsgID, updateBuilder.Build())
+				if err != nil {
+					slog.Error("Failed to add reasoning file to last message", slog.Any("err", err), slog.String("message_id", lastMsgID.String()))
+				} else {
+					slog.Debug("Added reasoning file to last message", slog.String("message_id", lastMsgID.String()))
+				}
+			} else {
+				slog.Error("Failed to get last message to add reasoning file", slog.Any("err", err), slog.String("message_id", lastMsgID.String()))
+			}
+		}
 	}
 
-	// --- Send Response ---
 	if preMsgWg != nil {
-		preMsgWg.Wait() // Wait for e.g., typing indicator to finish
+		preMsgWg.Wait()
 	}
 
 	var jumpURL string
-	var botMessage *discord.Message
-	if isRegenerate {
-		// Edit the previous message for regeneration
-		response = replaceLlmTagsWithNewlines(response, userID) // Handle tags before sending
-
-		builder := discord.NewMessageUpdateBuilder().SetAllowedMentions(&discord.AllowedMentions{RepliedUser: false})
-		if utf8.RuneCountInString(response) > 2000 {
-			// If too long, send as file attachment
-			builder.SetContent("")
-			builder.AddFiles(&discord.File{
-				Reader: strings.NewReader(response),
-				Name:   fmt.Sprintf("response-%v.txt", lastResponseMessage.ID),
-			})
-			// Add reasoning file if it exists
-			if len(files) > 0 {
-				builder.AddFiles(files...)
+	if isRegenerate && len(sentMessageIDs) > 0 {
+		firstMsgID := sentMessageIDs[0]
+		ch, err := client.Rest().GetChannel(channelID)
+		guildID := snowflake.ID(0)
+		if err == nil {
+			if gc, ok := ch.(discord.GuildChannel); ok {
+				guildID = gc.GuildID()
 			}
+		}
+		if guildID != 0 {
+			jumpURL = fmt.Sprintf("https://discord.com/channels/%s/%s/%s", guildID, channelID, firstMsgID)
 		} else {
-			builder.SetContent(response)
-			// Attach reasoning file if it exists
-			if len(files) > 0 {
-				builder.AddFiles(files...)
-			}
+			jumpURL = fmt.Sprintf("https://discord.com/channels/@me/%s/%s", channelID, firstMsgID)
 		}
-
-		slog.Debug("updating message for regeneration", slog.String("message_id", lastResponseMessage.ID.String()))
-		_, err = client.Rest().UpdateMessage(channelID, lastResponseMessage.ID, builder.Build())
-		if err != nil {
-			slog.Error("failed to update message for regeneration", slog.Any("err", err))
-			return "", fmt.Errorf("failed to update message: %w", err)
-		}
-		jumpURL = lastResponseMessage.JumpURL()
-
-	} else {
-		// Send new message(s)
-		messages, memories := splitLlmTags(response)
-		if err := db.HandleMemories(userID, memories); err != nil {
-			// Log error but continue sending messages
-			slog.Error("failed to handle memories during send", slog.Any("err", err))
-		}
-
-		var firstBotMessage *discord.Message
-		for i, content := range messages {
-			content = strings.TrimSpace(content)
-			if content == "" {
-				continue // Skip empty splits
-			}
-
-			// Only attach files to the last message split
-			currentFiles := []*discord.File{}
-			if i == len(messages)-1 {
-				currentFiles = files
-			}
-
-			// Use messageID for reply reference only on the first split
-			replyMessageID := snowflake.ID(0)
-			if i == 0 {
-				replyMessageID = messageID
-			}
-
-			// Send the split
-			botMessage, err = sendMessageSplits(client, replyMessageID, nil, 0, channelID, []rune(content), currentFiles, i != len(messages)-1)
-			if err != nil {
-				slog.Error("failed to send message split", slog.Any("err", err), slog.Int("split_index", i))
-				// Attempt to continue sending other splits? Or return error?
-				// For now, return the error encountered.
-				return "", fmt.Errorf("failed to send message split %d: %w", i+1, err)
-			}
-			if i == 0 && botMessage != nil {
-				firstBotMessage = botMessage // Keep track of the first message sent
-			}
-		}
-		// If the first message was sent successfully, use its jump URL if needed elsewhere (though not returned here)
-		if firstBotMessage != nil {
-			// jumpURL = firstBotMessage.JumpURL() // Not returned for non-regenerate
-		}
+		slog.Debug("Calculated jump URL for regenerate", slog.String("url", jumpURL))
 	}
-	// --- End Send ---
+
+	botMessageIDForNarration := snowflake.ID(0)
+	if len(sentMessageIDs) > 0 {
+		botMessageIDForNarration = sentMessageIDs[len(sentMessageIDs)-1]
+	} else {
+		botMessageIDForNarration = messageID
+	}
 
 	{
-		// since this function may run for seconds,
-		// the persona may have changed, refetch it for good measure
 		newCache := db.GetChannelCache(channelID)
 		cache.PersonaMeta = newCache.PersonaMeta
 	}
 
-	// Update cache and global stats after successful send/edit
 	cache.IsLastRandomDM = timeInteraction
 	cache.UpdateInteractionTime()
 	if err := cache.Write(channelID); err != nil {
-		// Log error but don't fail the interaction
 		slog.Error("failed to write channel cache after interaction", slog.Any("err", err), slog.String("channel_id", channelID.String()))
 	}
-	if err := db.UpdateGlobalStats(usage); err != nil {
-		// Log error but don't fail the interaction
+	if err := db.UpdateGlobalStats(finalUsage); err != nil {
 		slog.Error("failed to update global stats after interaction", slog.Any("err", err))
 	}
 
-	// maybe queue narration + generation
 	{
 		realMeta, _ := persona.GetMetaByName(cache.PersonaMeta.Name)
 		disableRandomNarrations := realMeta.DisableImages
-		if strings.Contains(response, "<generate_image>") ||
-			(!disableRandomNarrations && horder.GetHorder().IsFree()) {
-			narrationMessageID := messageID
-			if botMessage != nil {
-				narrationMessageID = botMessage.ID
-			}
-			handleNarration(client, channelID, narrationMessageID, *llmer)
+		if strings.Contains(finalProcessedResponse, "<generate_image>") || (!disableRandomNarrations && horder.GetHorder().IsFree()) {
+			handleNarration(client, channelID, botMessageIDForNarration, *llmer)
 		} else {
 			slog.Info("narrator: skipping narration", slog.Bool("disableImages", disableRandomNarrations), slog.Bool("timeSinceLastInteraction", time.Since(GetNarrator().LastInteractionTime()) > 2*time.Minute), slog.Bool("isFree", horder.GetHorder().IsFree()))
 		}
 	}
 
 	return jumpURL, nil
+}
+
+// updateDiscordMessage handles sending/editing Discord messages based on buffer content and limits.
+// It needs to be called with a mutex locked.
+func updateDiscordMessage(
+	client bot.Client,
+	channelID snowflake.ID,
+	responseBuffer *strings.Builder,
+	sentMessageIDs *[]snowflake.ID,
+	lastMessageContentLen *int, // Pointer to store rune count of the last sent part
+	isRegenerate bool,
+	originalEditMessageID snowflake.ID, // The very first message to edit if regenerating
+	replyToMessageID snowflake.ID, // The user message to reply to initially
+	limit int,
+	mu *sync.Mutex,
+) {
+	if responseBuffer.Len() == 0 {
+		return
+	}
+
+	currentContent := strings.TrimSpace(responseBuffer.String())
+	if currentContent == "" {
+		responseBuffer.Reset()
+		return
+	}
+	currentRunes := utf8.RuneCountInString(currentContent)
+
+	// Determine if a new message should be sent
+	shouldSendNew := len(*sentMessageIDs) == 0 || *lastMessageContentLen == 0
+	if shouldSendNew {
+		if *lastMessageContentLen == 0 && len(*sentMessageIDs) > 0 {
+			slog.Debug("updateDiscordMessage: Forcing new message due to lastMessageContentLen reset")
+		}
+
+		sendContent := currentContent
+		remainingContent := ""
+		sendRunes := currentRunes
+
+		if currentRunes > limit {
+			sendContent = limitRunes(currentContent, limit) // Use corrected limitRunes
+			sendRunes = utf8.RuneCountInString(sendContent) // Recalculate runes after limiting
+			// Calculate remaining content based on the limited sendContent
+			if len(currentContent) > len(sendContent) {
+				// Find the byte boundary corresponding to the rune limit
+				byteIndex := 0
+				runeCount := 0
+				for i := range currentContent {
+					runeCount++
+					if runeCount > sendRunes { // Find the start of the rune *after* the limit
+						byteIndex = i
+						break
+					}
+				}
+				if byteIndex > 0 {
+					remainingContent = currentContent[byteIndex:]
+				} else if len(currentContent) > len(sendContent) {
+					// Fallback if byte index calculation failed somehow (shouldn't happen often)
+					remainingContent = currentContent[len(sendContent):]
+				}
+			}
+		}
+
+		var sentMsg *discord.Message
+		var err error
+
+		// Determine if we edit the original message (only if regenerating and it's the very first message part)
+		canEditOriginal := isRegenerate && originalEditMessageID != 0 && len(*sentMessageIDs) == 0
+
+		if canEditOriginal {
+			slog.Debug("Streaming: Editing original message", slog.String("id", originalEditMessageID.String()), slog.Int("runes", sendRunes))
+			builder := discord.NewMessageUpdateBuilder().
+				SetContent(sendContent).
+				SetAllowedMentions(&discord.AllowedMentions{RepliedUser: false})
+			sentMsg, err = client.Rest().UpdateMessage(channelID, originalEditMessageID, builder.Build())
+			if err != nil {
+				slog.Error("Streaming: Failed to edit original message", slog.Any("err", err), slog.String("id", originalEditMessageID.String()))
+				return
+			}
+			*sentMessageIDs = append(*sentMessageIDs, originalEditMessageID)
+			*lastMessageContentLen = sendRunes
+		} else {
+			// Send a new message
+			slog.Debug("Streaming: Sending new message", slog.Int("runes", sendRunes))
+			builder := discord.NewMessageCreateBuilder().
+				SetContent(sendContent).
+				SetAllowedMentions(&discord.AllowedMentions{RepliedUser: false})
+			// Only reply to the user's message on the very first message sent by the bot overall
+			if replyToMessageID != 0 && len(*sentMessageIDs) == 0 {
+				builder.SetMessageReference(&discord.MessageReference{MessageID: &replyToMessageID})
+			}
+			sentMsg, err = client.Rest().CreateMessage(channelID, builder.Build())
+			if err != nil {
+				slog.Error("Streaming: Failed to send new message", slog.Any("err", err))
+				return
+			}
+			*sentMessageIDs = append(*sentMessageIDs, sentMsg.ID)
+			*lastMessageContentLen = sendRunes
+		}
+
+		responseBuffer.Reset()
+		responseBuffer.WriteString(remainingContent)
+
+	} else {
+		// --- Subsequent edit/send logic ---
+		lastMsgID := (*sentMessageIDs)[len(*sentMessageIDs)-1]
+		// Add 1 for the space we'll add during edit
+		combinedLen := *lastMessageContentLen + currentRunes + 1
+		shouldSendNewSplit := false
+
+		if combinedLen <= limit {
+			lastMsg, err := client.Rest().GetMessage(channelID, lastMsgID)
+			if err != nil {
+				slog.Error("Streaming: Failed to get last message for edit, falling back to new message", slog.Any("err", err), slog.String("id", lastMsgID.String()))
+				shouldSendNewSplit = true
+			} else {
+				separator := ""
+				if lastMsg.Content != "" { // Only add space if previous content exists
+					separator = " "
+				}
+				newContent := lastMsg.Content + separator + currentContent
+				newContentRunes := utf8.RuneCountInString(newContent)
+
+				if newContentRunes <= limit { // Double-check limit after adding space
+					slog.Debug("Streaming: Attempting to edit last message", slog.String("id", lastMsgID.String()), slog.Int("new_runes", newContentRunes))
+					builder := discord.NewMessageUpdateBuilder().
+						SetContent(newContent).
+						SetAllowedMentions(&discord.AllowedMentions{RepliedUser: false})
+					_, err = client.Rest().UpdateMessage(channelID, lastMsgID, builder.Build())
+					if err == nil {
+						*lastMessageContentLen = newContentRunes
+						responseBuffer.Reset()
+						slog.Debug("Streaming: Edit successful", slog.String("id", lastMsgID.String()))
+					} else {
+						slog.Warn("Streaming: Edit failed, falling back to new message", slog.Any("err", err), slog.String("id", lastMsgID.String()))
+						shouldSendNewSplit = true
+					}
+				} else {
+					slog.Warn("Streaming: Combined length exceeded limit after adding space", slog.Int("combined", combinedLen), slog.Int("new_runes", newContentRunes), slog.String("id", lastMsgID.String()))
+					shouldSendNewSplit = true
+				}
+			}
+		} else {
+			shouldSendNewSplit = true
+		}
+
+		// --- Send New Split Message (if required) ---
+		if shouldSendNewSplit {
+			sendContent := currentContent
+			remainingContent := ""
+			sendRunes := currentRunes
+
+			if currentRunes > limit {
+				sendContent = limitRunes(currentContent, limit) // Use corrected limitRunes
+				sendRunes = utf8.RuneCountInString(sendContent) // Recalculate runes after limiting
+				// Calculate remaining content based on the limited sendContent
+				if len(currentContent) > len(sendContent) {
+					byteIndex := 0
+					runeCount := 0
+					for i := range currentContent {
+						runeCount++
+						if runeCount > sendRunes {
+							byteIndex = i
+							break
+						}
+					}
+					if byteIndex > 0 {
+						remainingContent = currentContent[byteIndex:]
+					} else if len(currentContent) > len(sendContent) {
+						remainingContent = currentContent[len(sendContent):]
+					}
+				}
+			}
+
+			slog.Debug("Streaming: Sending new split message", slog.Int("runes", sendRunes))
+			builder := discord.NewMessageCreateBuilder().
+				SetContent(sendContent).
+				SetAllowedMentions(&discord.AllowedMentions{})
+
+			sentMsg, err := client.Rest().CreateMessage(channelID, builder.Build())
+			if err != nil {
+				slog.Error("Streaming: Failed to send new split message", slog.Any("err", err))
+				return
+			}
+			*sentMessageIDs = append(*sentMessageIDs, sentMsg.ID)
+			*lastMessageContentLen = sendRunes
+
+			responseBuffer.Reset()
+			responseBuffer.WriteString(remainingContent)
+		}
+	}
+}
+
+// limitRunes truncates a string to a maximum number of runes.
+func limitRunes(s string, n int) string {
+	if n <= 0 {
+		return ""
+	}
+	if utf8.RuneCountInString(s) <= n {
+		return s
+	}
+
+	// Safer approach: iterate runes
+	var b strings.Builder
+	b.Grow(n) // Approximate size
+	count := 0
+	for _, r := range s {
+		if count >= n {
+			break
+		}
+		b.WriteRune(r)
+		count++
+	}
+	return b.String()
 }
 
 const stableNarratorPrepend = "```json\n{\n  \"tags\":"
@@ -362,12 +733,10 @@ func parseStableNarratorTags(response string) (string, error) {
 	)
 	response = replacer.Replace(response)
 
-	// unmarshal json ({"tags": "tag1, tag2, tag3, ..."})
 	var t struct {
 		Tags string `json:"tags"`
 	}
 	if err := json.Unmarshal([]byte(response), &t); err != nil {
-		// perhaps the model just wanted to yap about something
 		slog.Error("narrator: failed to unmarshal json", slog.Any("err", err), slog.String("response", response))
 		return "", err
 	}
@@ -410,9 +779,7 @@ func handleNarrationGenerate(client bot.Client, channelID snowflake.ID, messageI
 		slog.Error("failed to fetch image models", slog.Any("err", err))
 		return
 	}
-	if !slices.ContainsFunc(models, func(model aihorde.ActiveModel) bool {
-		return model.Name == defaultImageModel
-	}) {
+	if !slices.ContainsFunc(models, func(model aihorde.ActiveModel) bool { return model.Name == defaultImageModel }) {
 		slog.Warn("narrator image model not available; skipping generation", slog.String("model", defaultImageModel))
 		return
 	}
@@ -420,8 +787,8 @@ func handleNarrationGenerate(client bot.Client, channelID snowflake.ID, messageI
 	isNSFW := true
 	channel, err := client.Rest().GetChannel(channelID)
 	if err == nil {
-		if guildChannel, ok := channel.(discord.GuildMessageChannel); ok {
-			isNSFW = guildChannel.NSFW()
+		if textChannel, ok := channel.(discord.GuildMessageChannel); ok {
+			isNSFW = textChannel.NSFW()
 		}
 	}
 
@@ -434,7 +801,7 @@ func handleNarrationGenerate(client bot.Client, channelID snowflake.ID, messageI
 
 	isPromptNSFW := horder.IsPromptNSFW(prompt)
 	if !isNSFW && isPromptNSFW {
-		return // prompt is nsfw, but channel is not
+		return
 	}
 
 	slog.Info("starting narration image generation", slog.String("model", model), slog.String("prompt", prompt), slog.String("channel_id", channelID.String()))
@@ -447,9 +814,7 @@ func handleNarrationGenerate(client bot.Client, channelID snowflake.ID, messageI
 	defer h.Done()
 
 	failures := 0
-	//i := 0
 	for {
-		//i++
 		status, err := h.GetStatus(id)
 		if err != nil {
 			slog.Error("handleNarrationGenerate: failed to get generation status", slog.Any("err", err), slog.String("id", id))
@@ -465,15 +830,6 @@ func handleNarrationGenerate(client bot.Client, channelID snowflake.ID, messageI
 			slog.Info("narration generation finished", slog.Bool("done", status.Done), slog.Bool("faulted", status.Faulted), slog.String("id", id))
 			break
 		}
-
-		/*
-			if i > 3 && status.WaitTime > 150 {
-				// too long, give up
-				slog.Warn("narration generation will take too long, giving up", slog.Int("wait_time", status.WaitTime), slog.String("id", id))
-				h.Cancel(id)
-				return
-			}
-		*/
 
 		slog.Info("narration generation progress", slog.Int("queue_pos", status.QueuePosition), slog.Int("wait_time", status.WaitTime), slog.String("id", id))
 		time.Sleep(5 * time.Second)
@@ -501,17 +857,15 @@ func handleNarrationGenerate(client bot.Client, channelID snowflake.ID, messageI
 		nsfw = true
 	}
 	if !isNSFW && nsfw {
-		return // don't send nsfw images to non-nsfw channels
+		return
 	}
 
-	// the filename MUST start with "narration", that's how addContextMessagesIfPossible knows to ignore it
 	imgData, filename, err := processImageData(finalStatus.Generations[0].Img, "narration")
 	if err != nil {
 		slog.Error("handleNarrationGenerate: failed to process image data", slog.Any("err", err), slog.String("id", id))
 		return
 	}
 
-	// send the image as a reply
 	_, err = client.Rest().CreateMessage(channelID, discord.NewMessageCreateBuilder().
 		SetContentf("-# %s", prompt).
 		SetFiles(&discord.File{Name: filename, Reader: bytes.NewReader(imgData), Flags: makeSpoilerFlag(nsfw)}).
@@ -523,7 +877,6 @@ func handleNarrationGenerate(client bot.Client, channelID snowflake.ID, messageI
 		slog.Error("handleNarrationGenerate: failed to send image reply", slog.Any("err", err), slog.String("channel_id", channelID.String()), slog.String("message_id", messageID.String()))
 	} else {
 		slog.Info("handleNarrationGenerate: narration image sent successfully", slog.String("channel_id", channelID.String()), slog.String("message_id", messageID.String()), slog.String("model", model), slog.String("prompt", prompt))
-
 		stats, err := db.GetGlobalStats()
 		if err == nil {
 			stats.ImagesGenerated++
