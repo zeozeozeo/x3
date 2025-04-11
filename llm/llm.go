@@ -313,7 +313,6 @@ func (l *Llmer) requestCompletionInternal2(
 	}
 
 	completionStart := time.Now()
-
 	ctx, cancel := context.WithDeadline(context.Background(), completionStart.Add(5*time.Minute))
 	defer cancel()
 
@@ -327,6 +326,7 @@ func (l *Llmer) requestCompletionInternal2(
 	usage := Usage{}
 
 	//tokens := 0
+	firstTokenTime := time.Time{}
 	for {
 		response, err := stream.Recv()
 		if errors.Is(err, io.EOF) {
@@ -345,12 +345,20 @@ func (l *Llmer) requestCompletionInternal2(
 		if len(response.Choices) == 0 {
 			continue
 		}
+		if firstTokenTime.IsZero() {
+			firstTokenTime = time.Now()
+		}
 		//tokens++
 		//if tokens%10 == 0 {
 		//	slog.Debug("stream progress", slog.Int("tokens", tokens), slog.Duration("in", time.Since(completionStart)), "text", text.String())
 		//}
+		fmt.Print(response.Choices[0].Delta.Content)
 		text.WriteString(response.Choices[0].Delta.Content)
 	}
+
+	fmt.Print("\n")
+	in := time.Since(firstTokenTime)
+	slog.Info("stream closed", "sinceFirst", in, "sinceStart", time.Since(completionStart), "tok/s", float64(usage.ResponseTokens)/in.Seconds())
 
 	// if the api provider is retarded enough to use HTML escapes like &lt; in a fucking API,
 	// strip the fuckers off
