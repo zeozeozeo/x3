@@ -428,7 +428,7 @@ func handleNarrationGenerate(client bot.Client, channelID snowflake.ID, messageI
 	model := defaultImageModel
 	prompt := tags
 	steps := 20
-	n := 1
+	n := 4
 	cfgScale := 7.0
 	clipSkip := 2
 
