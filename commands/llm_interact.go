@@ -485,36 +485,48 @@ func handleNarrationGenerate(client bot.Client, channelID snowflake.ID, messageI
 		return
 	}
 
-	if len(finalStatus.Generations) == 0 || finalStatus.Generations[0].Img == "" {
+	if len(finalStatus.Generations) == 0 {
 		slog.Warn("handleNarrationGenerate: no image generated or generation faulted", slog.String("id", id))
 		return
 	}
 
-	slog.Info("finalStatus generation metadata", slog.Any("metadata", finalStatus.Generations[0].GenMetadata))
+	var files []*discord.File
+	for i, gen := range finalStatus.Generations {
+		// the filename MUST start with "narration", that's how addContextMessagesIfPossible knows to ignore it
+		imgData, filename, err := processImageData(gen.Img, fmt.Sprintf("narration-%d", i+1))
+		if err != nil {
+			slog.Error("handleNarrationGenerate: failed to process image data", slog.Any("err", err), slog.String("img_src", gen.Img))
+			continue
+		}
 
-	nsfw, csam := horder.GetCensorship(finalStatus.Generations[0])
-	if csam {
-		slog.Warn("handleNarrationGenerate: generation contains CSAM", slog.String("id", id), slog.String("prompt", prompt))
-		return
-	}
-	if isPromptNSFW {
-		nsfw = true
-	}
-	if !isNSFW && nsfw {
-		return // don't send nsfw images to non-nsfw channels
+		nsfw, csam := horder.GetCensorship(gen)
+		if csam {
+			slog.Warn("handleNarrationGenerate: generation contains CSAM", slog.String("id", id), slog.String("prompt", prompt))
+			continue
+		}
+		if isPromptNSFW {
+			nsfw = true
+		}
+		if nsfw && !isNSFW {
+			continue // avoid sending NSFW images
+		}
+
+		files = append(files, &discord.File{
+			Reader: bytes.NewReader(imgData),
+			Name:   filename,
+			Flags:  makeSpoilerFlag(nsfw),
+		})
 	}
 
-	// the filename MUST start with "narration", that's how addContextMessagesIfPossible knows to ignore it
-	imgData, filename, err := processImageData(finalStatus.Generations[0].Img, "narration")
-	if err != nil {
-		slog.Error("handleNarrationGenerate: failed to process image data", slog.Any("err", err), slog.String("id", id))
+	if len(files) == 0 {
+		slog.Warn("handleNarrationGenerate: no images generated or generation faulted", slog.String("id", id), slog.String("prompt", prompt))
 		return
 	}
 
 	// send the image as a reply
 	_, err = client.Rest().CreateMessage(channelID, discord.NewMessageCreateBuilder().
 		SetContentf("-# %s", prompt).
-		SetFiles(&discord.File{Name: filename, Reader: bytes.NewReader(imgData), Flags: makeSpoilerFlag(nsfw)}).
+		SetFiles(files...).
 		SetMessageReference(&discord.MessageReference{MessageID: &messageID, ChannelID: &channelID}).
 		SetAllowedMentions(&discord.AllowedMentions{RepliedUser: false}).
 		Build())

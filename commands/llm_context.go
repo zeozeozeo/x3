@@ -187,6 +187,12 @@ func getMessageContentNoWhitelist(message discord.Message) string {
 	return getMessageContent(message, db.IsInWhitelist(message.Author.ID))
 }
 
+func isNarrationMessage(message discord.Message) bool {
+	return slices.ContainsFunc(message.Attachments, func(a discord.Attachment) bool {
+		return strings.HasPrefix(a.Filename, "narration-")
+	})
+}
+
 // addContextMessagesIfPossible fetches message history and adds it to the Llmer context.
 // Returns: number of messages fetched, map of usernames, last assistant response message, last assistant message ID, last user ID.
 func addContextMessagesIfPossible(
@@ -255,9 +261,7 @@ func addContextMessagesIfPossible(
 			} else if msg.EditedTimestamp != nil && strings.HasPrefix(msg.Content, "**") && strings.Count(msg.Content, "**") >= 2 {
 				// Handle regenerated message with prefill
 				content = strings.Replace(msg.Content, "**", "", 2)
-			} else if slices.ContainsFunc(msg.Attachments, func(a discord.Attachment) bool {
-				return strings.HasPrefix(a.Filename, "narration") && a.ContentType != nil && strings.HasPrefix(*a.ContentType, "image/")
-			}) {
+			} else if isNarrationMessage(msg) {
 				continue // skip narration images from handleNarrationGenerate
 			} else {
 				content = getMessageContentNoWhitelist(msg) // Get content normally for other bot messages
