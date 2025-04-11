@@ -287,6 +287,7 @@ func HandleLlm(event *handler.CommandEvent, m *model.Model) error {
 	// Update cache if it was used and potentially modified
 	if useCache {
 		cache.Llmer = llmer // Store the updated llmer state
+		cache.UpdateInteractionTime()
 		if err := cache.Write(event.Channel().ID()); err != nil {
 			slog.Error("failed to save channel cache", slog.Any("err", err))
 		}

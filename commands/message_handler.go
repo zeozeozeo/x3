@@ -2,6 +2,8 @@ package commands
 
 import (
 	"bytes"
+	"time"
+
 	// _ "embed" // Removed embed directive
 	"log/slog"
 	"regexp"
@@ -117,6 +119,14 @@ func OnMessageCreate(event *events.MessageCreate) {
 
 		// Otherwise, treat as LLM trigger, erasing "x3"
 		slog.Debug("handling 'x3' keyword interaction")
+		handleLlmInteraction(event)
+		return
+	}
+
+	// check if this is after a recent interaction
+	cache := db.GetChannelCache(event.ChannelID)
+	if time.Since(cache.LastInteraction) < 30*time.Second {
+		slog.Debug("handling recent interaction")
 		handleLlmInteraction(event)
 		return
 	}
