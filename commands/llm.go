@@ -120,7 +120,7 @@ func HandleLlm(event *handler.CommandEvent, m *model.Model) error {
 					llmer.Lobotomize(getLobotomyAmountFromMessage(*msg))
 				} else {
 					// Use the user ID from the fetched message for memory retrieval
-					msgPersona := persona.GetPersonaByMeta(cache.PersonaMeta, db.GetMemories(msg.Author.ID), msg.Author.EffectiveName())
+					msgPersona := persona.GetPersonaByMeta(cache.PersonaMeta, db.GetMemories(msg.Author.ID, 0), msg.Author.EffectiveName())
 					llmer.SetPersona(msgPersona) // Temporarily set persona for formatting
 					llmer.AddMessage(llm.RoleUser, formatMsg(getMessageContentNoWhitelist(*msg), msg.Author.EffectiveName(), msg.ReferencedMessage), msg.ID)
 					addImageAttachments(llmer, msg.Attachments)
@@ -131,7 +131,7 @@ func HandleLlm(event *handler.CommandEvent, m *model.Model) error {
 	slog.Debug("prepared initial context", slog.Int("num_messages", llmer.NumMessages()))
 
 	// Set the final persona for the actual request
-	currentPersona := persona.GetPersonaByMeta(cache.PersonaMeta, db.GetMemories(event.User().ID), event.User().EffectiveName())
+	currentPersona := persona.GetPersonaByMeta(cache.PersonaMeta, db.GetMemories(event.User().ID, 0), event.User().EffectiveName())
 	llmer.SetPersona(currentPersona)
 
 	// Add the user's prompt from the slash command

@@ -153,7 +153,7 @@ func handleLlmInteraction2(
 	// --- End Validation ---
 
 	// Get persona using the determined userID
-	p := persona.GetPersonaByMeta(cache.PersonaMeta, db.GetMemories(userID), username)
+	p := persona.GetPersonaByMeta(cache.PersonaMeta, db.GetMemories(userID, 0), username)
 
 	// Add the current user message/interaction content if provided
 	if content != "" {

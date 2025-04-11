@@ -103,6 +103,9 @@ func RegisterHandlers(r handler.Router) error {
 		r.Use()
 		r.Command("/list", HandleMemoryList)
 		r.Command("/clear", HandleMemoryClear)
+		r.Autocomplete("/delete", HandleMemoryDeleteAutocomplete)
+		r.Command("/delete", HandleMemoryDelete)
+		r.Command("/add", HandleMemoryAdd)
 	})
 
 	r.Autocomplete("/generate", HandleGenerateModelAutocomplete)
