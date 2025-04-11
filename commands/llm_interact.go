@@ -462,6 +462,7 @@ func handleNarrationGenerate(client bot.Client, channelID, messageID snowflake.I
 	failures := 0
 	dotAnim := 2 // ...
 	firstWaitTime := 0
+	firstQueuePos := 0
 	wasDiffusing := false
 	for {
 		status, err := h.GetStatus(id)
@@ -485,8 +486,16 @@ func handleNarrationGenerate(client bot.Client, channelID, messageID snowflake.I
 		if status.QueuePosition == 0 && status.WaitTime > 0 {
 			wasDiffusing = true
 		}
+		var bar string
+		if status.QueuePosition > 0 {
+			if firstQueuePos == 0 {
+				firstQueuePos = status.QueuePosition
+			}
+			bar = progressBar("", firstQueuePos-status.QueuePosition, firstQueuePos, len(generateImageTag)-2)
+		} else {
+			bar = progressBar("", firstWaitTime-waitTime, firstWaitTime, len(generateImageTag)-2) + "s"
+		}
 
-		bar := progressBar("", firstWaitTime-waitTime, firstWaitTime, len(generateImageTag)-2) + "s"
 		var updatedContent string
 		if wasDiffusing && status.QueuePosition == 0 && status.WaitTime == 0 {
 			updatedContent = triggerContent + "\n-# r-esrgan" + strings.Repeat(".", dotAnim%3+1)
