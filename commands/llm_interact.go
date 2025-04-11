@@ -238,6 +238,7 @@ func handleLlmInteraction2(
 
 	var jumpURL string
 	var botMessage *discord.Message
+	var messages []string
 	if isRegenerate {
 		// Edit the previous message for regeneration
 		response = replaceLlmTagsWithNewlines(response, userID) // Handle tags before sending
@@ -272,7 +273,8 @@ func handleLlmInteraction2(
 
 	} else {
 		// Send new message(s)
-		messages, memories := splitLlmTags(response)
+		var memories []string
+		messages, memories = splitLlmTags(response)
 		if err := db.HandleMemories(userID, memories); err != nil {
 			// Log error but continue sending messages
 			slog.Error("failed to handle memories during send", slog.Any("err", err))
@@ -345,7 +347,11 @@ func handleLlmInteraction2(
 			if botMessage != nil {
 				narrationMessageID = botMessage.ID
 			}
-			handleNarration(client, channelID, narrationMessageID, *llmer, response)
+			content := response
+			if len(messages) > 0 {
+				content = messages[len(messages)-1]
+			}
+			handleNarration(client, channelID, narrationMessageID, *llmer, content)
 		} else {
 			slog.Info("narrator: skipping narration", slog.Bool("disableImages", disableRandomNarrations), slog.Bool("timeSinceLastInteraction", time.Since(GetNarrator().LastInteractionTime()) > 2*time.Minute), slog.Bool("isFree", horder.GetHorder().IsFree()))
 		}
