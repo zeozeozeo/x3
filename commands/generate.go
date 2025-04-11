@@ -81,7 +81,7 @@ var GenerateCommand = discord.SlashCommandCreate{
 }
 
 const (
-	defaultNegativePrompt = "modern, recent, old, oldest, cartoon, graphic, text, painting, crayon, graphite, abstract, glitch, deformed, mutated, ugly, disfigured, long body, lowres, bad anatomy, bad hands, missing fingers, extra fingers, extra digits, fewer digits, cropped, very displeasing, (worst quality, bad quality:1.2), sketch, jpeg artifacts, signature, watermark, username, (censored, bar_censor, mosaic_censor:1.2), simple background, conjoined, bad ai-generated"
+	defaultNegativePrompt = "modern, recent, old, oldest, cartoon, graphic, text, painting, crayon, graphite, abstract, glitch, deformed, mutated, ugly, disfigured, long body, lowres, bad anatomy, bad hands, missing fingers, extra fingers, extra digits, fewer digits, cropped, very displeasing, (worst quality, bad quality:1.2), sketch, jpeg artifacts, signature, watermark, username, (censored, bar_censor, mosaic_censor:1.2), simple background, conjoined, bad, ai-generated"
 	defaultPromptPrepend  = "masterpiece, best quality, amazing quality, very aesthetic, high resolution, ultra-detailed, absurdres, newest, scenery, "
 	defaultImageModel     = "Nova Anime XL"
 )
@@ -116,7 +116,7 @@ func progressBar(message string, current, total, barWidth int) string {
 		bar = fmt.Sprintf("[%s]", emptyPart)
 	}
 
-	return fmt.Sprintf("%s: `%s` %d/%d", message, bar, current, total)
+	return fmt.Sprintf("%s`%s` %d/%d", message, bar, current, total)
 }
 
 // HandleGenerate handles the /generate command
@@ -252,7 +252,7 @@ func HandleGenerate(event *handler.CommandEvent) error {
 			if firstQueuePos == 0 {
 				firstQueuePos = status.QueuePosition
 			}
-			message = progressBar("Queued", firstQueuePos-status.QueuePosition, firstQueuePos, 25)
+			message = progressBar("Queued: ", firstQueuePos-status.QueuePosition, firstQueuePos, 25)
 		} else if status.WaitTime > 0 {
 			numDots = 2
 			addETA = true
@@ -260,10 +260,8 @@ func HandleGenerate(event *handler.CommandEvent) error {
 				diffuseStart = time.Now()
 			}
 			wasDiffusing = true
-			if firstWaitTime == 0 {
-				firstWaitTime = status.WaitTime
-			}
-			message = progressBar("Diffusing", firstWaitTime-status.WaitTime, firstWaitTime, 25)
+			firstWaitTime = max(firstWaitTime, status.WaitTime)
+			message = progressBar("Diffusing: ", firstWaitTime-status.WaitTime, firstWaitTime, 25)
 		} else if !status.IsPossible {
 			numDots = 2
 			addETA = false

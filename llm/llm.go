@@ -63,10 +63,33 @@ func (l *Llmer) NumMessages() int {
 	return len(l.Messages)
 }
 
-func (l *Llmer) TruncateMessages(max int) {
-	if len(l.Messages) > max {
-		l.Messages = l.Messages[len(l.Messages)-max:]
+// LobotomizeKeepLast removes messages in a way that the last n messages and the system prompt are kept
+func (l *Llmer) LobotomizeKeepLast(n int) {
+	numMessages := len(l.Messages)
+	if numMessages == 0 {
+		return
 	}
+	if n < 0 {
+		n = 0
+	}
+	hasSystemPrompt := l.Messages[0].Role == RoleSystem
+	startIndex := 0
+	if hasSystemPrompt {
+		startIndex = 1
+	}
+	numNonSystemMessages := numMessages - startIndex
+	if n >= numNonSystemMessages {
+		return
+	}
+	keepStartIndex := numMessages - n
+
+	var newMessages []Message
+	if hasSystemPrompt {
+		newMessages = append(newMessages, l.Messages[0])
+	}
+	newMessages = append(newMessages, l.Messages[keepStartIndex:]...)
+
+	l.Messages = newMessages
 }
 
 func (l *Llmer) Lobotomize(removeN int) {

@@ -29,6 +29,10 @@ var (
 	errRegenerateNoMessage       = errors.New("cannot find last response to regenerate")
 )
 
+const (
+	generateImageTag = "<generate_image>"
+)
+
 // replaceLlmTagsWithNewlines replaces <new_message> tags with newlines and handles <memory> tags.
 func replaceLlmTagsWithNewlines(response string, userID snowflake.ID) string {
 	var b strings.Builder
@@ -335,13 +339,13 @@ func handleLlmInteraction2(
 	{
 		realMeta, _ := persona.GetMetaByName(cache.PersonaMeta.Name)
 		disableRandomNarrations := realMeta.DisableImages
-		if strings.Contains(response, "<generate_image>") ||
+		if strings.Contains(response, generateImageTag) ||
 			(!disableRandomNarrations && horder.GetHorder().IsFree()) {
 			narrationMessageID := messageID
 			if botMessage != nil {
 				narrationMessageID = botMessage.ID
 			}
-			handleNarration(client, channelID, narrationMessageID, *llmer)
+			handleNarration(client, channelID, narrationMessageID, *llmer, response)
 		} else {
 			slog.Info("narrator: skipping narration", slog.Bool("disableImages", disableRandomNarrations), slog.Bool("timeSinceLastInteraction", time.Since(GetNarrator().LastInteractionTime()) > 2*time.Minute), slog.Bool("isFree", horder.GetHorder().IsFree()))
 		}
@@ -381,22 +385,25 @@ func parseStableNarratorTags(response string) (string, error) {
 	return t.Tags, nil
 }
 
-func handleNarration(client bot.Client, channelID snowflake.ID, messageID snowflake.ID, llmer llm.Llmer) {
+func handleNarration(client bot.Client, channelID, messageID snowflake.ID, llmer llm.Llmer, triggerContent string) {
+	llmer.LobotomizeKeepLast(4) // keep last 4 turns
 	GetNarrator().QueueNarration(llmer, stableNarratorPrepend, func(llmer *llm.Llmer, response string) {
 		tags, err := parseStableNarratorTags(response)
 		if err != nil {
 			return
 		}
 		slog.Info("narration callback", slog.String("tags", tags))
-		go handleNarrationGenerate(client, channelID, messageID, tags)
+		go handleNarrationGenerate(client, channelID, messageID, tags, triggerContent)
 	})
 }
 
 // handleNarrationGenerate generates an image based on LLM-provided tags and sends it as a reply.
-func handleNarrationGenerate(client bot.Client, channelID snowflake.ID, messageID snowflake.ID, tags string) {
+func handleNarrationGenerate(client bot.Client, channelID, messageID snowflake.ID, tags, triggerContent string) {
 	if tags == "" {
 		return
 	}
+
+	triggerContent = strings.ReplaceAll(triggerContent, generateImageTag, "")
 
 	tags = defaultPromptPrepend + tags
 
@@ -447,9 +454,10 @@ func handleNarrationGenerate(client bot.Client, channelID snowflake.ID, messageI
 	defer h.Done()
 
 	failures := 0
-	//i := 0
+	dotAnim := 2 // ...
+	firstWaitTime := 0
+	wasDiffusing := false
 	for {
-		//i++
 		status, err := h.GetStatus(id)
 		if err != nil {
 			slog.Error("handleNarrationGenerate: failed to get generation status", slog.Any("err", err), slog.String("id", id))
@@ -460,6 +468,36 @@ func handleNarrationGenerate(client bot.Client, channelID snowflake.ID, messageI
 			time.Sleep(5 * time.Second)
 			continue
 		}
+
+		firstWaitTime = max(firstWaitTime, status.WaitTime)
+
+		// update <generate_image> tag with a progressbar
+		waitTime := status.WaitTime
+		if status.Done {
+			waitTime = 0
+		}
+		if status.QueuePosition == 0 && status.WaitTime > 0 {
+			wasDiffusing = true
+		}
+
+		bar := progressBar("", firstWaitTime-waitTime, firstWaitTime, len(generateImageTag)-2) + "s"
+		var updatedContent string
+		if wasDiffusing && status.QueuePosition == 0 && status.WaitTime == 0 {
+			updatedContent = triggerContent + "\n-# r-esrgan" + strings.Repeat(".", dotAnim%3+1)
+			dotAnim++
+		} else {
+			updatedContent = triggerContent + "\n-# " + bar
+		}
+		client.Rest().UpdateMessage(
+			channelID,
+			messageID,
+			discord.NewMessageUpdateBuilder().
+				SetContent(updatedContent).
+				SetAllowedMentions(&discord.AllowedMentions{
+					RepliedUser: false,
+				}).
+				Build(),
+		)
 
 		if status.Done || status.Faulted {
 			slog.Info("narration generation finished", slog.Bool("done", status.Done), slog.Bool("faulted", status.Faulted), slog.String("id", id))
@@ -530,6 +568,18 @@ func handleNarrationGenerate(client bot.Client, channelID snowflake.ID, messageI
 		SetMessageReference(&discord.MessageReference{MessageID: &messageID, ChannelID: &channelID}).
 		SetAllowedMentions(&discord.AllowedMentions{RepliedUser: false}).
 		Build())
+
+	// remove the progressbar
+	client.Rest().UpdateMessage(
+		channelID,
+		messageID,
+		discord.NewMessageUpdateBuilder().
+			SetContent(triggerContent).
+			SetAllowedMentions(&discord.AllowedMentions{
+				RepliedUser: false,
+			}).
+			Build(),
+	)
 
 	if err != nil {
 		slog.Error("handleNarrationGenerate: failed to send image reply", slog.Any("err", err), slog.String("channel_id", channelID.String()), slog.String("message_id", messageID.String()))
