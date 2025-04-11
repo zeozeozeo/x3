@@ -189,7 +189,7 @@ func getMessageContentNoWhitelist(message discord.Message) string {
 
 func isNarrationMessage(message discord.Message) bool {
 	return slices.ContainsFunc(message.Attachments, func(a discord.Attachment) bool {
-		return strings.HasPrefix(a.Filename, "narration-")
+		return strings.HasPrefix(a.Filename, "narration-") || strings.HasPrefix(a.Filename, "SPOILER_narration-")
 	})
 }
 
