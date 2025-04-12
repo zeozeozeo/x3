@@ -13,11 +13,10 @@ import (
 )
 
 // SigmaBoyMp4 holds the embedded video data, set by main.
-var SigmaBoyMp4 []byte
+var (
+	SigmaBoyMp4 []byte
 
-// GetAllCommandDefs aggregates all command definitions from the package.
-func GetAllCommandDefs() []discord.ApplicationCommandCreate {
-	allCommands := []discord.ApplicationCommandCreate{
+	AllCommands []discord.ApplicationCommandCreate = []discord.ApplicationCommandCreate{
 		WhitelistCommand,
 		LobotomyCommand,
 		PersonaCommand,
@@ -30,23 +29,22 @@ func GetAllCommandDefs() []discord.ApplicationCommandCreate {
 		ChatCommand, // generic /chat command
 		GenerateCommand,
 	}
+)
 
+func init() {
 	// Add model-specific LLM commands
-	allCommands = append(allCommands, GptCommands...)
+	AllCommands = append(AllCommands, GptCommands...)
 
 	// Add image commands from the imagecmd package
-	// Pass the function from utils.go
-	allCommands = append(allCommands, imagecmd.MakeRedditImageCommand(
+	AllCommands = append(AllCommands, imagecmd.MakeRedditImageCommand(
 		"boykisser", "Send boykisser image", []string{"Boykisser3", "girlkisser", "BoykisserHeaven", "TRANSKlSSER", "bothkisser", "boykisserADULT"}, updateInteractionError,
 	))
-	allCommands = append(allCommands, imagecmd.MakeRedditImageCommand(
+	AllCommands = append(AllCommands, imagecmd.MakeRedditImageCommand(
 		"furry", "Send a cute and relatable furry image", []string{"furry_irl"}, updateInteractionError,
 	))
-	allCommands = append(allCommands, imagecmd.MakeRedditImageCommand(
+	AllCommands = append(AllCommands, imagecmd.MakeRedditImageCommand(
 		"changed", "Send a meme about the game Changed", []string{"ChangedFurry"}, updateInteractionError,
 	))
-
-	return allCommands
 }
 
 // RegisterHandlers registers all command and autocomplete handlers with the router.

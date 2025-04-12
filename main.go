@@ -125,7 +125,7 @@ func main() {
 	defer client.Close(context.TODO())
 
 	// Register slash commands with Discord
-	if _, err = client.Rest().SetGlobalCommands(client.ApplicationID(), commands.GetAllCommandDefs()); err != nil {
+	if _, err = client.Rest().SetGlobalCommands(client.ApplicationID(), commands.AllCommands); err != nil {
 		panic(err)
 	} else {
 		slog.Info("global commands registered successfully")

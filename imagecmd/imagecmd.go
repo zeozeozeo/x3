@@ -172,6 +172,7 @@ func MakeRedditImageCommand(
 
 func RegisterCommands(r *handler.Mux) {
 	for _, handler := range handlers {
+		slog.Info("Registering command", slog.String("name", handler.name))
 		r.Command("/"+handler.name, handler.handle)
 		r.ButtonComponent("/"+handler.refreshID, handler.refresh)
 	}
