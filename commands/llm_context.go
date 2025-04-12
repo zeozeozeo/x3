@@ -294,13 +294,13 @@ func addContextMessagesIfPossible(
 
 			// Handle potential message splitting indicator (\u200B)
 			if strings.HasSuffix(content, "\u200B") {
-				content = strings.TrimSuffix(content, "\u200B") + " <new_message> "
+				content = content + " <new_message> "
 			}
 			if strings.HasPrefix(content, "\u200B") {
 				// means impersonate message!
 				role = llm.RoleUser
-				content = strings.TrimPrefix(content, "\u200B")
 			}
+			content = strings.ReplaceAll(content, "\u200B", "")
 
 			// Remove random DM reminder if present
 			content = strings.TrimSuffix(content, interactionReminder)

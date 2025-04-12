@@ -351,7 +351,7 @@ func handleLlmInteraction2(
 	}
 
 	// maybe queue narration + generation
-	{
+	if !isImpersonate {
 		realMeta, _ := persona.GetMetaByName(cache.PersonaMeta.Name)
 		disableRandomNarrations := realMeta.DisableImages
 		if strings.Contains(response, generateImageTag) ||
