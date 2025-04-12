@@ -43,19 +43,21 @@ func HandleRegenerate(event *handler.CommandEvent) error {
 	}
 
 	// Call the core interaction logic with regenerate flag
-	jumpURL, err := handleLlmInteraction2(
+	jumpURL, _, err := handleLlmInteraction2(
 		event.Client(),
 		event.Channel().ID(),
-		0,  // messageID is determined by handleLlmInteraction2 when regenerating
-		"", // content is empty for regeneration
-		"", // username is not needed for regeneration
-		0,  // userID for memory is not relevant here (or should it be event.User().ID?) - Assuming 0 for now.
-		nil, // attachments are not relevant for regeneration
+		0,     // messageID is determined by handleLlmInteraction2 when regenerating
+		"",    // content is empty for regeneration
+		"",    // username is not needed for regeneration
+		0,     // userID for memory is not relevant here (or should it be event.User().ID?) - Assuming 0 for now.
+		nil,   // attachments are not relevant for regeneration
 		false, // timeInteraction
 		true,  // isRegenerate
 		prepend,
 		nil, // preMsgWg - no typing indicator needed for ephemeral response
 		nil, // reference - determined by handleLlmInteraction2
+		nil, // no event
+		nil,
 	)
 	if err != nil {
 		// Send error back to the user ephemerally

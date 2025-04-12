@@ -23,7 +23,7 @@ func InitiateDMInteraction(client bot.Client) {
 		slog.Error("InitiateDMInteraction: failed to get cached channel IDs", slog.Any("err", err))
 		return
 	}
-	slog.Debug("InitiateDMInteraction check", slog.Int("cached_channels", len(channels)))
+	slog.Info("InitiateDMInteraction check", slog.Int("cached_channels", len(channels)))
 
 	if len(channels) == 0 {
 		return // No channels in cache to check
@@ -54,9 +54,8 @@ func InitiateDMInteraction(client bot.Client) {
 
 		// Check time since last interaction
 		if !cache.LastInteraction.IsZero() {
-			// Wait at least 20-24 hours (randomized)
-			minWait := 20 * time.Hour
-			maxWait := 24 * time.Hour
+			minWait := 3 * time.Hour
+			maxWait := 6 * time.Hour
 			randomWait := minWait + time.Duration(rand.Int63n(int64(maxWait-minWait)))
 			respondTime := cache.LastInteraction.Add(randomWait)
 
@@ -93,7 +92,7 @@ func InitiateDMInteraction(client bot.Client) {
 
 		// Call core LLM logic with timeInteraction flag
 		// handleLlmInteraction2 is in llm_interact.go
-		_, err = handleLlmInteraction2(
+		_, _, err = handleLlmInteraction2(
 			client,
 			id, // Channel ID
 			0,  // Message ID (not replying)
@@ -106,6 +105,8 @@ func InitiateDMInteraction(client bot.Client) {
 			"",               // No regenerate prepend
 			&wg,              // Pass WaitGroup
 			nil,              // No specific message reference
+			nil,              // No event
+			nil,
 		)
 
 		// Handle errors from the interaction attempt
@@ -123,5 +124,5 @@ func InitiateDMInteraction(client bot.Client) {
 		return
 	}
 
-	slog.Debug("InitiateDMInteraction: no suitable channels found for interaction in this cycle")
+	slog.Info("InitiateDMInteraction: no suitable channels found for interaction in this cycle")
 }

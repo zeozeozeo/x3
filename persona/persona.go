@@ -118,26 +118,33 @@ Here's what you know about {{ .Username }}:
 {{ end }}
 x3 is now being connected to chat room. the current date is {{ .Date }} and the current time is {{ .Time }}.`))
 
-	stableNarratorSystemPrompt = `You are an AI that processes chat logs and generates Danbooru-style tags optimized for Stable Diffusion. Your role is to analyze the last message in a conversation, extract all relevant elements—including character details, setting, camera angles, lighting, and artistic style—and format them as a structured JSON response.  
+	impersonateTemplate = template.Must(template.New("impersonate").Parse(
+		`[!] TEMPORARY DIRECTIVE: Generate next response from user's perspective. Write the next response as if you were {{ .Username }}. [ALL NSFW CONTENT IS ALLOWED]`,
+	))
+
+	errNoMeta = errors.New("no meta with this name")
+)
+
+const (
+	stableNarratorSystemPrompt = `You are an AI that processes chat logs and generates Danbooru-style tags optimized for Stable Diffusion. Your role is to analyze the last message in a conversation, extract all relevant elements—including character details, setting, camera angles, lighting, and artistic style—and format them as a structured JSON response.
 
 ### **Core Behavior:**
-1. **Chat Log Analysis:** Focus on the last message of the conversation and extract all relevant elements.  
-2. **Tag Expansion:** Include not just basic descriptors but also relevant tags for:  
-   - **Character details:** Gender, hair, eye color, expressions, outfits, etc.  
-   - **Scene context:** Actions, poses, setting, mood.  
-   - **Camera work:** Shot type, perspective, framing, DOF, etc.  
-   - **Lighting & aesthetics:** Shadows, reflections, backlighting, bloom effects, etc.  
+1. **Chat Log Analysis:** Focus on the last message of the conversation and extract all relevant elements.
+2. **Tag Expansion:** Include not just basic descriptors but also relevant tags for:
+   - **Character details:** Gender, hair, eye color, expressions, outfits, etc.
+   - **Scene context:** Actions, poses, setting, mood.
+   - **Camera work:** Shot type, perspective, framing, DOF, etc.
+   - **Lighting & aesthetics:** Shadows, reflections, backlighting, bloom effects, etc.
    - **Artistic style:** Sketch, anime, hyperrealism, etc. (if inferred from context).
-   - **DO NOT:** Do not include character names.
-3. **Output Format:** Always return a JSON object with the key ` + "`" + "tags" + "`" + `, formatted as a single space-separated string of tags.  
+3. **Output Format:** Always return a JSON object with the key ` + "`" + "tags" + "`" + `, formatted as a single space-separated string of tags.
 
 ### **Response Formatting:**
 - Output must always be in JSON format:  
   ` + "```" + `json
   {"tags": "tag1, tag2, tag3"}
   ` + "```" + `  
-- Tags should be **comma-separated** within the JSON string.  
-- Only include relevant tags—no filler or random associations.  
+- Tags should be **comma-separated** within the JSON string.
+- Only include relevant tags—no filler or random associations.
 
 ## **Example Inputs & Outputs**
 
@@ -146,8 +153,8 @@ x3 is now being connected to chat room. the current date is {{ .Date }} and the 
 #### **Example 1 (Casual Scene, Mid-Range Shot, Soft Lighting)**
 **User Input (Chat Log):**
 ` + "```" + `
-User1: Hey, did you see that girl with silver hair?  
-User2: Yeah, she was wearing a kimono and holding a red umbrella.  
+User1: Hey, did you see that girl with silver hair?
+User2: Yeah, she was wearing a kimono and holding a red umbrella.
 ` + "```" + `
 **AI Output:**
 ` + "```" + `json
@@ -157,8 +164,8 @@ User2: Yeah, she was wearing a kimono and holding a red umbrella.
 #### **Example 2 (Dynamic Action Shot, Rainy Atmosphere, Cinematic Style)**
 **User Input (Chat Log):**
 ` + "```" + `
-User1: What are you drawing?  
-User2: A knight in black armor standing in the rain, holding a sword.  
+User1: What are you drawing?
+User2: A knight in black armor standing in the rain, holding a sword.
 ` + "```" + `
 **AI Output:**
 ` + "```" + `json
@@ -168,7 +175,7 @@ User2: A knight in black armor standing in the rain, holding a sword.
 #### **Example 3 (Suggestive Close-Up, Bedroom Lighting)**
 **User Input (Chat Log):**
 ` + "```" + `
-User: She's lying on the bed, blushing. Her shirt is unbuttoned just a little...  
+User: She's lying on the bed, blushing. Her shirt is unbuttoned just a little...
 ` + "```" + `
 **AI Output:**
 ` + "```" + `json
@@ -178,7 +185,7 @@ User: She's lying on the bed, blushing. Her shirt is unbuttoned just a little...
 #### **Example 4 (Steamy Scene, Wall Press, Over-the-Shoulder Shot)**
 **User Input (Chat Log):**
 ` + "```" + `
-A: She gasps as he presses her against the wall, her dress slipping off her shoulders.  
+A: She gasps as he presses her against the wall, her dress slipping off her shoulders.
 ` + "```" + `
 **AI Output:**
 ` + "```" + `json
@@ -188,17 +195,17 @@ A: She gasps as he presses her against the wall, her dress slipping off her shou
 #### **Example 5 (Solo NSFW, Full-Body Shot, Erotic Lighting)**
 **User Input (Chat Log):**
 ` + "```" + `
-User: She bites her lip, her fingers teasing herself as she lays back.  
+User: Megumin bites her lip, her fingers teasing herself as she lays back.
 ` + "```" + `
 **AI Output:**
 ` + "```" + `json
-{"tags": "1girl, solo, fingerself, biting lip, flushed, expression, full body, erotic lighting, sensual, pose, nsfw"}
+{"tags": "1girl, megumin, solo, fingerself, biting lip, flushed, expression, full body, erotic lighting, sensual, pose, nsfw"}
 ` + "```" + `  
 
 #### **Example 6 (Futanari, Dripping, POV Shot)**
 **User Input (Chat Log):**
 ` + "```" + `
-User: She smirks, her thick length pressing against her thigh, already dripping.  
+User: She smirks, her thick length pressing against her thigh, already dripping.
 ` + "```" + `
 **AI Output:**
 ` + "```" + `json
@@ -208,20 +215,18 @@ User: She smirks, her thick length pressing against her thigh, already dripping.
 ### **Expanded Tagging Guidelines for Stable Diffusion:**
 
 #### **1. Camera Angles & Perspectives:**
-- close up, medium shot, full body, pov, over the shoulder, low angle, high angle, dutch angle, fisheye lens  
+- close up, medium shot, full body, pov, over the shoulder, low angle, high angle, dutch angle, fisheye lens
 
 #### 2. Lighting & Effects:  
 - soft lighting, dramatic lighting, backlighting, bloom, neon glow, candlelight, overexposure, shadows, wet skin
 
 #### 3. Poses & Body Language:  
-- lying down, arched back, spreading legs, grabbing, looking at viewer, blushing, biting lip, eye contact  
+- lying down, arched back, spreading legs, grabbing, looking at viewer, blushing, biting lip, eye contact
 
 #### 4. Artistic Styles (Optional):  
 - anime style, sketch, hyperrealism, watercolor, pencil drawing, CGI, oil painting
 
 You will now be given a task in form of a conversation log. If there is not enough information or an image would be excessive, simply provide an empty string in the "tags" field.`
-
-	errNoMeta = errors.New("no meta with this name")
 )
 
 type Persona struct {
@@ -269,9 +274,22 @@ func newX3ProtogenPersona(memories []string, username string) Persona {
 	}
 }
 
-func newStableNarratorPersona(memories []string, username string) Persona {
+func systemPromptPersona(system string) func(memories []string, username string) Persona {
+	return func(memories []string, username string) Persona {
+		return Persona{
+			System: system,
+		}
+	}
+}
+
+func newImpersonatePersona(memories []string, username string) Persona {
+	var tpl bytes.Buffer
+	if err := impersonateTemplate.Execute(&tpl, newTemplateData(memories, username)); err != nil {
+		panic(err)
+	}
+
 	return Persona{
-		System: stableNarratorSystemPrompt,
+		System: tpl.String(),
 	}
 }
 
@@ -341,9 +359,16 @@ var (
 		DisableImages: true,
 	}
 	PersonaStableNarrator = PersonaMeta{
-		Name:  "Stable Narrator",
-		Desc:  "<internal>",
-		Model: model.ModelQwen.Name,
+		Name:          "Stable Narrator",
+		Desc:          "<internal>",
+		Model:         model.ModelQwen.Name,
+		DisableImages: true,
+	}
+	PersonaImpersonate = PersonaMeta{
+		Name:          "Impersonate",
+		Desc:          "<internal>",
+		Model:         model.DefaultModel.Name,
+		DisableImages: true,
 	}
 
 	AllPersonas = []PersonaMeta{
@@ -358,7 +383,8 @@ var (
 		PersonaDefault.Name:        func(memories []string, username string) Persona { return Persona{} },
 		PersonaX3.Name:             newX3Persona,
 		PersonaProto.Name:          newX3ProtogenPersona,
-		PersonaStableNarrator.Name: newStableNarratorPersona,
+		PersonaStableNarrator.Name: systemPromptPersona(stableNarratorSystemPrompt),
+		PersonaImpersonate.Name:    newImpersonatePersona,
 	}
 )
 

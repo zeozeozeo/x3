@@ -37,7 +37,7 @@ func handleLlmInteraction(event *events.MessageCreate) error {
 
 	// Call the core LLM interaction logic
 	// handleLlmInteraction2 is in llm_interact.go
-	_, err := handleLlmInteraction2(
+	_, _, err := handleLlmInteraction2(
 		event.Client(),
 		event.ChannelID,
 		event.MessageID,
@@ -50,6 +50,8 @@ func handleLlmInteraction(event *events.MessageCreate) error {
 		"",    // No regenerate prepend
 		&wg,   // Pass WaitGroup for typing indicator coordination
 		event.Message.ReferencedMessage,
+		nil, // no event
+		nil,
 	)
 
 	// Handle potential errors from the interaction logic

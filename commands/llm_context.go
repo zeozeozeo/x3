@@ -59,7 +59,10 @@ func formatMsg(msg, username string, reference *discord.Message) string {
 			msg,
 		)
 	}
-	return fmt.Sprintf("%s: %s", username, msg)
+	if username != "" {
+		return fmt.Sprintf("%s: %s", username, msg)
+	}
+	return msg
 }
 
 // isImageAttachment checks if a Discord attachment is an image.
@@ -101,6 +104,19 @@ func readTxtCache(attachmentID snowflake.ID) ([]byte, bool) {
 // It respects whitelist status for attachment size limits.
 func getMessageContent(message discord.Message, isWhitelisted bool) string {
 	content := message.Content
+
+	// rebuild message
+	var sb strings.Builder
+	sb.Grow(len(content))
+	for line := range strings.SplitSeq(content, "\n") {
+		// handleNarrationGenerate will add progress updates to the end of the messages, strip them
+		if !strings.HasPrefix(line, "-# `[") && !strings.HasPrefix(line, "-# r-esrgan") {
+			sb.WriteString(line)
+		}
+		sb.WriteRune('\n')
+	}
+
+	content = sb.String()
 
 	// Process text attachments
 	for i, attachment := range message.Attachments {

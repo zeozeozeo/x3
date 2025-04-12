@@ -28,6 +28,7 @@ var (
 		MemoryCommand,
 		ChatCommand, // generic /chat command
 		GenerateCommand,
+		ImpersonateCommand,
 	}
 )
 
@@ -106,9 +107,10 @@ func RegisterHandlers(r handler.Router) error {
 		r.Command("/add", HandleMemoryAdd)
 	})
 
-	r.Autocomplete("/generate", HandleGenerateModelAutocomplete)
-	r.Command("/generate", HandleGenerate)
-	r.ButtonComponent("/cancel/{id}", HandleGenerateCancel)
+	mux.Autocomplete("/generate", HandleGenerateModelAutocomplete)
+	mux.ButtonComponent("/cancel/{id}", HandleGenerateCancel)
+
+	mux.Command("/impersonate", HandleImpersonate)
 
 	// Image Commands (Registered via imagecmd package)
 	// Pass the asserted *handler.Mux to imagecmd

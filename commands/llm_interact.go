@@ -15,6 +15,7 @@ import (
 
 	"github.com/disgoorg/disgo/bot"
 	"github.com/disgoorg/disgo/discord"
+	"github.com/disgoorg/disgo/handler"
 	"github.com/disgoorg/snowflake/v2"
 	"github.com/zeozeozeo/aihorde-go"
 	"github.com/zeozeozeo/x3/db"
@@ -105,7 +106,9 @@ func handleLlmInteraction2(
 	regeneratePrepend string, // Text to prepend to the regenerated response
 	preMsgWg *sync.WaitGroup, // WaitGroup to wait on before sending the message (e.g., for typing indicator)
 	reference *discord.Message, // Message being replied to (if any)
-) (string, error) { // Returns jumpURL (if regenerating) and error
+	event *handler.CommandEvent, // Event to update the interaction of for the first split (optional)
+	systemPromptOverride *string, // Optional override for the system prompt
+) (string, snowflake.ID, error) { // (Returns jumpURL if regenerating, otherwise response), the bot message id and error
 	cache := db.GetChannelCache(channelID)
 
 	// Handle character card logic first if applicable
@@ -113,11 +116,11 @@ func handleLlmInteraction2(
 	exit, err := handleCard(client, channelID, messageID, cache, preMsgWg)
 	if err != nil {
 		slog.Error("handleCard failed", slog.Any("err", err), slog.String("channel_id", channelID.String()))
-		return "", fmt.Errorf("failed to handle character card: %w", err)
+		return "", 0, fmt.Errorf("failed to handle character card: %w", err)
 	}
 	if exit {
 		slog.Debug("handleCard indicated exit", slog.String("channel_id", channelID.String()))
-		return "", nil // Card message was sent, no further LLM interaction needed now.
+		return "", 0, nil // Card message was sent, no further LLM interaction needed now.
 	}
 
 	llmer := llm.NewLlmer()
@@ -136,16 +139,16 @@ func handleLlmInteraction2(
 	// --- Input Validation and Error Handling ---
 	if timeInteraction && numCtxMessages == 0 {
 		slog.Warn("time interaction triggered in empty channel", slog.String("channel_id", channelID.String()))
-		return "", errTimeInteractionNoMessages
+		return "", 0, errTimeInteractionNoMessages
 	}
 	if isRegenerate && lastResponseMessage == nil {
 		slog.Warn("regenerate called but no previous assistant message found", slog.String("channel_id", channelID.String()))
-		return "", errRegenerateNoMessage
+		return "", 0, errRegenerateNoMessage
 	}
 	if timeInteraction && userID == 0 {
 		if lastUserID == 0 {
-			slog.Error("rime interaction failed: cannot determine target user ID", slog.String("channel_id", channelID.String()))
-			return "", errors.New("cannot determine target user for time interaction")
+			slog.Error("time interaction failed: cannot determine target user ID", slog.String("channel_id", channelID.String()))
+			return "", 0, errors.New("cannot determine target user for time interaction")
 		}
 		userID = lastUserID // Use the ID of the last user who sent a message
 		slog.Debug("inferred user ID for time interaction", slog.String("user_id", userID.String()))
@@ -176,11 +179,14 @@ func handleLlmInteraction2(
 		slog.Debug("regenerating: lobotomized history", slog.String("until_id", lastResponseMessage.ID.String()), slog.Int("remaining_messages", llmer.NumMessages()))
 	}
 
+	if systemPromptOverride != nil {
+		p.System = *systemPromptOverride
+	}
 	llmer.SetPersona(p)
 
 	// Determine prepend text for the assistant response
 	var prepend string
-	if isRegenerate && regeneratePrepend != "" {
+	if regeneratePrepend != "" {
 		prepend = regeneratePrepend
 	} else {
 		prepend = cache.PersonaMeta.Prepend // Use persona's default prepend if not regenerating with specific prepend
@@ -197,7 +203,7 @@ func handleLlmInteraction2(
 	response, usage, err := llmer.RequestCompletion(m, usernames, cache.PersonaMeta.Settings, prepend)
 	if err != nil {
 		slog.Error("LLM request failed", slog.Any("err", err))
-		return "", fmt.Errorf("LLM request failed: %w", err)
+		return "", 0, fmt.Errorf("LLM request failed: %w", err)
 	}
 	slog.Debug("LLM response received", slog.Int("response_len", len(response)), slog.String("usage", usage.String()))
 	// --- End Generation ---
@@ -267,7 +273,7 @@ func handleLlmInteraction2(
 		_, err = client.Rest().UpdateMessage(channelID, lastResponseMessage.ID, builder.Build())
 		if err != nil {
 			slog.Error("failed to update message for regeneration", slog.Any("err", err))
-			return "", fmt.Errorf("failed to update message: %w", err)
+			return response, 0, fmt.Errorf("failed to update message: %w", err)
 		}
 		jumpURL = lastResponseMessage.JumpURL()
 
@@ -300,16 +306,17 @@ func handleLlmInteraction2(
 			}
 
 			// Send the split
-			botMessage, err = sendMessageSplits(client, replyMessageID, nil, 0, channelID, []rune(content), currentFiles, i != len(messages)-1)
+			botMessage, err = sendMessageSplits(client, replyMessageID, event, 0, channelID, []rune(content), currentFiles, i != len(messages)-1)
 			if err != nil {
 				slog.Error("failed to send message split", slog.Any("err", err), slog.Int("split_index", i))
 				// Attempt to continue sending other splits? Or return error?
 				// For now, return the error encountered.
-				return "", fmt.Errorf("failed to send message split %d: %w", i+1, err)
+				return response, 0, fmt.Errorf("failed to send message split %d: %w", i+1, err)
 			}
 			if i == 0 && botMessage != nil {
-				firstBotMessage = botMessage // Keep track of the first message sent
+				firstBotMessage = botMessage // Keep track of the first message sents
 			}
+			event = nil // updated the event, send the next split as a new message
 		}
 		// If the first message was sent successfully, use its jump URL if needed elsewhere (though not returned here)
 		if firstBotMessage != nil {
@@ -357,7 +364,14 @@ func handleLlmInteraction2(
 		}
 	}
 
-	return jumpURL, nil
+	var botMessageID snowflake.ID
+	if botMessage != nil {
+		botMessageID = botMessage.ID
+	}
+	if isRegenerate {
+		return jumpURL, botMessageID, nil
+	}
+	return response, botMessageID, nil
 }
 
 const stableNarratorPrepend = "```json\n{\n  \"tags\":"
