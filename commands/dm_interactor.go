@@ -107,6 +107,7 @@ func InitiateDMInteraction(client bot.Client) {
 			nil,              // No specific message reference
 			nil,              // No event
 			nil,
+			false,
 		)
 
 		// Handle errors from the interaction attempt

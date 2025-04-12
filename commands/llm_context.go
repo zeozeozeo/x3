@@ -296,6 +296,10 @@ func addContextMessagesIfPossible(
 			if strings.HasSuffix(content, "\u200B") {
 				content = strings.TrimSuffix(content, "\u200B") + " <new_message> "
 			}
+			if strings.HasPrefix(content, "\u200B") {
+				// means impersonate message!
+				role = llm.RoleUser
+			}
 
 			// Remove random DM reminder if present
 			content = strings.TrimSuffix(content, interactionReminder)

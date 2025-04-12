@@ -58,6 +58,7 @@ func HandleRegenerate(event *handler.CommandEvent) error {
 		nil, // reference - determined by handleLlmInteraction2
 		nil, // no event
 		nil,
+		false,
 	)
 	if err != nil {
 		// Send error back to the user ephemerally

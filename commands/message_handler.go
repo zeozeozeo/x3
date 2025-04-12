@@ -52,6 +52,7 @@ func handleLlmInteraction(event *events.MessageCreate) error {
 		event.Message.ReferencedMessage,
 		nil, // no event
 		nil,
+		false,
 	)
 
 	// Handle potential errors from the interaction logic

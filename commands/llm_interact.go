@@ -108,6 +108,7 @@ func handleLlmInteraction2(
 	reference *discord.Message, // Message being replied to (if any)
 	event *handler.CommandEvent, // Event to update the interaction of for the first split (optional)
 	systemPromptOverride *string, // Optional override for the system prompt
+	isImpersonate bool, // Whether this is an impersonate interaction
 ) (string, snowflake.ID, error) { // (Returns jumpURL if regenerating, otherwise response), the bot message id and error
 	cache := db.GetChannelCache(channelID)
 
@@ -211,6 +212,11 @@ func handleLlmInteraction2(
 	// Add random DM reminder if applicable
 	if timeInteraction && !cache.EverUsedRandomDMs && !isRegenerate {
 		response += interactionReminder
+	}
+
+	if isImpersonate {
+		// Prefix with a \u200B to detect this inside addContextMessagesIfPossible
+		response = "\u200B" + response
 	}
 
 	// Update channel usage stats (before potentially erroring out on send)
