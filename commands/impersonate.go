@@ -82,8 +82,10 @@ func HandleImpersonate(event *handler.CommandEvent) error {
 		}
 
 		var wg sync.WaitGroup
-		wg.Add(1)
-		go sendTypingWithLog(event.Client(), event.Channel().ID(), &wg)
+		if i > 0 { // don't wait for the first iter because event is nonnil
+			wg.Add(1)
+			go sendTypingWithLog(event.Client(), event.Channel().ID(), &wg)
+		}
 		response, botMessageID, err := handleLlmInteraction2(
 			event.Client(),
 			event.Channel().ID(), // Channel ID
