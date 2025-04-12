@@ -101,7 +101,7 @@ func HandleImpersonate(event *handler.CommandEvent) error {
 			nil,              // No specific message reference
 			interactionEvent, // We want the first split to be sent as an update of this event
 			systemPromptOverride,
-			true,
+			isImpersonateTurn,
 		)
 		if err != nil {
 			slog.Error("handleLlmInteraction2 failed", slog.Any("err", err), slog.String("channel_id", event.Channel().ID().String()))
