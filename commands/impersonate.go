@@ -38,10 +38,10 @@ func HandleImpersonate(event *handler.CommandEvent) error {
 	turns := event.SlashCommandInteractionData().Int("turns")
 	turns = min(max(1, turns), 50)
 	isInWhitelist := db.IsInWhitelist(event.User().ID)
-	if turns > 10 && !isInWhitelist {
+	if turns > 5 && !isInWhitelist {
 		return event.CreateMessage(
 			discord.MessageCreate{
-				Content: "Non-whitelisted users cannot impersonate for more than 10 turns (DM <@890686470556356619> to request access)",
+				Content: "Non-whitelisted users cannot impersonate for more than 5 turns (DM <@890686470556356619> to request access)",
 				Flags:   discord.MessageFlagEphemeral,
 			},
 		)
