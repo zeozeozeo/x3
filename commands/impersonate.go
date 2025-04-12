@@ -68,7 +68,7 @@ func HandleImpersonate(event *handler.CommandEvent) error {
 		// format when impersonating: `system message: <generate the next response as USER>`
 		var trigger string
 		if isImpersonateTurn {
-			trigger = fmt.Sprintf("<generate the next response as %s>", event.User().EffectiveName())
+			trigger = fmt.Sprintf("<generate the next response as %s; keep the response short and concise>", event.User().EffectiveName())
 		} else {
 			trigger = prevResponse
 		}

@@ -108,12 +108,16 @@ func getMessageContent(message discord.Message, isWhitelisted bool) string {
 	// rebuild message
 	var sb strings.Builder
 	sb.Grow(len(content))
+	i := 0
 	for line := range strings.SplitSeq(content, "\n") {
+		if i > 0 {
+			sb.WriteRune('\n')
+		}
 		// handleNarrationGenerate will add progress updates to the end of the messages, strip them
 		if !strings.HasPrefix(line, "-# `[") && !strings.HasPrefix(line, "-# r-esrgan") {
 			sb.WriteString(line)
 		}
-		sb.WriteRune('\n')
+		i++
 	}
 
 	content = sb.String()
