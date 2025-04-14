@@ -9,7 +9,7 @@ require (
 
 require (
 	github.com/dlclark/regexp2 v1.9.0 // indirect
-	golang.org/x/text v0.18.0 // indirect
+	golang.org/x/text v0.22.0 // indirect
 )
 
 require (
@@ -26,6 +26,6 @@ require (
 	github.com/sasha-s/go-csync v0.0.0-20240107134140-fcbab37b09ad // indirect
 	github.com/sashabaranov/go-openai v1.35.6
 	github.com/tiktoken-go/tokenizer v0.2.1
-	golang.org/x/crypto v0.27.0 // indirect
-	golang.org/x/sys v0.25.0 // indirect
+	golang.org/x/crypto v0.35.0 // indirect
+	golang.org/x/sys v0.30.0 // indirect
 )
