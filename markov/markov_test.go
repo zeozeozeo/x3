@@ -1,4 +1,3 @@
-// Corrected markov_test.go file (no comments inside)
 package markov_test
 
 import (
@@ -8,7 +7,6 @@ import (
 	"strings"
 	"testing"
 
-	// Make sure this import path matches your project structure
 	"github.com/zeozeozeo/x3/markov"
 )
 
@@ -23,15 +21,12 @@ func (m *mockRNG) Intn(n int) int {
 	}
 	val := m.values[m.index]
 	m.index++
-	// Allow val == n-1, check if it's out of bounds >= n
-	if val >= n && n > 0 { // Check n > 0 to avoid panic on Intn(0)
+	if val >= n && n > 0 {
 		panic(fmt.Sprintf("mockRNG value %d out of range for n=%d", val, n))
 	}
-	// If n is 0 or less, Intn is allowed to panic by definition, but our mock shouldn't produce value > 0
 	if n <= 0 && val != 0 {
 		panic(fmt.Sprintf("mockRNG value %d provided but Intn called with n=%d", val, n))
 	}
-	// If n == 1, result must be 0
 	if n == 1 && val != 0 {
 		panic(fmt.Sprintf("mockRNG value %d provided but Intn called with n=%d, expected 0", val, n))
 	}
@@ -493,23 +488,21 @@ func TestGenerateIntegration(t *testing.T) {
 	input := []string{"I", "am", "Sam", "Sam", "I", "am"}
 	c.Add(input)
 
-	// Values needed:
 	// ^ ^ -> I   (n=1, val=0)
 	// ^ I -> am  (n=1, val=0)
-	// I am -> Sam (n=2, val=0)  [Other choice is $]
+	// I am -> Sam (n=2, val=0)  [other choice is $]
 	// am Sam -> Sam (n=1, val=0)
 	// Sam Sam -> I (n=1, val=0)
 	// Sam I -> am (n=1, val=0)
-	// I am -> $   (n=2, val=1)  [Other choice is Sam]
+	// I am -> $   (n=2, val=1)  [other choice is Sam]
 	rng := &mockRNG{values: []int{0, 0, 0, 0, 0, 0, 1}}
 	var result []string
 	current := markov.NGram{markov.StartToken, markov.StartToken}
-	maxSteps := 20 // Prevent infinite loops in case of test logic error
+	maxSteps := 20
 
 	for i := 0; i < maxSteps; i++ {
 		next, err := c.GenerateDeterministic(current, rng)
 		if err != nil {
-			// Allow error if state becomes unknown unexpectedly, but fail test
 			if strings.Contains(err.Error(), "unknown ngram state") {
 				t.Fatalf("Generate hit unknown state %v on iteration %d: %v", current, i, err)
 			} else {
@@ -521,14 +514,13 @@ func TestGenerateIntegration(t *testing.T) {
 			break
 		}
 		result = append(result, next)
-		// Ensure current is always length Order before slicing
 		if len(current) != c.Order {
 			t.Fatalf("Internal test error: current ngram %v length mismatch on iteration %d", current, i)
 		}
-		current = append(current[1:], next) // Slide the window
+		current = append(current[1:], next)
 	}
 
-	expected := []string{"I", "am", "Sam", "Sam", "I", "am"} // Sequence before hitting EndToken
+	expected := []string{"I", "am", "Sam", "Sam", "I", "am"}
 	if !reflect.DeepEqual(result, expected) {
 		t.Errorf("Generated sequence mismatch:\nGot:  %v\nWant: %v", result, expected)
 	}
