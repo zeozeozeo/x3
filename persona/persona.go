@@ -361,7 +361,7 @@ var (
 	PersonaStableNarrator = PersonaMeta{
 		Name:          "Stable Narrator",
 		Desc:          "<internal>",
-		Model:         model.ModelQwen.Name,
+		Model:         model.ModelLlama70b.Name,
 		DisableImages: true,
 	}
 	PersonaImpersonate = PersonaMeta{

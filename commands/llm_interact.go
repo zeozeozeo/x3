@@ -125,15 +125,20 @@ func handleLlmInteraction2(
 	}
 
 	llmer := llm.NewLlmer()
+	m := model.GetModelByName(cache.PersonaMeta.Model)
 
 	// Fetch surrounding messages for context
 	// Note: addContextMessagesIfPossible modifies the llmer by adding messages.
+	ctxLen := cache.ContextLength
+	if m.IsMarkov {
+		ctxLen = 70
+	}
 	numCtxMessages, usernames, lastResponseMessage, lastAssistantMessageID, lastUserID := addContextMessagesIfPossible(
 		client,
 		llmer,
 		channelID,
 		messageID,
-		cache.ContextLength,
+		ctxLen,
 	)
 	slog.Debug("interaction; added context messages", slog.Int("added", numCtxMessages), slog.Int("count", llmer.NumMessages()))
 
@@ -194,7 +199,6 @@ func handleLlmInteraction2(
 	}
 
 	// --- Generate LLM Response ---
-	m := model.GetModelByName(cache.PersonaMeta.Model)
 	slog.Debug("requesting LLM completion",
 		slog.String("model", m.Name),
 		slog.Int("num_messages", llmer.NumMessages()),
@@ -383,7 +387,8 @@ func handleLlmInteraction2(
 const stableNarratorPrepend = "```json\n{\n  \"tags\":"
 
 func parseStableNarratorTags(response string) (string, error) {
-	response = strings.TrimPrefix(strings.Replace(response, "**", "", 2), stableNarratorPrepend)
+	//_, response = llm.ExtractThinking(response)
+	response = strings.Replace(response, "**", "", 2)
 	replacer := strings.NewReplacer(
 		"**", "",
 		"_", " ",
@@ -412,8 +417,12 @@ func parseStableNarratorTags(response string) (string, error) {
 }
 
 func handleNarration(client bot.Client, channelID, messageID snowflake.ID, llmer llm.Llmer, triggerContent string) {
+	prepend := stableNarratorPrepend
+	if model.GetModelByName(persona.PersonaStableNarrator.Model).Reasoning {
+		prepend = ""
+	}
 	llmer.LobotomizeKeepLast(4) // keep last 4 turns
-	GetNarrator().QueueNarration(llmer, stableNarratorPrepend, func(llmer *llm.Llmer, response string) {
+	GetNarrator().QueueNarration(llmer, prepend, func(llmer *llm.Llmer, response string) {
 		tags, err := parseStableNarratorTags(response)
 		if err != nil {
 			return

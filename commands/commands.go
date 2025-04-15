@@ -108,6 +108,7 @@ func RegisterHandlers(r handler.Router) error {
 	})
 
 	mux.Autocomplete("/generate", HandleGenerateModelAutocomplete)
+	mux.Command("/generate", HandleGenerate)
 	mux.ButtonComponent("/cancel/{id}", HandleGenerateCancel)
 
 	mux.Command("/impersonate", HandleImpersonate)

@@ -124,6 +124,9 @@ func getMessageContent(message discord.Message, isWhitelisted bool) string {
 
 	// Process text attachments
 	for i, attachment := range message.Attachments {
+		if attachment.Filename == "reasoning.txt" {
+			continue
+		}
 		// Check size limits
 		maxSize := 16 * 1024 // Default limit
 		if isWhitelisted {

@@ -12,6 +12,7 @@ import (
 
 	"github.com/disgoorg/snowflake/v2"
 	openai "github.com/sashabaranov/go-openai"
+	"github.com/zeozeozeo/x3/markov"
 	"github.com/zeozeozeo/x3/model"
 	"github.com/zeozeozeo/x3/persona"
 )
@@ -20,6 +21,11 @@ const (
 	RoleUser      = openai.ChatMessageRoleUser
 	RoleAssistant = openai.ChatMessageRoleAssistant
 	RoleSystem    = openai.ChatMessageRoleSystem
+)
+
+const (
+	markovChainOrder = 2
+	markovMaxLength  = 100
 )
 
 type Message struct {
@@ -474,7 +480,68 @@ func (l *Llmer) requestCompletionInternal(
 	return "", Usage{}, fmt.Errorf("all configurations for provider %s failed: %w", provider, lastErr) // all baseUrls/tokens/codenames errored
 }
 
+func (l *Llmer) inferMarkovChain(usernames map[string]bool) string {
+	if len(l.Messages) == 0 {
+		return ""
+	}
+
+	chain := markov.NewChain(markovChainOrder)
+	totalWords := 0
+	for _, msg := range l.Messages {
+		//if len(l.Messages) > 1 && msg.Role == RoleSystem {
+		//	continue
+		//}
+		content := msg.Content
+		for username := range usernames {
+			content = strings.TrimPrefix(content, username+": ")
+		}
+		words := strings.Fields(content)
+		if len(words) > 0 {
+			chain.Add(words)
+			totalWords += len(words)
+		}
+	}
+
+	current := make(markov.NGram, markovChainOrder)
+	for i := range current {
+		current[i] = markov.StartToken
+	}
+
+	var sb strings.Builder
+
+	for range markovMaxLength {
+		nextToken, err := chain.Generate(current)
+
+		if err != nil {
+			slog.Error("markov generation error", slog.Any("error", err), "current_state", current)
+			if errors.Is(err, markov.ErrUnknownNgramState) && sb.Len() > 0 {
+				break
+			}
+			return ""
+		}
+
+		if nextToken == "" || nextToken == markov.EndToken {
+			break
+		}
+
+		if sb.Len() > 0 {
+			sb.WriteByte(' ')
+		}
+		sb.WriteString(nextToken)
+
+		current = append(current[1:], nextToken)
+	}
+
+	return strings.TrimSpace(sb.String())
+}
+
 func (l *Llmer) RequestCompletion(m model.Model, usernames map[string]bool, settings persona.InferenceSettings, prepend string) (res string, usage Usage, err error) {
+	if m.IsMarkov {
+		res = l.inferMarkovChain(usernames)
+		usage = Usage{}
+		return res, usage, nil
+	}
+
 	settings.Remap() // remap values (1.0 temp -> 0.6 temp)
 
 	for _, provider := range model.ScoreProviders(m.Reasoning) {

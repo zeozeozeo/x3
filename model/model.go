@@ -85,6 +85,7 @@ type Model struct {
 	Encoding  tokenizer.Encoding
 	Providers map[string]ModelProvider
 	IsLunaris bool
+	IsMarkov  bool
 }
 
 type ScoredProvider struct {
@@ -403,7 +404,7 @@ var (
 		IsLlama: true,
 		Providers: map[string]ModelProvider{
 			ProviderGroq: {
-				Codenames: []string{"llama-3.3-70b-specdec", "llama-3.3-70b-versatile"},
+				Codenames: []string{"llama-3.3-70b-versatile"},
 			},
 			ProviderOpenRouter: {
 				Codenames: []string{"meta-llama/llama-3.3-70b-instruct:free"},
@@ -621,9 +622,9 @@ var (
 			ProviderCrof: {
 				Codenames: []string{"qwen-qwq-32b"},
 			},
-			ProviderOpenRouter: {
-				Codenames: []string{"qwen/qwq-32b:free"},
-			},
+			//ProviderOpenRouter: {
+			//	Codenames: []string{"qwen/qwq-32b:free"},
+			//},
 			ProviderElectron: {
 				Codenames: []string{"qwq-32b"},
 			},
@@ -1141,6 +1142,13 @@ var (
 		},
 	}
 
+	ModelMarkovChain = Model{
+		Name:      "Markov Chain",
+		Command:   "markov",
+		IsMarkov:  true,
+		Providers: map[string]ModelProvider{},
+	}
+
 	AllModels = []Model{
 		ModelLunaris8b,
 		ModelGpt4oMini,           // gptslop
@@ -1160,8 +1168,8 @@ var (
 		ModelDeepSeekR1, // groq often cuts off the response
 		ModelDeepSeekV3, // pretty good but slow
 		ModelQwQ,        // groq often cuts off the response
-		ModelQwen,       // very good and fast, default qwen model
-		ModelQwen72b,    // is this different from qwen2.5-max? idk
+		//ModelQwen,       // very good and fast, default qwen model
+		ModelQwen72b, // is this different from qwen2.5-max? idk
 		ModelQwenVL72b,
 		ModelDeepSeekR1DistillLlama70b, // slightly better than qwq at writing
 		ModelCommandA,
@@ -1201,6 +1209,7 @@ var (
 		ModelLlama8b,
 		ModelLlama11b,
 		ModelLlama90b,
+		ModelMarkovChain,
 
 		// TODO:
 		//ModelClaude3Haiku, // unstable api
