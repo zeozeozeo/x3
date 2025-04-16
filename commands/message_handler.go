@@ -69,7 +69,7 @@ func handleLlmInteraction(event *events.MessageCreate) error {
 // It handles various triggers like mentions, replies, keywords, and DMs.
 func OnMessageCreate(event *events.MessageCreate) {
 	// Ignore bots and blacklisted channels
-	if event.Message.Author.Bot || (event.GuildID != nil && db.IsChannelInBlacklist(*event.GuildID)) {
+	if event.Message.Author.Bot || (event.GuildID != nil && db.IsChannelInBlacklist(event.ChannelID)) {
 		return
 	}
 	if event.Message.Content == "" && len(event.Message.Attachments) == 0 {
