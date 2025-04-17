@@ -534,12 +534,19 @@ func (l *Llmer) inferMarkovChain(usernames map[string]bool) string {
 	return strings.TrimSpace(sb.String())
 }
 
+// shouldSwapToVision returns true if any of the last 4 messages had images sent by user
 func (l Llmer) shouldSwapToVision() bool {
-	if len(l.Messages) == 0 {
-		return false
+	numMessages := len(l.Messages)
+
+	for i := max(0, numMessages-4); i < numMessages; i++ {
+		message := l.Messages[i]
+		// the message is from the user AND has images
+		if message.Role == RoleUser && len(message.Images) > 0 {
+			return true
+		}
 	}
-	lastMessage := l.Messages[len(l.Messages)-1]
-	return lastMessage.Role == RoleUser && len(lastMessage.Images) > 0
+
+	return false
 }
 
 func (l *Llmer) RequestCompletion(models []model.Model, usernames map[string]bool, settings persona.InferenceSettings, prepend string) (res string, usage Usage, err error) {
