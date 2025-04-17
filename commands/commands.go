@@ -69,7 +69,7 @@ func RegisterHandlers(r handler.Router) error {
 		if currentModel.Command != "chat" { // Don't re-register /chat
 			mux.Command("/"+currentModel.Command, func(event *handler.CommandEvent) error {
 				// Whitelist check is now inside HandleLlm
-				return HandleLlm(event, &currentModel)
+				return HandleLlm(event, []model.Model{currentModel})
 			})
 		}
 	}

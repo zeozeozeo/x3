@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"github.com/zeozeozeo/x3/llm"
-	"github.com/zeozeozeo/x3/model"
 	"github.com/zeozeozeo/x3/persona"
 )
 
@@ -65,7 +64,7 @@ func (n *Narrator) Run() {
 		meta := persona.PersonaStableNarrator
 		p := persona.GetPersonaByMeta(meta, nil, "")
 		qn.llmer.SetPersona(p) // TODO: custom personas
-		res, _, err := qn.llmer.RequestCompletion(model.GetModelByName(meta.Model), nil, meta.Settings, qn.prepend)
+		res, _, err := qn.llmer.RequestCompletion(meta.GetModels(), nil, meta.Settings, qn.prepend)
 
 		// update last interaction time
 		n.mu.Lock()

@@ -28,6 +28,10 @@ const (
 	markovMaxLength  = 100
 )
 
+var (
+	errNoModelsForCompletion = errors.New("no models provided for completion")
+)
+
 type Message struct {
 	Role    string       `json:"role"`
 	Content string       `json:"content"`
@@ -432,11 +436,6 @@ func (l *Llmer) requestCompletionInternal(
 		return "", Usage{}, fmt.Errorf("no valid client configurations for provider %s", provider)
 	}
 
-	// Validate Cloudflare configuration: must have 1 base URL or matching number of URLs and tokens
-	if provider == model.ProviderCloudflare && len(baseUrls) != 1 && len(baseUrls) != len(tokens) {
-		return "", Usage{}, fmt.Errorf("invalid Cloudflare config: must have 1 base URL or matching number of base URLs (%d) and tokens (%d)", len(baseUrls), len(tokens))
-	}
-
 	var lastErr error
 	for i, baseUrl := range baseUrls {
 		tokensToTry := tokens // Default: try all tokens with this base URL
@@ -535,57 +534,100 @@ func (l *Llmer) inferMarkovChain(usernames map[string]bool) string {
 	return strings.TrimSpace(sb.String())
 }
 
-func (l *Llmer) RequestCompletion(m model.Model, usernames map[string]bool, settings persona.InferenceSettings, prepend string) (res string, usage Usage, err error) {
-	if m.IsMarkov {
+func (l Llmer) shouldSwapToVision() bool {
+	if len(l.Messages) == 0 {
+		return false
+	}
+	lastMessage := l.Messages[len(l.Messages)-1]
+	return lastMessage.Role == RoleUser && len(lastMessage.Images) > 0
+}
+
+func (l *Llmer) RequestCompletion(models []model.Model, usernames map[string]bool, settings persona.InferenceSettings, prepend string) (res string, usage Usage, err error) {
+	if len(models) == 0 {
+		err = errNoModelsForCompletion
+		return
+	}
+
+	if models[0].IsMarkov {
 		res = l.inferMarkovChain(usernames)
 		usage = Usage{}
-		return res, usage, nil
+		err = nil
+		return
 	}
 
 	settings.Remap() // remap values (1.0 temp -> 0.6 temp)
 
-	for _, provider := range model.ScoreProviders(m.Reasoning) {
-		retries := 0
-	retry:
-		if retries >= 3 {
-			continue
-		}
-		if _, ok := m.Providers[provider.Name]; !ok {
-			continue
-		}
-		slog.Info("requesting completion", slog.String("provider", provider.Name), slog.Int("providerErrors", provider.Errors), slog.Int("retries", retries))
+	modelsToTry := models
 
-		res, usage, err = l.requestCompletionInternal(m, provider.Name, usernames, settings.Fixup(), prepend)
-		if res == "" {
-			slog.Warn("got an empty response from requestCompletionInternal", slog.String("provider", provider.Name))
-			retries++
-			provider.Errors++
-			goto retry
+	// If the last message has an image, filter models to only include vision models
+	if l.shouldSwapToVision() {
+		visionModels := []model.Model{}
+		for _, mod := range models {
+			if mod.Vision {
+				visionModels = append(visionModels, mod)
+			}
 		}
-
-		if usage.IsEmpty() {
-			usage = l.estimateUsage(m)
-		} else if usage.ResponseTokens <= 1 {
-			// unrealistic; openrouter api responds with response tokens set to 1
-			estimatedUsage := l.estimateUsage(m)
-			usage.ResponseTokens = estimatedUsage.ResponseTokens
+		if len(visionModels) > 0 {
+			slog.Info("last message has image, filtering to vision models", "count", len(visionModels))
+			modelsToTry = visionModels
+		} else {
+			slog.Info("last message has image, but no vision models provided in the list; swapping to DefaultVisionModels")
+			modelsToTry = model.GetModelsByNames(model.DefaultVisionModels)
 		}
-
-		slog.Info("request usage", slog.String("usage", usage.String()))
-		if err == nil {
-			return
-		}
-		slog.Warn("(provider tests) failed to request completion", slog.String("provider", provider.Name), slog.Any("err", err))
-		provider.Errors++
 	}
 
-	// If we're here, we're probably censored
-	// Not good, especially for a bot that deals with random conversations, which is what we are
-	// so remove the latest message
-	if len(l.Messages) > 0 {
-		slog.Warn("removing last message due to censorship")
-		l.Messages = l.Messages[:len(l.Messages)-1]
+	var lastErr error
+
+	for _, m := range modelsToTry {
+		if m.IsMarkov {
+			continue
+		}
+
+		slog.Info("attempting completion with model", "model", m.Name)
+		for _, provider := range model.ScoreProviders(m.Reasoning) {
+			retries := 0
+		retry:
+			if retries >= 3 {
+				slog.Warn("max retries reached for provider", "provider", provider.Name, "model", m.Name)
+				continue // Try next provider
+			}
+			if _, ok := m.Providers[provider.Name]; !ok {
+				continue // This provider is not configured for this model
+			}
+			slog.Info("requesting completion", "model", m.Name, "provider", provider.Name, "providerErrors", provider.Errors, "retries", retries)
+
+			res, usage, err = l.requestCompletionInternal(m, provider.Name, usernames, settings.Fixup(), prepend)
+
+			// Check for empty response first
+			if err == nil && res == "" {
+				slog.Warn("got an empty response from requestCompletionInternal", "model", m.Name, "provider", provider.Name)
+				err = errors.New("empty response received") // Treat empty response as an error for retry logic
+			}
+
+			if err != nil {
+				slog.Warn("requestCompletionInternal failed", "model", m.Name, "provider", provider.Name, "error", err, "retries", retries)
+				lastErr = err // Store the error
+				retries++
+				provider.Errors++
+				goto retry
+			}
+
+			// Success
+			if usage.IsEmpty() {
+				usage = l.estimateUsage(m)
+			} else if usage.ResponseTokens <= 1 {
+				// unrealistic; openrouter api responds with response tokens set to 1
+				estimatedUsage := l.estimateUsage(m)
+				usage.ResponseTokens = estimatedUsage.ResponseTokens
+			}
+
+			slog.Info("request successful", "model", m.Name, "provider", provider.Name, "usage", usage.String())
+			return res, usage, nil // return on success
+		}
+		slog.Warn("all providers failed for model", "model", m.Name)
 	}
 
-	return
+	slog.Error("all models failed to provide a completion", "lastError", lastErr)
+	err = fmt.Errorf("all models failed: %w", lastErr)
+	return "", Usage{}, err
 }

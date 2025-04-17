@@ -321,7 +321,7 @@ func (s InferenceSettings) Fixup() InferenceSettings {
 type PersonaMeta struct {
 	Name          string            `json:"name,omitempty"`
 	Desc          string            `json:"-"`
-	Model         string            `json:"model,omitempty"`
+	Models        []string          `json:"model,omitempty"`
 	System        string            `json:"system,omitempty"`
 	FirstMes      []string          `json:"first_mes,omitempty"`
 	NextMes       *int              `json:"next_mes,omitempty"`
@@ -331,14 +331,21 @@ type PersonaMeta struct {
 	DisableImages bool              `json:"disable_images,omitempty"` // disable random image narrations
 }
 
+func (meta PersonaMeta) GetModels() []model.Model {
+	if len(meta.Models) == 0 {
+		return model.GetModelsByNames(model.DefaultModels)
+	}
+	return model.GetModelsByNames(meta.Models)
+}
+
 func (meta PersonaMeta) String() string {
 	if meta.Desc == "" {
 		return meta.Name
 	}
-	if meta.Model == "" {
+	if len(meta.Models) == 0 {
 		return fmt.Sprintf("%s: %s", meta.Name, meta.Desc)
 	}
-	return fmt.Sprintf("%s: %s (%s)", meta.Name, meta.Desc, meta.Model)
+	return fmt.Sprintf("%s: %s (%s)", meta.Name, meta.Desc, meta.Models[0])
 }
 
 var (
@@ -355,19 +362,19 @@ var (
 	PersonaProto = PersonaMeta{
 		Name:          "x3 Protogen (Default)",
 		Desc:          "x3 as a furry protogen. Suitable for RP",
-		Model:         model.DefaultModel.Name,
+		Models:        model.DefaultModels,
 		DisableImages: true,
 	}
 	PersonaStableNarrator = PersonaMeta{
 		Name:          "Stable Narrator",
 		Desc:          "<internal>",
-		Model:         model.ModelLlama70b.Name,
+		Models:        model.DefaultModels,
 		DisableImages: true,
 	}
 	PersonaImpersonate = PersonaMeta{
 		Name:          "Impersonate",
 		Desc:          "<internal>",
-		Model:         model.DefaultModel.Name,
+		Models:        model.DefaultModels, // not used
 		DisableImages: true,
 	}
 

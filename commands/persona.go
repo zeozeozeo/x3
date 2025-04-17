@@ -38,7 +38,7 @@ func makePersonaOptionChoices() []discord.ApplicationCommandOptionChoiceString {
 func formatModel(m model.Model) string {
 	var sb strings.Builder
 	sb.WriteString(m.Name)
-	if m.Name == model.DefaultModel.Name {
+	if m.Name == model.DefaultModels[0] {
 		sb.WriteString(" (Default)")
 	}
 	if m.Whitelisted {
@@ -148,8 +148,16 @@ func handlePersonaInfo(event *handler.CommandEvent, ephemeral bool) error {
 		AddField("Description", meta.Desc, true).
 		AddField("Temperature", fmt.Sprintf("%s (remapped to %s)", ftoa(settings.Temperature), ftoa(remappedSettings.Temperature)), true).
 		AddField("Top P", fmt.Sprintf("%s (remapped to %s)", ftoa(settings.TopP), ftoa(remappedSettings.TopP)), true).
-		AddField("Frequency Penalty", ftoa(settings.FrequencyPenalty), true).
-		AddField("Model", model.GetModelByName(cache.PersonaMeta.Model).Name, false)
+		AddField("Frequency Penalty", ftoa(settings.FrequencyPenalty), true)
+
+	models := cache.PersonaMeta.Models
+	if len(models) > 0 {
+		if len(models) == 1 {
+			builder.AddField("Model", models[0], true)
+		} else {
+			builder.AddField("Models", strings.Join(models, ", "), true)
+		}
+	}
 
 	var files []*discord.File
 	if cache.PersonaMeta.System != "" {
@@ -257,7 +265,7 @@ func HandlePersona(event *handler.CommandEvent) error {
 		cache.PersonaMeta.System = dataSystem
 	}
 	if dataModel != "" {
-		cache.PersonaMeta.Model = dataModel
+		cache.PersonaMeta.Models = []string{dataModel}
 	}
 	prevContextLen := cache.ContextLength
 	if hasContext {
@@ -320,8 +328,9 @@ func HandlePersona(event *handler.CommandEvent) error {
 	if cache.PersonaMeta.Name != prevMeta.Name && cache.PersonaMeta.Name != "" {
 		didWhat = append(didWhat, fmt.Sprintf("set persona to `%s`", cache.PersonaMeta.Name))
 	}
-	if cache.PersonaMeta.Model != prevMeta.Model && cache.PersonaMeta.Model != "" {
-		didWhat = append(didWhat, fmt.Sprintf("set model to `%s`", cache.PersonaMeta.Model))
+	if dataModel != "" {
+		// TODO: pass multiple models?
+		didWhat = append(didWhat, fmt.Sprintf("set model to `%s`", cache.PersonaMeta.Models[0]))
 	}
 	if cache.PersonaMeta.System != prevMeta.System && cache.PersonaMeta.System != "" {
 		didWhat = append(didWhat, "updated the system prompt")

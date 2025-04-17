@@ -418,9 +418,9 @@ var (
 			ProviderCrof: {
 				Codenames: []string{"llama3.3-70b"},
 			},
-			// ProviderGithub: {
-			// 	Codenames: []string{"Llama-3.3-70B-Instruct"},
-			// },
+			ProviderGithub: {
+				Codenames: []string{"Llama-3.3-70B-Instruct"},
+			},
 			ProviderElectron: {
 				Codenames: []string{"llama-3.3-70b-instruct"},
 			},
@@ -489,6 +489,15 @@ var (
 			ProviderCloudflare: {
 				Codenames: []string{"@cf/meta/llama-4-scout-17b-16e-instruct"},
 			},
+			ProviderMNN: {
+				Codenames: []string{"llama-4-scout"},
+			},
+			ProviderGithub: {
+				Codenames: []string{"meta/Llama-4-Scout-17B-16E-Instruct"},
+			},
+			ProviderCrof: {
+				Codenames: []string{"llama-4-scout-131k"},
+			},
 		},
 	}
 
@@ -505,6 +514,12 @@ var (
 			},
 			ProviderElectron: {
 				Codenames: []string{"llama-4-maverick-17b-128e-instruct"},
+			},
+			ProviderMNN: {
+				Codenames: []string{"llama-4-maverick"},
+			},
+			ProviderGithub: {
+				Codenames: []string{"meta/Llama-4-Maverick-17B-128E-Instruct-FP8"},
 			},
 		},
 	}
@@ -1215,7 +1230,8 @@ var (
 		//ModelClaude3Haiku, // unstable api
 	}
 
-	DefaultModel = ModelLlama70b
+	DefaultModels       = []string{ModelLlama70b.Name, ModelLlamaScout.Name, ModelLlamaMaverick.Name, ModelGpt4oMini.Name, ModelGpt4o.Name, ModelGeminiFlash.Name}
+	DefaultVisionModels = []string{ModelLlamaScout.Name, ModelLlamaMaverick.Name, ModelGpt4oMini.Name, ModelGpt4o.Name, ModelGeminiFlash.Name}
 
 	modelByName = map[string]Model{}
 
@@ -1281,7 +1297,15 @@ func GetModelByName(name string) Model {
 	if m, ok := modelByName[name]; ok {
 		return m
 	}
-	return DefaultModel
+	return GetModelByName(DefaultModels[0])
+}
+
+func GetModelsByNames(names []string) []Model {
+	models := make([]Model, len(names))
+	for i, name := range names {
+		models[i] = GetModelByName(name)
+	}
+	return models
 }
 
 // Client returns lists of base URLs, tokens, and codenames for the given provider.

@@ -21,7 +21,6 @@ import (
 	"github.com/zeozeozeo/x3/db"
 	"github.com/zeozeozeo/x3/horder"
 	"github.com/zeozeozeo/x3/llm"
-	"github.com/zeozeozeo/x3/model"
 	"github.com/zeozeozeo/x3/persona"
 )
 
@@ -125,12 +124,12 @@ func handleLlmInteraction2(
 	}
 
 	llmer := llm.NewLlmer()
-	m := model.GetModelByName(cache.PersonaMeta.Model)
+	models := cache.PersonaMeta.GetModels()
 
 	// Fetch surrounding messages for context
 	// Note: addContextMessagesIfPossible modifies the llmer by adding messages.
 	ctxLen := cache.ContextLength
-	if m.IsMarkov {
+	if models[0].IsMarkov {
 		ctxLen = 70
 	}
 	numCtxMessages, usernames, lastResponseMessage, lastAssistantMessageID, lastUserID := addContextMessagesIfPossible(
@@ -200,12 +199,12 @@ func handleLlmInteraction2(
 
 	// --- Generate LLM Response ---
 	slog.Debug("requesting LLM completion",
-		slog.String("model", m.Name),
+		slog.Int("num_models", len(models)),
 		slog.Int("num_messages", llmer.NumMessages()),
 		slog.Bool("is_regenerate", isRegenerate),
 		slog.String("prepend", prepend),
 	)
-	response, usage, err := llmer.RequestCompletion(m, usernames, cache.PersonaMeta.Settings, prepend)
+	response, usage, err := llmer.RequestCompletion(models, usernames, cache.PersonaMeta.Settings, prepend)
 	if err != nil {
 		slog.Error("LLM request failed", slog.Any("err", err))
 		return "", 0, fmt.Errorf("LLM request failed: %w", err)
@@ -229,7 +228,7 @@ func handleLlmInteraction2(
 
 	// Extract <think> tags if model supports reasoning
 	var thinking string
-	if m.Reasoning {
+	{
 		var answer string
 		thinking, answer = llm.ExtractThinking(response)
 		if thinking != "" && answer != "" {
@@ -355,7 +354,7 @@ func handleLlmInteraction2(
 	}
 
 	// maybe queue narration + generation
-	if !isImpersonate && !m.IsMarkov {
+	if !isImpersonate && !models[0].IsMarkov {
 		realMeta, _ := persona.GetMetaByName(cache.PersonaMeta.Name)
 		disableRandomNarrations := realMeta.DisableImages
 		if strings.Contains(response, generateImageTag) ||
@@ -417,12 +416,8 @@ func parseStableNarratorTags(response string) (string, error) {
 }
 
 func handleNarration(client bot.Client, channelID, messageID snowflake.ID, llmer llm.Llmer, triggerContent string) {
-	prepend := stableNarratorPrepend
-	if model.GetModelByName(persona.PersonaStableNarrator.Model).Reasoning {
-		prepend = ""
-	}
 	llmer.LobotomizeKeepLast(4) // keep last 4 turns
-	GetNarrator().QueueNarration(llmer, prepend, func(llmer *llm.Llmer, response string) {
+	GetNarrator().QueueNarration(llmer, stableNarratorPrepend, func(llmer *llm.Llmer, response string) {
 		tags, err := parseStableNarratorTags(response)
 		if err != nil {
 			return

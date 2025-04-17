@@ -62,31 +62,32 @@ var ChatCommand discord.ApplicationCommandCreate = makeGptCommand("chat", "Chat 
 var GptCommands = makeGptCommands()
 
 // HandleLlm is the main handler for all LLM-based slash commands (/chat, /gpt4o, etc.).
-// If 'm' is nil, it handles the generic /chat command using the channel's current persona model.
+// If 'models' is nil, it handles the generic /chat command using the channel's current persona model.
 // Otherwise, it uses the specified model 'm'.
-func HandleLlm(event *handler.CommandEvent, m *model.Model) error {
+func HandleLlm(event *handler.CommandEvent, models []model.Model) error {
 	data := event.SlashCommandInteractionData()
 	prompt := data.String("prompt")
 	ephemeral := data.Bool("ephemeral")
 
 	// Determine the model to use
 	cache := db.GetChannelCache(event.Channel().ID())
-	var targetModel model.Model
-	if m == nil {
+	var targetModels []model.Model
+	if len(models) == 0 {
 		// Generic /chat command, use the model from channel cache/persona
-		targetModel = model.GetModelByName(cache.PersonaMeta.Model)
-		m = &targetModel // Assign to m for consistency below
+		targetModels = cache.PersonaMeta.GetModels()
 	} else {
 		// Specific model command (e.g., /gpt4o)
-		targetModel = *m
+		targetModels = models
 	}
 
 	// Check whitelist if necessary
-	if targetModel.Whitelisted && !db.IsInWhitelist(event.User().ID) {
-		return event.CreateMessage(discord.MessageCreate{
-			Content: fmt.Sprintf("You are not whitelisted to use the `%s` model. Try `/chat` or `/gpt4o-mini`.", targetModel.Command),
-			Flags:   discord.MessageFlagEphemeral,
-		})
+	for _, targetModel := range targetModels {
+		if targetModel.Whitelisted && !db.IsInWhitelist(event.User().ID) {
+			return event.CreateMessage(discord.MessageCreate{
+				Content: fmt.Sprintf("You are not whitelisted to use the `%s` model. Try `/chat`.", targetModel.Command),
+				Flags:   discord.MessageFlagEphemeral,
+			})
+		}
 	}
 
 	// --- Prepare LLM context ---
@@ -147,11 +148,11 @@ func HandleLlm(event *handler.CommandEvent, m *model.Model) error {
 
 	// --- Execute LLM Request ---
 	slog.Debug("requesting LLM completion via slash command",
-		slog.String("model", targetModel.Name),
+		slog.Int("num_models", len(targetModels)),
 		slog.Int("num_messages", llmer.NumMessages()),
 		slog.String("prepend", cache.PersonaMeta.Prepend),
 	)
-	response, usage, err := llmer.RequestCompletion(targetModel, nil, cache.PersonaMeta.Settings, cache.PersonaMeta.Prepend) // Pass nil for usernames map as it's not easily available here
+	response, usage, err := llmer.RequestCompletion(targetModels, nil, cache.PersonaMeta.Settings, cache.PersonaMeta.Prepend) // Pass nil for usernames map as it's not easily available here
 	if err != nil {
 		slog.Error("LLM request failed", slog.Any("err", err))
 		return updateInteractionError(event, fmt.Sprintf("LLM request failed: %s", err.Error())) // Use updateInteractionError as we deferred
@@ -168,7 +169,7 @@ func HandleLlm(event *handler.CommandEvent, m *model.Model) error {
 
 	// Process response (thinking tags, memory tags, splitting)
 	var thinking string
-	if targetModel.Reasoning {
+	{
 		var answer string
 		thinking, answer = llm.ExtractThinking(response)
 		if thinking != "" && answer != "" {

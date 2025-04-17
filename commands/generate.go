@@ -14,8 +14,6 @@ import (
 	"github.com/zeozeozeo/x3/db"
 	"github.com/zeozeozeo/x3/horder"
 	"github.com/zeozeozeo/x3/llm"
-	"github.com/zeozeozeo/x3/model"
-	"github.com/zeozeozeo/x3/persona"
 )
 
 var GenerateCommand = discord.SlashCommandCreate{
@@ -174,14 +172,9 @@ func HandleGenerate(event *handler.CommandEvent) error {
 		}
 		tagChan := make(chan string)
 
-		prepend := stableNarratorPrepend
-		if model.GetModelByName(persona.PersonaStableNarrator.Model).Reasoning {
-			prepend = ""
-		}
-
 		llmer := llm.NewLlmer()
 		llmer.AddMessage(llm.RoleUser, prompt, 0)
-		GetNarrator().QueueNarration(*llmer, prepend, func(llmer *llm.Llmer, response string) {
+		GetNarrator().QueueNarration(*llmer, stableNarratorPrepend, func(llmer *llm.Llmer, response string) {
 			tags, err := parseStableNarratorTags(response)
 			if err != nil {
 				tagChan <- ""
