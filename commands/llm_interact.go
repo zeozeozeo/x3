@@ -173,9 +173,9 @@ func handleLlmInteraction2(
 		if reference != nil && reference.ID == lastAssistantMessageID {
 			reference = nil
 		}
-		llmer.AddMessage(llm.RoleUser, formatMsg(content, username, reference), messageID)
-		addImageAttachments(llmer, attachments) // Add attachments from the *current* message
 	}
+	llmer.AddMessage(llm.RoleUser, formatMsg(content, username, reference), messageID)
+	addImageAttachments(llmer, attachments)
 
 	// Handle regeneration logic
 	if isRegenerate {
