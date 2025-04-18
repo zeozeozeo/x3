@@ -163,16 +163,13 @@ func handleLlmInteraction2(
 	// Get persona using the determined userID
 	p := persona.GetPersonaByMeta(cache.PersonaMeta, db.GetMemories(userID, 0), username)
 
-	// Add the current user message/interaction content if provided
-	if content != "" {
-		// Avoid formatting reply if the reference is the message we're about to regenerate
-		if reference != nil && isRegenerate && reference.ID == lastResponseMessage.ID {
-			reference = nil
-		}
-		// Avoid formatting reply if the reference is the last assistant message (prevents self-reply formatting)
-		if reference != nil && reference.ID == lastAssistantMessageID {
-			reference = nil
-		}
+	// Avoid formatting reply if the reference is the message we're about to regenerate
+	if reference != nil && isRegenerate && reference.ID == lastResponseMessage.ID {
+		reference = nil
+	}
+	// Avoid formatting reply if the reference is the last assistant message (prevents self-reply formatting)
+	if reference != nil && reference.ID == lastAssistantMessageID {
+		reference = nil
 	}
 	llmer.AddMessage(llm.RoleUser, formatMsg(content, username, reference), messageID)
 	addImageAttachments(llmer, attachments)
