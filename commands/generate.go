@@ -129,7 +129,7 @@ func HandleGenerate(event *handler.CommandEvent) error {
 	n := data.Int("n")
 	cfgScale := data.Float("cfg_scale")
 	clipSkip := data.Int("clip_skip")
-	autoTag := data.Bool("auto_tag")
+	autoTag, hasAutoTag := data.OptBool("auto_tag")
 	ephemeral := data.Bool("ephemeral")
 	isNSFW := true // in dms
 
@@ -147,7 +147,7 @@ func HandleGenerate(event *handler.CommandEvent) error {
 		m = defaultImageModel
 	}
 	isImplicitAutoTag := false
-	if !autoTag && m != "Flux.1-Schnell fp8 (Compact)" && !strings.Contains(prompt, ",") {
+	if !hasAutoTag && m != "Flux.1-Schnell fp8 (Compact)" && !strings.Contains(prompt, ",") {
 		// no commas = likely no tags, need to auto-tag
 		autoTag = true
 		isImplicitAutoTag = true

@@ -232,7 +232,7 @@ func HandlePersona(event *handler.CommandEvent) error {
 	if m.Whitelisted && !inWhitelist {
 		return event.CreateMessage(
 			discord.NewMessageCreateBuilder().
-				SetContentf("You need to be whitelisted to set the model `%s`. Try `%s`", dataModel, model.ModelGpt4oMini.Name).
+				SetContentf("You need to be whitelisted to set the model `%s`. Try `%s`", dataModel, model.ModelGpt41Mini.Name).
 				SetEphemeral(true).
 				Build(),
 		)

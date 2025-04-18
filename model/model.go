@@ -48,6 +48,7 @@ const (
 	meowBaseURL       = "https://meow.cablyai.com/v1"
 	cohereBaseURL     = "https://api.cohere.ai/compatibility/v1"
 	mnnBaseURL        = "https://api.mnnai.ru/v1"
+	voidaiBaseURL     = "https://api.voidai.xyz/v1"
 )
 
 const (
@@ -67,6 +68,7 @@ const (
 	ProviderCohere      = "cohere"
 	ProviderMNN         = "mnn"
 	ProviderSelfhosted  = "selfhosted"
+	ProviderVoid        = "voidai"
 )
 
 type ModelProvider struct {
@@ -95,74 +97,119 @@ type ScoredProvider struct {
 }
 
 var (
-	ModelGpt4oMini = Model{
-		Name:     "OpenAI GPT-4o mini",
-		Command:  "gpt4o",
+	ModelGpt41Mini = Model{
+		Name:     "OpenAI GPT-4.1 mini",
+		Command:  "mini",
 		Vision:   true,
 		Encoding: tokenizer.O200kBase,
 		Providers: map[string]ModelProvider{
 			ProviderGithub: {
-				Codenames: []string{"gpt-4o-mini"},
+				Codenames: []string{"openai/gpt-4.1-mini"},
 			},
 			ProviderZukijourney: {
-				Codenames: []string{"gpt-4o-mini"},
+				Codenames: []string{"gpt-4.1-mini"},
 			},
 			ProviderFresed: {
-				Codenames: []string{"gpt-4o-mini"},
+				Codenames: []string{"gpt-4.1-mini"},
 			},
 			ProviderHelixmind: {
-				Codenames: []string{"gpt-4o-mini"},
+				Codenames: []string{"gpt-4.1-mini"},
 			},
 			ProviderG4F: {
-				Codenames: []string{"gpt-4o-mini"},
+				Codenames: []string{"gpt-4.1-mini"},
 			},
 			ProviderElectron: {
-				Codenames: []string{"gpt-4o-mini"},
+				Codenames: []string{"gpt-4.1-mini"},
 			},
 			ProviderCably: {
-				Codenames: []string{"gpt-4o-mini"},
+				Codenames: []string{"gpt-4.1-mini"},
 			},
 			ProviderMeow: {
-				Codenames: []string{"gpt-4o-mini"},
+				Codenames: []string{"gpt-4.1-mini"},
 			},
 			ProviderMNN: {
-				Codenames: []string{"gpt-4o-mini"},
+				Codenames: []string{"gpt-4.1-mini"},
+			},
+			ProviderVoid: {
+				Codenames: []string{"gpt-4.1-mini"},
 			},
 		},
 	}
 
-	ModelGpt4o = Model{
-		Name:     "OpenAI GPT-4o",
-		Command:  "gpt4",
+	ModelGpt41 = Model{
+		Name:     "OpenAI GPT-4.1",
+		Command:  "gpt",
 		Vision:   true,
 		Encoding: tokenizer.O200kBase,
 		Providers: map[string]ModelProvider{
 			ProviderGithub: {
-				Codenames: []string{"gpt-4o"},
+				Codenames: []string{"openai/gpt-4.1"},
 			},
 			ProviderZukijourney: {
-				Codenames: []string{"gpt-4o"},
+				Codenames: []string{"gpt-4.1"},
 			},
 			ProviderFresed: {
-				Codenames: []string{"gpt-4o"},
+				Codenames: []string{"gpt-4.1"},
 			},
 			ProviderHelixmind: {
-				Codenames: []string{"gpt-4o"},
+				Codenames: []string{"gpt-4.1"},
 			},
 			ProviderG4F: {
-				Codenames: []string{"gpt-4o"},
+				Codenames: []string{"gpt-4.1"},
 			},
 			ProviderElectron: {
-				Codenames: []string{"gpt-4o"},
+				Codenames: []string{"gpt-4.1"},
 			},
 			ProviderCably: {
-				Codenames: []string{"gpt-4o"},
+				Codenames: []string{"gpt-4.1"},
 			},
 			ProviderMeow: {
-				Codenames: []string{"gpt-4o"},
+				Codenames: []string{"gpt-4.1"},
 			},
 			ProviderMNN: {
-				Codenames: []string{"gpt-4o"},
+				Codenames: []string{"gpt-4.1"},
+			},
+			ProviderVoid: {
+				Codenames: []string{"gpt-4.1"},
+			},
+		},
+	}
+
+	ModelGpt41Nano = Model{
+		Name:     "OpenAI GPT-4.1 nano",
+		Command:  "nano",
+		Vision:   true,
+		Encoding: tokenizer.O200kBase,
+		Providers: map[string]ModelProvider{
+			ProviderGithub: {
+				Codenames: []string{"openai/gpt-4.1-nano"},
+			},
+			ProviderZukijourney: {
+				Codenames: []string{"gpt-4.1-nano"},
+			},
+			ProviderFresed: {
+				Codenames: []string{"gpt-4.1-nano"},
+			},
+			ProviderHelixmind: {
+				Codenames: []string{"gpt-4.1-nano"},
+			},
+			ProviderG4F: {
+				Codenames: []string{"gpt-4.1-nano"},
+			},
+			ProviderElectron: {
+				Codenames: []string{"gpt-4.1-nano"},
+			},
+			ProviderCably: {
+				Codenames: []string{"gpt-4.1-nano"},
+			},
+			ProviderMeow: {
+				Codenames: []string{"gpt-4.1-nano"},
+			},
+			ProviderMNN: {
+				Codenames: []string{"gpt-4.1-nano"},
+			},
+			ProviderVoid: {
+				Codenames: []string{"gpt-4.1-nano"},
 			},
 		},
 	}
@@ -224,7 +271,7 @@ var (
 				Codenames: []string{"command-r-plus"},
 			},
 			ProviderGithub: {
-				Codenames: []string{"Cohere-command-r-plus-08-2024"},
+				Codenames: []string{"cohere/Cohere-command-r-plus"},
 			},
 			ProviderCohere: {
 				Codenames: []string{"command-r-plus"},
@@ -243,7 +290,7 @@ var (
 		Command: "mistral",
 		Providers: map[string]ModelProvider{
 			ProviderGithub: {
-				Codenames: []string{"Mistral-Large-2411"},
+				Codenames: []string{"mistral-ai/Mistral-Large-2411"},
 			},
 			ProviderZukijourney: {
 				Codenames: []string{"mistral-large"},
@@ -255,6 +302,9 @@ var (
 				Codenames: []string{"mistral-large-latest"},
 			},
 			ProviderMNN: {
+				Codenames: []string{"mistral-large-latest"},
+			},
+			ProviderVoid: {
 				Codenames: []string{"mistral-large-latest"},
 			},
 		},
@@ -272,10 +322,13 @@ var (
 				Codenames: []string{"mistral-small"},
 			},
 			ProviderGithub: {
-				Codenames: []string{"mistral-small-2503"},
+				Codenames: []string{"mistral-ai/mistral-small-2503"},
 			},
 			ProviderMNN: {
 				Codenames: []string{"mistral-small"},
+			},
+			ProviderVoid: {
+				Codenames: []string{"mistral-small-latest"},
 			},
 		},
 	}
@@ -362,6 +415,9 @@ var (
 			ProviderMNN: {
 				Codenames: []string{"llama-3.2-90b"},
 			},
+			ProviderGithub: {
+				Codenames: []string{"meta/Llama-3.2-90B-Vision-Instruct"},
+			},
 		},
 	}
 
@@ -395,6 +451,12 @@ var (
 			ProviderCloudflare: {
 				Codenames: []string{"@cf/meta/llama-3.2-11b-vision-instruct"},
 			},
+			ProviderVoid: {
+				Codenames: []string{"meta-llama/Llama-3.2-11B-Vision-Instruct"},
+			},
+			ProviderGithub: {
+				Codenames: []string{"meta/Llama-3.2-11B-Vision-Instruct"},
+			},
 		},
 	}
 
@@ -419,7 +481,7 @@ var (
 				Codenames: []string{"llama3.3-70b"},
 			},
 			ProviderGithub: {
-				Codenames: []string{"Llama-3.3-70B-Instruct"},
+				Codenames: []string{"meta/Llama-3.3-70B-Instruct"},
 			},
 			ProviderElectron: {
 				Codenames: []string{"llama-3.3-70b-instruct"},
@@ -432,6 +494,9 @@ var (
 			},
 			ProviderMNN: {
 				Codenames: []string{"llama-3.3-70b"},
+			},
+			ProviderVoid: {
+				Codenames: []string{"meta-llama/Llama-3.3-70B-Instruct-Turbo", "meta-llama/Llama-3.3-70B-Instruct"},
 			},
 		},
 	}
@@ -464,6 +529,9 @@ var (
 			},
 			ProviderMNN: {
 				Codenames: []string{"llama-3.1-8b"},
+			},
+			ProviderVoid: {
+				Codenames: []string{"meta-llama/Meta-Llama-3.1-8B-Instruct-Turbo"},
 			},
 		},
 	}
@@ -583,13 +651,16 @@ var (
 				Codenames: []string{"deepseek-v3"},
 			},
 			ProviderGithub: {
-				Codenames: []string{"DeepSeek-V3"},
+				Codenames: []string{"deepseek/DeepSeek-V3-0324"},
 			},
 			ProviderCably: {
 				Codenames: []string{"deepseek-v3"},
 			},
 			ProviderMNN: {
 				Codenames: []string{"deepseek-v3"},
+			},
+			ProviderVoid: {
+				Codenames: []string{"deepseek-v3-0324", "deepseek-v3"},
 			},
 		},
 	}
@@ -606,7 +677,7 @@ var (
 				Codenames: []string{"deepseek/deepseek-r1:free"},
 			},
 			ProviderGithub: {
-				Codenames: []string{"DeepSeek-R1"},
+				Codenames: []string{"deepseek/DeepSeek-R1"},
 			},
 			ProviderElectron: {
 				Codenames: []string{"deepseek-r1"},
@@ -615,6 +686,9 @@ var (
 				Codenames: []string{"deepseek-r1"},
 			},
 			ProviderMNN: {
+				Codenames: []string{"deepseek-r1"},
+			},
+			ProviderVoid: {
 				Codenames: []string{"deepseek-r1"},
 			},
 		},
@@ -822,73 +896,6 @@ var (
 		},
 	}
 
-	ModelOlympicCoder32b = Model{
-		Name:      "Open-R1 OlympicCoder 32B",
-		Command:   "olympic",
-		Reasoning: true,
-		Providers: map[string]ModelProvider{
-			ProviderOpenRouter: {
-				Codenames: []string{"open-r1/olympiccoder-32b:free"},
-			},
-			ProviderElectron: {
-				Codenames: []string{"olympiccoder-32b"},
-			},
-		},
-	}
-
-	ModelQwenVL72b = Model{
-		Name:    "Qwen2.5-VL 72B",
-		Command: "vl",
-		Vision:  true,
-		Providers: map[string]ModelProvider{
-			ProviderOpenRouter: {
-				Codenames: []string{"qwen/qwen2.5-vl-72b-instruct:free"},
-			},
-			ProviderElectron: {
-				Codenames: []string{"qwen2.5-vl-72b-instruct"},
-			},
-		},
-	}
-
-	ModelQwen72b = Model{
-		Name:    "Qwen2.5 72B",
-		Command: "qwen72b",
-		Providers: map[string]ModelProvider{
-			ProviderOpenRouter: {
-				Codenames: []string{"qwen/qwen-2.5-72b-instruct:free"},
-			},
-			ProviderZukijourney: {
-				Codenames: []string{"qwen2.5-72b-instruct"},
-			},
-			ProviderFresed: {
-				Codenames: []string{"qwen-2.5-72b"},
-			},
-		},
-	}
-
-	ModelMoonlight16bA3b = Model{
-		Name:    "Moonshot AI Moonlight 16B A3B",
-		Command: "moonlight",
-		Providers: map[string]ModelProvider{
-			ProviderOpenRouter: {
-				Codenames: []string{"moonshotai/moonlight-16b-a3b-instruct:free"},
-			},
-		},
-	}
-
-	ModelToppyM7b = Model{
-		Name:    "Toppy M 7B",
-		Command: "toppy",
-		Providers: map[string]ModelProvider{
-			ProviderOpenRouter: {
-				Codenames: []string{"undi95/toppy-m-7b:free"},
-			},
-			ProviderElectron: {
-				Codenames: []string{"toppy-m-7b"},
-			},
-		},
-	}
-
 	ModelMythoMax13b = Model{
 		Name:    "MythoMax 13B",
 		Command: "mytho",
@@ -1046,31 +1053,6 @@ var (
 		},
 	}
 
-	ModelDeepSeekR1Uncensored = Model{
-		Name:      "DeepSeek R1 Uncensored 671B",
-		Command:   "r1u",
-		Reasoning: true,
-		Providers: map[string]ModelProvider{
-			ProviderCably: {
-				Codenames: []string{"deepseek-r1-uncensored"},
-			},
-		},
-	}
-
-	ModelO3MiniLow = Model{
-		Name:      "OpenAI o3-mini-low",
-		Command:   "o3",
-		Reasoning: true,
-		Providers: map[string]ModelProvider{
-			ProviderCably: {
-				Codenames: []string{"o3-mini-low"},
-			},
-			ProviderMNN: {
-				Codenames: []string{"o3-mini"},
-			},
-		},
-	}
-
 	ModelClaudeSonnet = Model{
 		Name:        "Anthropic Claude 3.7 Sonnet",
 		Command:     "sonnet",
@@ -1101,29 +1083,6 @@ var (
 		},
 	}
 
-	ModelGpt45 = Model{
-		Name:        "OpenAI GPT-4.5",
-		Command:     "gpt5",
-		Whitelisted: true,
-		Providers: map[string]ModelProvider{
-			ProviderMeow: {
-				Codenames: []string{"gpt-4.5", "gpt-4.5-preview"},
-			},
-		},
-	}
-
-	ModelO1 = Model{
-		Name:        "OpenAI o1",
-		Command:     "o1",
-		Whitelisted: true,
-		Reasoning:   true,
-		Providers: map[string]ModelProvider{
-			ProviderMeow: {
-				Codenames: []string{"o1"},
-			},
-		},
-	}
-
 	ModelGrok3 = Model{
 		Name:        "xAI Grok 3",
 		Command:     "grok3",
@@ -1138,25 +1097,6 @@ var (
 		},
 	}
 
-	ModelGrok2 = Model{
-		Name:    "xAI Grok 2",
-		Command: "grok",
-		Providers: map[string]ModelProvider{
-			ProviderMeow: {
-				Codenames: []string{"grok-2"},
-			},
-			ProviderZukijourney: {
-				Codenames: []string{"grok-2-1212"},
-			},
-			ProviderFresed: {
-				Codenames: []string{"grok-2"},
-			},
-			ProviderElectron: {
-				Codenames: []string{"grok-2"},
-			},
-		},
-	}
-
 	ModelMarkovChain = Model{
 		Name:      "Markov Chain",
 		Command:   "markov",
@@ -1166,8 +1106,9 @@ var (
 
 	AllModels = []Model{
 		ModelLunaris8b,
-		ModelGpt4oMini,           // gptslop
-		ModelGpt4o,               // overly expensive gptslop
+		ModelGpt41Mini, // gptslop
+		ModelGpt41,     // overly expensive gptslop
+		ModelGpt41Nano,
 		ModelGeminiFlash,         // this is insanely bad for coding
 		ModelGeminiFlashThinking, // better for creative writing, probably even worse for coding
 		ModelGeminiPro,           // too expensive
@@ -1184,12 +1125,9 @@ var (
 		ModelDeepSeekV3, // pretty good but slow
 		ModelQwQ,        // groq often cuts off the response
 		//ModelQwen,       // very good and fast, default qwen model
-		ModelQwen72b, // is this different from qwen2.5-max? idk
-		ModelQwenVL72b,
 		ModelDeepSeekR1DistillLlama70b, // slightly better than qwq at writing
 		ModelCommandA,
 		ModelDolphin3Mistral, // fully uncensored, good
-		ModelO3MiniLow,       // unstable
 		// discord menu cutoff (25) - only useless models should go below this
 		ModelClaudeSonnet,
 		ModelMistralNemo,
@@ -1207,18 +1145,12 @@ var (
 		ModelDeepSeekR1DistillQwen32b, // useless when qwq is available
 		ModelRekaFlash3,               // only good for english, worse than qwq
 		ModelPhi4,                     // synthetically trained microsoft slop
-		ModelOlympicCoder32b,          // marginally better than qwq
-		ModelMythoMax13b,              // ancient llama 2 finetune used by chub.ai
-		ModelGigaChatPro,              // this is a joke
+		//ModelOlympicCoder32b,          // marginally better than qwq
+		ModelMythoMax13b, // ancient llama 2 finetune used by chub.ai
+		ModelGigaChatPro, // this is a joke
 		ModelSaigaNemo12b,
-		ModelMoonlight16bA3b, // insanely bad model
-		ModelToppyM7b,        // this is really fucking bad
 		ModelQwQAbliterated,
-		ModelDeepSeekR1Uncensored,
 		ModelCommandRplus,
-		//ModelGpt45,
-		ModelO1,
-		ModelGrok2,
 		ModelGrok3,
 		ModelMistralSaba,
 		ModelLlama8b,
@@ -1230,8 +1162,8 @@ var (
 		//ModelClaude3Haiku, // unstable api
 	}
 
-	DefaultModels       = []string{ModelLlama70b.Name, ModelLlamaScout.Name, ModelLlamaMaverick.Name, ModelGpt4oMini.Name, ModelGpt4o.Name, ModelGeminiFlash.Name}
-	DefaultVisionModels = []string{ModelLlamaScout.Name, ModelLlamaMaverick.Name, ModelGpt4oMini.Name, ModelGpt4o.Name, ModelGeminiFlash.Name}
+	DefaultModels       = []string{ModelLlama70b.Name, ModelLlamaScout.Name, ModelLlamaMaverick.Name, ModelGpt41Mini.Name, ModelGpt41.Name, ModelGpt41Nano.Name, ModelGeminiFlash.Name}
+	DefaultVisionModels = []string{ModelLlamaScout.Name, ModelLlamaMaverick.Name, ModelGpt41Mini.Name, ModelGpt41.Name, ModelGpt41Nano.Name, ModelGeminiFlash.Name}
 
 	modelByName = map[string]Model{}
 
@@ -1366,6 +1298,8 @@ func (m Model) Client(provider string) (baseUrls []string, tokens []string, code
 			panic("X3_SELFHOSTED_API_BASE and X3_SELFHOSTED_API_TOKEN lists must be the same length")
 		}
 		return
+	case ProviderVoid:
+		tokenEnvKey, apiVar = "X3_VOIDAI_TOKEN", voidaiBaseURL
 	default:
 		return nil, nil, nil
 	}
