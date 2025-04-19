@@ -30,15 +30,19 @@ var (
 )
 
 const (
-	generateImageTag = "<generate_image>"
+	generateImageTag    = "<generate_image>"
+	memoryUpdatedAppend = "\n-# memory updated"
 )
 
 // replaceLlmTagsWithNewlines replaces <new_message> tags with newlines and handles <memory> tags.
-func replaceLlmTagsWithNewlines(response string, userID snowflake.ID) string {
+// Returns the modified response and a boolean indicating if any <memory> tags were found.
+func replaceLlmTagsWithNewlines(response string, userID snowflake.ID) (string, bool) {
 	var b strings.Builder
 	messages, memories := splitLlmTags(response)
+	memoryUpdated := len(memories) > 0
 	if err := db.HandleMemories(userID, memories); err != nil {
 		slog.Error("failed to handle memories", slog.Any("err", err))
+		memoryUpdated = false
 		// Continue processing messages even if memory saving fails
 	}
 	for i, message := range messages {
@@ -47,7 +51,7 @@ func replaceLlmTagsWithNewlines(response string, userID snowflake.ID) string {
 			b.WriteRune('\n')
 		}
 	}
-	return b.String()
+	return b.String(), memoryUpdated
 }
 
 // splitLlmTags splits the response by <new_message> and extracts <memory> tags.
@@ -253,7 +257,11 @@ func handleLlmInteraction2(
 	var messages []string
 	if isRegenerate {
 		// Edit the previous message for regeneration
-		response = replaceLlmTagsWithNewlines(response, userID) // Handle tags before sending
+		var memoryUpdated bool
+		response, memoryUpdated = replaceLlmTagsWithNewlines(response, userID) // Handle tags before sending
+		if memoryUpdated {
+			response += memoryUpdatedAppend
+		}
 
 		builder := discord.NewMessageUpdateBuilder().SetAllowedMentions(&discord.AllowedMentions{RepliedUser: false})
 		if utf8.RuneCountInString(response) > 2000 {
@@ -290,6 +298,8 @@ func handleLlmInteraction2(
 		if err := db.HandleMemories(userID, memories); err != nil {
 			// Log error but continue sending messages
 			slog.Error("failed to handle memories during send", slog.Any("err", err))
+		} else if len(memories) > 0 && len(messages) > 0 {
+			messages[len(messages)-1] += memoryUpdatedAppend + memories[0]
 		}
 
 		var firstBotMessage *discord.Message

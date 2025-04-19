@@ -305,8 +305,9 @@ func addContextMessagesIfPossible(
 			}
 			content = strings.ReplaceAll(content, "\u200B", "")
 
-			// Remove random DM reminder if present
+			// Remove appends
 			content = strings.TrimSuffix(content, interactionReminder)
+			content = strings.TrimSuffix(content, memoryUpdatedAppend)
 		} else {
 			// --- Process User Message ---
 			role = llm.RoleUser

@@ -189,7 +189,11 @@ func HandleLlm(event *handler.CommandEvent, models []model.Model) error {
 	// If ephemeral or using cache, we can't rely on sendMessageSplits' multi-message capability.
 	// We must combine messages and handle memories before sending.
 	if ephemeral || useCache {
-		response = replaceLlmTagsWithNewlines(response, event.User().ID)
+		var memoryUpdated bool
+		response, memoryUpdated = replaceLlmTagsWithNewlines(response, event.User().ID)
+		if memoryUpdated {
+			response += memoryUpdatedAppend
+		}
 	}
 
 	// --- Send/Update Response ---
@@ -222,6 +226,8 @@ func HandleLlm(event *handler.CommandEvent, models []model.Model) error {
 		messages, memories := splitLlmTags(response)
 		if err := db.HandleMemories(event.User().ID, memories); err != nil {
 			slog.Error("failed to handle memories", slog.Any("err", err))
+		} else if len(memories) > 0 && len(messages) > 0 {
+			messages[len(messages)-1] += memoryUpdatedAppend
 		}
 
 		// Send the message parts

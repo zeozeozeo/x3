@@ -348,6 +348,12 @@ func (meta PersonaMeta) String() string {
 	return fmt.Sprintf("%s: %s (%s)", meta.Name, meta.Desc, meta.Models[0])
 }
 
+func clone[T any](arr []T) []T {
+	cloned := make([]T, len(arr))
+	copy(cloned, arr)
+	return cloned
+}
+
 var (
 	PersonaDefault = PersonaMeta{
 		Name:          "Default",
@@ -362,19 +368,19 @@ var (
 	PersonaProto = PersonaMeta{
 		Name:          "x3 Protogen (Default)",
 		Desc:          "x3 as a furry protogen. Suitable for RP",
-		Models:        model.DefaultModels,
+		Models:        clone(model.DefaultModels),
 		DisableImages: true,
 	}
 	PersonaStableNarrator = PersonaMeta{
 		Name:          "Stable Narrator",
 		Desc:          "<internal>",
-		Models:        model.DefaultModels,
+		Models:        clone(model.DefaultModels),
 		DisableImages: true,
 	}
 	PersonaImpersonate = PersonaMeta{
 		Name:          "Impersonate",
 		Desc:          "<internal>",
-		Models:        model.DefaultModels, // not used
+		Models:        clone(model.DefaultModels), // not used
 		DisableImages: true,
 	}
 

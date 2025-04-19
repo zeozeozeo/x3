@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"net/http"
 	"path"
+	"reflect"
 	"sort"
 	"strconv"
 	"strings"
@@ -38,7 +39,7 @@ func makePersonaOptionChoices() []discord.ApplicationCommandOptionChoiceString {
 func formatModel(m model.Model) string {
 	var sb strings.Builder
 	sb.WriteString(m.Name)
-	if m.Name == model.DefaultModels[0] {
+	if m.Name == model.DefaultModel {
 		sb.WriteString(" (Default)")
 	}
 	if m.Whitelisted {
@@ -204,12 +205,12 @@ func HandlePersona(event *handler.CommandEvent) error {
 
 	if dataCard != "" {
 		// might take some time to fetch the character card
-		err := event.DeferCreateMessage(ephemeral)
-		if err != nil {
+		if err := event.DeferCreateMessage(ephemeral); err != nil {
 			return err
 		}
 	}
 
+	cache := db.GetChannelCache(event.Channel().ID())
 	m := model.GetModelByName(dataModel)
 
 	// default settings for lunaris (TODO: maybe add per-model default settings instead of this HACK ?):
@@ -246,20 +247,19 @@ func HandlePersona(event *handler.CommandEvent) error {
 		)
 	}
 
-	cache := db.GetChannelCache(event.Channel().ID())
 	personaMeta, err := persona.GetMetaByName(dataPersona)
 	if err != nil {
 		personaMeta = cache.PersonaMeta
 	}
+	slog.Info("persona meta models", "dataPersona", dataPersona, "models", personaMeta.Models)
 
 	// update persona meta in channel cache
 	prevMeta := cache.PersonaMeta
 	if prevMeta.System == "" {
 		prevMeta.System = persona.GetPersonaByMeta(cache.PersonaMeta, nil, "").System
 	}
-	cache.PersonaMeta = personaMeta
 	if dataPersona != "" {
-		cache.PersonaMeta.Name = dataPersona
+		cache.PersonaMeta = personaMeta
 	}
 	if dataSystem != "" {
 		cache.PersonaMeta.System = dataSystem
@@ -274,16 +274,21 @@ func HandlePersona(event *handler.CommandEvent) error {
 		}
 		cache.ContextLength = dataContext
 	}
-	var seed *int
 	if dataSeed != 0 {
-		seed = &dataSeed
+		cache.PersonaMeta.Settings.Seed = &dataSeed
+	} else {
+		cache.PersonaMeta.Settings.Seed = nil
 	}
-	cache.PersonaMeta.Settings = persona.InferenceSettings{
-		Temperature:      float32(dataTemperature),
-		TopP:             float32(dataTopP),
-		FrequencyPenalty: float32(dataFreqPenalty),
-		Seed:             seed,
-	}.Fixup()
+	if hasTemperature {
+		cache.PersonaMeta.Settings.Temperature = float32(dataTemperature)
+	}
+	if hasTopP {
+		cache.PersonaMeta.Settings.TopP = float32(dataTopP)
+	}
+	if hasFreqPenalty {
+		cache.PersonaMeta.Settings.FrequencyPenalty = float32(dataFreqPenalty)
+	}
+	cache.PersonaMeta.Settings = cache.PersonaMeta.Settings.Fixup()
 
 	// apply character card
 	didWhat := []string{}
@@ -328,8 +333,8 @@ func HandlePersona(event *handler.CommandEvent) error {
 	if cache.PersonaMeta.Name != prevMeta.Name && cache.PersonaMeta.Name != "" {
 		didWhat = append(didWhat, fmt.Sprintf("set persona to `%s`", cache.PersonaMeta.Name))
 	}
-	if dataModel != "" {
-		// TODO: pass multiple models?
+	if !reflect.DeepEqual(cache.PersonaMeta.Models, prevMeta.Models) {
+		// TODO: list multiple models?
 		didWhat = append(didWhat, fmt.Sprintf("set model to `%s`", cache.PersonaMeta.Models[0]))
 	}
 	if cache.PersonaMeta.System != prevMeta.System && cache.PersonaMeta.System != "" {

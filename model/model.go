@@ -480,9 +480,9 @@ var (
 			ProviderCrof: {
 				Codenames: []string{"llama3.3-70b"},
 			},
-			ProviderGithub: {
-				Codenames: []string{"meta/Llama-3.3-70B-Instruct"},
-			},
+			//ProviderGithub: {
+			//	Codenames: []string{"meta/Llama-3.3-70B-Instruct"},
+			//},
 			ProviderElectron: {
 				Codenames: []string{"llama-3.3-70b-instruct"},
 			},
@@ -1106,6 +1106,7 @@ var (
 
 	AllModels = []Model{
 		ModelLunaris8b,
+		ModelLlama70b,  // default - fastest with specdec, mostly uncensored, good for RP
 		ModelGpt41Mini, // gptslop
 		ModelGpt41,     // overly expensive gptslop
 		ModelGpt41Nano,
@@ -1117,7 +1118,6 @@ var (
 		ModelLlamaScout,
 		ModelLlamaMaverick,
 		ModelLlama405b, // unstable api
-		ModelLlama70b,  // default - fastest with specdec, mostly uncensored, good for RP
 		ModelRogueRose, // good RP model
 		ModelGemma9b,
 		ModelGemma27b,   // this is balls
@@ -1163,6 +1163,7 @@ var (
 	}
 
 	DefaultModels       = []string{ModelLlama70b.Name, ModelLlamaScout.Name, ModelLlamaMaverick.Name, ModelGpt41Mini.Name, ModelGpt41.Name, ModelGpt41Nano.Name, ModelGeminiFlash.Name}
+	DefaultModel        = DefaultModels[0]
 	DefaultVisionModels = []string{ModelLlamaScout.Name, ModelLlamaMaverick.Name, ModelGpt41Mini.Name, ModelGpt41.Name, ModelGpt41Nano.Name, ModelGeminiFlash.Name}
 
 	modelByName = map[string]Model{}
@@ -1229,7 +1230,7 @@ func GetModelByName(name string) Model {
 	if m, ok := modelByName[name]; ok {
 		return m
 	}
-	return GetModelByName(DefaultModels[0])
+	return GetModelByName(DefaultModel)
 }
 
 func GetModelsByNames(names []string) []Model {
