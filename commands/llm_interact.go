@@ -364,8 +364,9 @@ func handleLlmInteraction2(
 	if !isImpersonate && !models[0].IsMarkov {
 		realMeta, _ := persona.GetMetaByName(cache.PersonaMeta.Name)
 		disableRandomNarrations := realMeta.DisableImages
-		if strings.Contains(response, generateImageTag) ||
-			(!disableRandomNarrations && horder.GetHorder().IsFree()) {
+		if !db.IsChannelInImageBlacklist(channelID) &&
+			(strings.Contains(response, generateImageTag) ||
+				(!disableRandomNarrations && horder.GetHorder().IsFree())) {
 			narrationMessageID := messageID
 			if botMessage != nil {
 				narrationMessageID = botMessage.ID

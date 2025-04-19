@@ -38,6 +38,10 @@ var BlacklistCommand = discord.SlashCommandCreate{
 			},
 		},
 		discord.ApplicationCommandOptionBool{
+			Name:        "image_generation",
+			Description: "Only blacklist image generation",
+		},
+		discord.ApplicationCommandOptionBool{
 			Name:        "ephemeral",
 			Description: "If the response should only be visible to you",
 		},
@@ -57,30 +61,44 @@ func HandleBlacklist(event *handler.CommandEvent) error {
 	data := event.SlashCommandInteractionData()
 	channelID := data.Snowflake("channel")
 	ephemeral := data.Bool("ephemeral") // Defaults to false if not provided
+	imageBlacklist := data.Bool("image_generation")
 
-	if db.IsChannelInBlacklist(channelID) {
-		// Channel is already blacklisted, remove it
-		err := db.RemoveChannelFromBlacklist(channelID)
-		if err != nil {
-			return sendInteractionError(event, "Failed to remove channel from blacklist.", true)
+	// Determine the blacklist type
+	var actionMessage string
+	if imageBlacklist {
+		if db.IsChannelInImageBlacklist(channelID) {
+			err := db.RemoveChannelFromImageBlacklist(channelID)
+			if err != nil {
+				return sendInteractionError(event, "Failed to remove channel from image blacklist.", true)
+			}
+			actionMessage = "Removed channel <#%d> from the image blacklist."
+		} else {
+			err := db.AddChannelToImageBlacklist(channelID)
+			if err != nil {
+				return sendInteractionError(event, "Failed to add channel to image blacklist.", true)
+			}
+			actionMessage = "Added channel <#%d> to the image blacklist. Image generation will be ignored in this channel."
 		}
-		return event.CreateMessage(
-			discord.NewMessageCreateBuilder().
-				SetContentf("Removed channel <#%d> from the blacklist.", channelID).
-				SetEphemeral(ephemeral).
-				Build(),
-		)
 	} else {
-		// Channel is not blacklisted, add it
-		err := db.AddChannelToBlacklist(channelID)
-		if err != nil {
-			return sendInteractionError(event, "Failed to add channel to blacklist.", true)
+		if db.IsChannelInBlacklist(channelID) {
+			err := db.RemoveChannelFromBlacklist(channelID)
+			if err != nil {
+				return sendInteractionError(event, "Failed to remove channel from blacklist.", true)
+			}
+			actionMessage = "Removed channel <#%d> from the blacklist."
+		} else {
+			err := db.AddChannelToBlacklist(channelID)
+			if err != nil {
+				return sendInteractionError(event, "Failed to add channel to blacklist.", true)
+			}
+			actionMessage = "Added channel <#%d> to the blacklist. The bot will ignore messages in this channel."
 		}
-		return event.CreateMessage(
-			discord.NewMessageCreateBuilder().
-				SetContentf("Added channel <#%d> to the blacklist. The bot will ignore messages in this channel.", channelID).
-				SetEphemeral(ephemeral).
-				Build(),
-		)
 	}
+
+	return event.CreateMessage(
+		discord.NewMessageCreateBuilder().
+			SetContentf(actionMessage, channelID).
+			SetEphemeral(ephemeral).
+			Build(),
+	)
 }
