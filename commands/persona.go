@@ -213,17 +213,6 @@ func HandlePersona(event *handler.CommandEvent) error {
 	cache := db.GetChannelCache(event.Channel().ID())
 	m := model.GetModelByName(dataModel)
 
-	// default settings for lunaris (TODO: maybe add per-model default settings instead of this HACK ?):
-	// temp = 1.4, top_p = 0.9
-	if m.IsLunaris {
-		if !hasTemperature {
-			dataTemperature = 1.4 + 0.4 // remaps to 1.4
-		}
-		if !hasTopP {
-			dataTopP = 1.0 // remaps to 0.9
-		}
-	}
-
 	// only query whitelist if we need to
 	inWhitelist := false
 	if m.Whitelisted || dataContext > 50 {
@@ -288,6 +277,18 @@ func HandlePersona(event *handler.CommandEvent) error {
 	if hasFreqPenalty {
 		cache.PersonaMeta.Settings.FrequencyPenalty = float32(dataFreqPenalty)
 	}
+
+	// default settings for lunaris (HACK: maybe add per-model default settings instead of this?):
+	// temp = 1.4, top_p = 0.9
+	if m.IsLunaris {
+		if !hasTemperature {
+			cache.PersonaMeta.Settings.Temperature = 1.4 + 0.4 // remaps to 1.4
+		}
+		if !hasTopP {
+			cache.PersonaMeta.Settings.TopP = 1.0 // remaps to 0.9
+		}
+	}
+
 	cache.PersonaMeta.Settings = cache.PersonaMeta.Settings.Fixup()
 
 	// apply character card
@@ -333,9 +334,13 @@ func HandlePersona(event *handler.CommandEvent) error {
 	if cache.PersonaMeta.Name != prevMeta.Name && cache.PersonaMeta.Name != "" {
 		didWhat = append(didWhat, fmt.Sprintf("set persona to `%s`", cache.PersonaMeta.Name))
 	}
-	if !reflect.DeepEqual(cache.PersonaMeta.Models, prevMeta.Models) {
+	if !reflect.DeepEqual(cache.PersonaMeta.Models, prevMeta.Models) && len(cache.PersonaMeta.Models) > 0 {
 		// TODO: list multiple models?
-		didWhat = append(didWhat, fmt.Sprintf("set model to `%s`", cache.PersonaMeta.Models[0]))
+		s := fmt.Sprintf("set model to `%s`", cache.PersonaMeta.Models[0])
+		if len(cache.PersonaMeta.Models) > 1 {
+			s += fmt.Sprintf(" (+%d)", len(cache.PersonaMeta.Models)-1)
+		}
+		didWhat = append(didWhat, fmt.Sprintf("set model to `%s`", s))
 	}
 	if cache.PersonaMeta.System != prevMeta.System && cache.PersonaMeta.System != "" {
 		didWhat = append(didWhat, "updated the system prompt")

@@ -6,6 +6,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"time"
 )
 
 const sdiffModelDetailsUrl = "https://raw.githubusercontent.com/Haidra-Org/AI-Horde-image-model-reference/refs/heads/main/stable_diffusion.json"
@@ -71,6 +72,8 @@ type ModelRequirements struct {
 }
 
 func FetchModelDetails() (ModelsData, error) {
+	slog.Info("FetchModelDetails: fetching model details...", "url", sdiffModelDetailsUrl)
+	start := time.Now()
 	resp, err := http.Get(sdiffModelDetailsUrl)
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch URL %s: %w", sdiffModelDetailsUrl, err)
@@ -92,7 +95,7 @@ func FetchModelDetails() (ModelsData, error) {
 		return nil, fmt.Errorf("failed to unmarshal JSON: %w", err)
 	}
 
-	slog.Info("FetchModelDetails: fetched model details", slog.Int("count", len(models)))
+	slog.Info("FetchModelDetails: fetched model details", slog.Int("count", len(models)), "in", time.Since(start))
 
 	return models, nil
 }
