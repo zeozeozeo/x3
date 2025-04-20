@@ -299,7 +299,7 @@ func handleLlmInteraction2(
 			// Log error but continue sending messages
 			slog.Error("failed to handle memories during send", slog.Any("err", err))
 		} else if len(memories) > 0 && len(messages) > 0 {
-			messages[len(messages)-1] += memoryUpdatedAppend + memories[0]
+			messages[len(messages)-1] += memoryUpdatedAppend
 		}
 
 		var firstBotMessage *discord.Message
