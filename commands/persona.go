@@ -340,7 +340,7 @@ func HandlePersona(event *handler.CommandEvent) error {
 		if len(cache.PersonaMeta.Models) > 1 {
 			s += fmt.Sprintf(" (+%d)", len(cache.PersonaMeta.Models)-1)
 		}
-		didWhat = append(didWhat, fmt.Sprintf("set model to `%s`", s))
+		didWhat = append(didWhat, s)
 	}
 	if cache.PersonaMeta.System != prevMeta.System && cache.PersonaMeta.System != "" {
 		didWhat = append(didWhat, "updated the system prompt")
