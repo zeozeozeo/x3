@@ -309,8 +309,7 @@ func (l *Llmer) requestCompletionInternal2(
 	prepend string,
 ) (string, Usage, error) {
 	req := openai.ChatCompletionRequest{
-		Model: codename,
-		// google api doesn't support image URIs, WTF google?
+		Model:    codename,
 		Messages: l.convertMessages(m.Vision, m.IsLlama, prepend),
 		Stream:   true,
 		StreamOptions: &openai.StreamOptions{
