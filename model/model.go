@@ -49,6 +49,7 @@ const (
 	cohereBaseURL     = "https://api.cohere.ai/compatibility/v1"
 	mnnBaseURL        = "https://api.mnnai.ru/v1"
 	voidaiBaseURL     = "https://api.voidai.xyz/v1"
+	zhipuBaseURL      = "https://open.bigmodel.cn/api/paas/v4"
 )
 
 const (
@@ -69,6 +70,7 @@ const (
 	ProviderMNN         = "mnn"
 	ProviderSelfhosted  = "selfhosted"
 	ProviderVoid        = "voidai"
+	ProviderZhipu       = "zhipu"
 )
 
 type ModelProvider struct {
@@ -1097,6 +1099,38 @@ var (
 		},
 	}
 
+	ModelGLM4 = Model{
+		Name:    "Zhipu AI GLM-4",
+		Command: "glm4",
+		Providers: map[string]ModelProvider{
+			ProviderZhipu: {
+				Codenames: []string{"glm-4-flash"},
+			},
+		},
+	}
+
+	ModelGLM4V = Model{
+		Name:    "Zhipu AI GLM-4V",
+		Command: "glm4v",
+		Vision:  true,
+		Providers: map[string]ModelProvider{
+			ProviderZhipu: {
+				Codenames: []string{"glm-4v-flash"},
+			},
+		},
+	}
+
+	ModelGLMZ1 = Model{
+		Name:      "Zhipu AI GLM-Z1",
+		Command:   "z1",
+		Reasoning: true,
+		Providers: map[string]ModelProvider{
+			ProviderZhipu: {
+				Codenames: []string{"glm-z1-flash"},
+			},
+		},
+	}
+
 	ModelMarkovChain = Model{
 		Name:      "Markov Chain",
 		Command:   "markov",
@@ -1129,6 +1163,9 @@ var (
 		ModelCommandA,
 		ModelDolphin3Mistral, // fully uncensored, good
 		// discord menu cutoff (25) - only useless models should go below this
+		ModelGLM4,
+		ModelGLMZ1,
+		ModelGLM4V,
 		ModelClaudeSonnet,
 		ModelMistralNemo,
 		ModelAnubisPro105b,
@@ -1172,6 +1209,7 @@ var (
 	allProviders = []*ScoredProvider{
 		{Name: ProviderSelfhosted},
 		{Name: ProviderGroq},
+		{Name: ProviderZhipu},
 		{Name: ProviderGithub},
 		{Name: ProviderGoogle},
 		{Name: ProviderCrof, PreferReasoning: true}, // above groq when reasoning
@@ -1301,6 +1339,8 @@ func (m Model) Client(provider string) (baseUrls []string, tokens []string, code
 		return
 	case ProviderVoid:
 		tokenEnvKey, apiVar = "X3_VOIDAI_TOKEN", voidaiBaseURL
+	case ProviderZhipu:
+		tokenEnvKey, apiVar = "X3_BIGMODEL_TOKEN", zhipuBaseURL
 	default:
 		return nil, nil, nil
 	}
