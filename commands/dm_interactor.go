@@ -116,7 +116,8 @@ func InitiateDMInteraction(client bot.Client) {
 			// No action needed, just skip this channel for now
 		} else if err != nil {
 			slog.Error("InitiateDMInteraction: failed to handle LLM interaction", slog.Any("err", err), slog.String("channel_id", id.String()))
-			// Logged error, potentially try again later
+			cache.NoRandomDMs = true
+			cache.Write(id)
 		} else {
 			slog.Info("Proactive DM interaction sent successfully", slog.String("channel_id", id.String()))
 		}
