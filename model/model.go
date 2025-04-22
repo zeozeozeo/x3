@@ -1100,7 +1100,7 @@ var (
 	}
 
 	ModelGLM4 = Model{
-		Name:    "Zhipu AI GLM-4",
+		Name:    "THUDM GLM-4-0414 32B",
 		Command: "glm4",
 		Providers: map[string]ModelProvider{
 			ProviderZhipu: {
@@ -1110,7 +1110,7 @@ var (
 	}
 
 	ModelGLM4V = Model{
-		Name:    "Zhipu AI GLM-4V",
+		Name:    "THUDM GLM-4V",
 		Command: "glm4v",
 		Vision:  true,
 		Providers: map[string]ModelProvider{
@@ -1121,7 +1121,7 @@ var (
 	}
 
 	ModelGLMZ1 = Model{
-		Name:      "Zhipu AI GLM-Z1",
+		Name:      "THUDM GLM-Z1-0414 32B",
 		Command:   "z1",
 		Reasoning: true,
 		Providers: map[string]ModelProvider{
