@@ -576,8 +576,8 @@ var (
 		Command: "maverick",
 		Vision:  true,
 		Providers: map[string]ModelProvider{
-			ProviderOpenRouter: {
-				Codenames: []string{"meta-llama/llama-4-maverick:free"},
+			ProviderGroq: {
+				Codenames: []string{"meta-llama/llama-4-maverick-17b-128e-instruct"},
 			},
 			ProviderZukijourney: {
 				Codenames: []string{"llama-4-maverick-17b-instruct"},
@@ -600,25 +600,6 @@ var (
 		Providers: map[string]ModelProvider{
 			ProviderZukijourney: {
 				Codenames: []string{"GigaChat-Pro"},
-			},
-		},
-	}
-
-	ModelGemma9b = Model{
-		Name:    "Google Gemma 2 9B",
-		Command: "gemma9b",
-		Providers: map[string]ModelProvider{
-			ProviderZukijourney: {
-				Codenames: []string{"gemma-2-9b"},
-			},
-			ProviderGroq: {
-				Codenames: []string{"gemma2-9b-it"},
-			},
-			ProviderFresed: {
-				Codenames: []string{"gemma-2-9b-it"},
-			},
-			ProviderGoogle: {
-				Codenames: []string{"gemma-2-9b-it"},
 			},
 		},
 	}
@@ -824,60 +805,6 @@ var (
 			},
 			ProviderCloudflare: {
 				Codenames: []string{"@cf/deepseek-ai/deepseek-r1-distill-qwen-32b"},
-			},
-		},
-	}
-
-	ModelRekaFlash3 = Model{
-		Name:      "Reka Flash 3",
-		Command:   "reka",
-		Reasoning: true,
-		Providers: map[string]ModelProvider{
-			ProviderOpenRouter: {
-				Codenames: []string{"rekaai/reka-flash-3:free"},
-			},
-		},
-	}
-
-	ModelGeminiFlashThinking = Model{
-		Name:      "Gemini 2.0 Flash Thinking",
-		Command:   "thinking",
-		Reasoning: true,
-		Providers: map[string]ModelProvider{
-			ProviderGoogle: {
-				Codenames: []string{"gemini-2.0-flash-thinking-exp-01-21"},
-			},
-			ProviderFresed: {
-				Codenames: []string{"gemini-2.0-flash-thinking-exp"},
-			},
-			ProviderZukijourney: {
-				Codenames: []string{"gemini-2.0-flash-thinking-exp-01-21"},
-			},
-			ProviderOpenRouter: {
-				Codenames: []string{"google/gemini-2.0-flash-thinking-exp:free"},
-			},
-			ProviderMNN: {
-				Codenames: []string{"gemini-2.0-flash-thinking-exp-01-21"},
-			},
-		},
-	}
-
-	ModelGeminiPro = Model{
-		Name:        "Gemini 2.0 Pro",
-		Command:     "pro",
-		Whitelisted: true,
-		Providers: map[string]ModelProvider{
-			ProviderGoogle: {
-				Codenames: []string{"gemini-2.0-pro-exp-02-05"},
-			},
-			ProviderZukijourney: {
-				Codenames: []string{"gemini-2.0-pro-exp-02-05"},
-			},
-			ProviderOpenRouter: {
-				Codenames: []string{"google/gemini-2.0-pro-exp-02-05:free"},
-			},
-			ProviderMNN: {
-				Codenames: []string{"gemini-2.0-pro-exp-02-05"},
 			},
 		},
 	}
@@ -1144,16 +1071,13 @@ var (
 		ModelGpt41Mini, // gptslop
 		ModelGpt41,     // overly expensive gptslop
 		ModelGpt41Nano,
-		ModelGeminiFlash,         // this is insanely bad for coding
-		ModelGeminiFlashThinking, // better for creative writing, probably even worse for coding
-		ModelGeminiPro,           // too expensive
-		ModelMistralLarge,        // uncensored; i wish i could make this the default, but it's very slow
+		ModelGeminiFlash,  // this is insanely bad for coding
+		ModelMistralLarge, // uncensored; i wish i could make this the default, but it's very slow
 		ModelMistralSmall,
 		ModelLlamaScout,
 		ModelLlamaMaverick,
-		ModelLlama405b, // unstable api
-		ModelRogueRose, // good RP model
-		ModelGemma9b,
+		ModelLlama405b,  // unstable api
+		ModelRogueRose,  // good RP model
 		ModelGemma27b,   // this is balls
 		ModelDeepSeekR1, // groq often cuts off the response
 		ModelDeepSeekV3, // pretty good but slow
@@ -1180,7 +1104,6 @@ var (
 		ModelEvaQwen72b,
 		ModelDolphin3R1Mistral,        // pretty bad compared to the llama 70b distill
 		ModelDeepSeekR1DistillQwen32b, // useless when qwq is available
-		ModelRekaFlash3,               // only good for english, worse than qwq
 		ModelPhi4,                     // synthetically trained microsoft slop
 		//ModelOlympicCoder32b,          // marginally better than qwq
 		ModelMythoMax13b, // ancient llama 2 finetune used by chub.ai
