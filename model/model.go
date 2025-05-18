@@ -48,7 +48,7 @@ const (
 	meowBaseURL       = "https://meow.cablyai.com/v1"
 	cohereBaseURL     = "https://api.cohere.ai/compatibility/v1"
 	mnnBaseURL        = "https://api.mnnai.ru/v1"
-	voidaiBaseURL     = "https://api.voidai.xyz/v1"
+	voidaiBaseURL     = "https://api.voidai.app/v1"
 	zhipuBaseURL      = "https://open.bigmodel.cn/api/paas/v4"
 	chutesBaseURL     = "https://llm.chutes.ai/v1"
 )
