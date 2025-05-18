@@ -37,7 +37,7 @@ const (
 	azureBaseURL      = "https://models.inference.ai.azure.com"
 	zjBaseURL         = "https://api.zukijourney.com/v1"
 	hmBaseURL         = "https://helixmind.online/v1"
-	fresedBaseURL     = "https://fresedgpt.space/v1"
+	fresedBaseURL     = "https://fresedapi.fun/v1"
 	groqBaseURL       = "https://api.groq.com/openai/v1"
 	googleBaseURL     = "https://generativelanguage.googleapis.com/v1beta/openai"
 	openRouterBaseURL = "https://openrouter.ai/api/v1"
@@ -50,6 +50,7 @@ const (
 	mnnBaseURL        = "https://api.mnnai.ru/v1"
 	voidaiBaseURL     = "https://api.voidai.xyz/v1"
 	zhipuBaseURL      = "https://open.bigmodel.cn/api/paas/v4"
+	chutesBaseURL     = "https://llm.chutes.ai/v1"
 )
 
 const (
@@ -71,6 +72,7 @@ const (
 	ProviderSelfhosted  = "selfhosted"
 	ProviderVoid        = "voidai"
 	ProviderZhipu       = "zhipu"
+	ProviderChutes      = "chutes"
 )
 
 type ModelProvider struct {
@@ -354,19 +356,6 @@ var (
 		},
 	}
 
-	ModelMistralSaba = Model{
-		Name:    "Mistral Saba 24B (Arabic)",
-		Command: "saba",
-		Providers: map[string]ModelProvider{
-			ProviderGroq: {
-				Codenames: []string{"mistral-saba-24b"},
-			},
-			ProviderElectron: {
-				Codenames: []string{"mistral-saba-latest"},
-			},
-		},
-	}
-
 	ModelLlama405b = Model{
 		Name:    "Meta Llama 3.1 405B",
 		Command: "llama405b",
@@ -477,7 +466,7 @@ var (
 				Codenames: []string{"llama-3.3-70b-instruct"},
 			},
 			ProviderFresed: {
-				Codenames: []string{"llama-3.3-70b"},
+				Codenames: []string{"llama-3.3-70b-turbo-free", "llama-3.3-70b-turbo"},
 			},
 			ProviderCrof: {
 				Codenames: []string{"llama3.3-70b"},
@@ -621,9 +610,12 @@ var (
 	}
 
 	ModelDeepSeekV3 = Model{
-		Name:    "DeepSeek-V3 671B",
+		Name:    "DeepSeek-V3 671B (0324)",
 		Command: "deepseek",
 		Providers: map[string]ModelProvider{
+			ProviderChutes: {
+				Codenames: []string{"deepseek-ai/DeepSeek-V3-0324"},
+			},
 			ProviderZukijourney: {
 				Codenames: []string{"deepseek-chat"},
 			},
@@ -631,7 +623,7 @@ var (
 				Codenames: []string{"deepseek-v3"},
 			},
 			ProviderCrof: {
-				Codenames: []string{"deepseek-v3"},
+				Codenames: []string{"DeepSeek-V3-0324"},
 			},
 			ProviderGithub: {
 				Codenames: []string{"deepseek/DeepSeek-V3-0324"},
@@ -653,6 +645,9 @@ var (
 		Command:   "r1",
 		Reasoning: true,
 		Providers: map[string]ModelProvider{
+			ProviderChutes: {
+				Codenames: []string{"deepseek-ai/DeepSeek-R1"},
+			},
 			ProviderCrof: {
 				Codenames: []string{"deepseek-r1"},
 			},
@@ -677,166 +672,19 @@ var (
 		},
 	}
 
-	ModelQwQ = Model{
-		Name:      "QwQ 32B",
-		Command:   "qwq",
+	ModelQwen3A22b = Model{
+		Name:      "Qwen3 235B A22B",
+		Command:   "qwen",
 		Reasoning: true,
 		Providers: map[string]ModelProvider{
-			ProviderZukijourney: {
-				Codenames: []string{"qwq-32b"},
+			ProviderChutes: {
+				Codenames: []string{"Qwen/Qwen3-235B-A22B"},
 			},
-			ProviderGroq: {
-				Codenames: []string{"qwen-qwq-32b"},
-			},
-			ProviderFresed: {
-				Codenames: []string{"qwq-32b"},
+			ProviderVoid: {
+				Codenames: []string{"Qwen/Qwen3-235B-A22B"},
 			},
 			ProviderCrof: {
-				Codenames: []string{"qwen-qwq-32b"},
-			},
-			//ProviderOpenRouter: {
-			//	Codenames: []string{"qwen/qwq-32b:free"},
-			//},
-			ProviderElectron: {
-				Codenames: []string{"qwq-32b"},
-			},
-		},
-	}
-
-	ModelQwen = Model{
-		Name:    "Qwen2.5 32B",
-		Command: "qwen",
-		Providers: map[string]ModelProvider{
-			ProviderGroq: {
-				Codenames: []string{"qwen-2.5-32b"},
-			},
-		},
-	}
-
-	ModelQwenCoder = Model{
-		Name:    "Qwen2.5 Coder 32B",
-		Command: "coder",
-		Providers: map[string]ModelProvider{
-			ProviderGroq: {
-				Codenames: []string{"qwen-2.5-coder-32b"},
-			},
-			ProviderOpenRouter: {
-				Codenames: []string{"qwen/qwen-2.5-coder-32b-instruct:free"},
-			},
-			ProviderFresed: {
-				Codenames: []string{"qwen-2.5-coder-32b"},
-			},
-		},
-	}
-
-	ModelRogueRose = Model{
-		Name:    "Rogue Rose 103B v0.2 (RP)",
-		Command: "rose",
-		Providers: map[string]ModelProvider{
-			ProviderOpenRouter: {
-				Codenames: []string{"sophosympatheia/rogue-rose-103b-v0.2:free"},
-			},
-			ProviderZukijourney: {
-				Codenames: []string{"rogue-rose-103b-v0.2"},
-			},
-		},
-	}
-
-	ModelDolphin3Mistral = Model{
-		Name:    "Dolphin3.0 Mistral 24B (RP)",
-		Command: "dolphin",
-		Providers: map[string]ModelProvider{
-			ProviderOpenRouter: {
-				Codenames: []string{"cognitivecomputations/dolphin3.0-mistral-24b:free"},
-			},
-			ProviderElectron: {
-				Codenames: []string{"dolphin3.0-mistral-24b"},
-			},
-		},
-	}
-
-	ModelDolphin3R1Mistral = Model{
-		Name:      "Dolphin3.0 R1 Mistral 24B (RP)",
-		Command:   "r1d",
-		Reasoning: true,
-		Providers: map[string]ModelProvider{
-			ProviderOpenRouter: {
-				Codenames: []string{"cognitivecomputations/dolphin3.0-r1-mistral-24b:free"},
-			},
-			ProviderElectron: {
-				Codenames: []string{"dolphin3.0-r1-mistral-24b"},
-			},
-		},
-	}
-
-	ModelDeepSeekR1DistillLlama70b = Model{
-		Name:      "DeepSeek R1 Distill Llama 70B",
-		Command:   "r1l",
-		Reasoning: true,
-		Providers: map[string]ModelProvider{
-			ProviderOpenRouter: {
-				Codenames: []string{"deepseek/deepseek-r1-distill-llama-70b:free"},
-			},
-			ProviderCrof: {
-				Codenames: []string{"deepseek-r1-distill-llama-70b"},
-			},
-			ProviderGroq: {
-				Codenames: []string{"deepseek-r1-distill-llama-70b"},
-			},
-		},
-	}
-
-	ModelDeepSeekR1DistillQwen32b = Model{
-		Name:      "DeepSeek R1 Distill Qwen 32B",
-		Command:   "r1q",
-		Reasoning: true,
-		Providers: map[string]ModelProvider{
-			ProviderOpenRouter: {
-				Codenames: []string{"deepseek/deepseek-r1-distill-qwen-32b:free"},
-			},
-			ProviderGroq: {
-				Codenames: []string{"deepseek-r1-distill-qwen-32b"},
-			},
-			ProviderCrof: {
-				Codenames: []string{"deepseek-r1-distill-qwen-32b"},
-			},
-			ProviderMeow: {
-				Codenames: []string{"deepseek-r1-distill-qwen-32b"},
-			},
-			ProviderCloudflare: {
-				Codenames: []string{"@cf/deepseek-ai/deepseek-r1-distill-qwen-32b"},
-			},
-		},
-	}
-
-	ModelPhi4 = Model{
-		Name:    "Microsoft Phi-4 14B",
-		Command: "phi",
-		Providers: map[string]ModelProvider{
-			ProviderGithub: {
-				Codenames: []string{"Phi-4"},
-			},
-			ProviderZukijourney: {
-				Codenames: []string{"phi-4"},
-			},
-			ProviderFresed: {
-				Codenames: []string{"phi-4"},
-			},
-		},
-	}
-
-	ModelMythoMax13b = Model{
-		Name:    "MythoMax 13B",
-		Command: "mytho",
-		Providers: map[string]ModelProvider{
-			ProviderOpenRouter: {
-				Codenames: []string{"gryphe/mythomax-l2-13b:free"},
-			},
-			ProviderElectron: {
-				Codenames: []string{"mytho-max-l2-13b"},
-			},
-			ProviderZukijourney: {
-				Codenames: []string{"mythomax-l2-13b"},
+				Codenames: []string{"Qwen3-235B-A22B"},
 			},
 		},
 	}
@@ -851,133 +699,6 @@ var (
 			},
 			ProviderElectron: {
 				Codenames: []string{"l3-lunaris-8b"},
-			},
-		},
-	}
-
-	ModelAnubisPro105b = Model{
-		Name:    "Llama 3.3 Anubis Pro 105B (RP)",
-		Command: "anubis",
-		Providers: map[string]ModelProvider{
-			ProviderElectron: {
-				Codenames: []string{"anubis-pro-105b-v1"},
-			},
-		},
-	}
-
-	ModelLumimaid70b = Model{
-		Name:    "Llama 3.1 Lumimaid 70B (RP)",
-		Command: "lumimaid",
-		Providers: map[string]ModelProvider{
-			ProviderElectron: {
-				Codenames: []string{"llama-3.1-lumimaid-70b"},
-			},
-		},
-	}
-
-	ModelMagnum72b = Model{
-		Name:    "Qwen2.5 Magnum V4 72B (RP)",
-		Command: "magnum",
-		Providers: map[string]ModelProvider{
-			ProviderElectron: {
-				Codenames: []string{"magnum-v4-72b"},
-			},
-		},
-	}
-
-	ModelHanamiX1 = Model{
-		Name:    "Llama 3.1 Hanami X1 70B (RP)",
-		Command: "hanami",
-		Providers: map[string]ModelProvider{
-			ProviderElectron: {
-				Codenames: []string{"l3.1-70b-hanami-x1"},
-			},
-		},
-	}
-
-	ModelEva70b = Model{
-		Name:    "Llama 3.3 EVA v0.1 70B (RP)",
-		Command: "eva",
-		Providers: map[string]ModelProvider{
-			ProviderElectron: {
-				Codenames: []string{"eva-llama-3.33-70b-v0.1"},
-			},
-		},
-	}
-
-	ModelEvaQwen32b = Model{
-		Name:    "Qwen2.5 EVA v0.2 32B (RP)",
-		Command: "qeva",
-		Providers: map[string]ModelProvider{
-			ProviderElectron: {
-				Codenames: []string{"eva-qwen2.5-32b-v0.2"},
-			},
-		},
-	}
-
-	ModelEvaQwen72b = Model{
-		Name:    "Qwen2.5 EVA v0.2 72B (RP)",
-		Command: "evaq",
-		Providers: map[string]ModelProvider{
-			ProviderElectron: {
-				Codenames: []string{"eva-qwen2.5-72b"},
-			},
-		},
-	}
-
-	ModelSaigaNemo12b = Model{
-		Name:    "Saiga Mistral Nemo 12B (Russian)",
-		Command: "saiga",
-		Providers: map[string]ModelProvider{
-			ProviderElectron: {
-				Codenames: []string{"saiga-nemo-12b"},
-			},
-		},
-	}
-
-	ModelElectra70b = Model{
-		Name:      "Llama 3.3 Electra R1 70B (RP)",
-		Command:   "electra",
-		Reasoning: true,
-		Providers: map[string]ModelProvider{
-			ProviderElectron: {
-				Codenames: []string{"l3.3-electra-r1-70b"},
-			},
-		},
-	}
-
-	ModelMai70b = Model{
-		Name:      "Llama 3.3 Mai R1 70B (RP)",
-		Command:   "mai",
-		Reasoning: true,
-		Providers: map[string]ModelProvider{
-			ProviderElectron: {
-				Codenames: []string{"l3.3-cu-mai-r1-70b"},
-			},
-		},
-	}
-
-	ModelQwQAbliterated = Model{
-		Name:        "QwQ Abliterated 32B (RP)",
-		Command:     "qwqa",
-		Reasoning:   true,
-		Whitelisted: true, // eats tokens
-		Providers: map[string]ModelProvider{
-			ProviderElectron: {
-				Codenames: []string{"qwq-32b-abliterated"},
-			},
-		},
-	}
-
-	ModelEuryale70b = Model{
-		Name:    "Llama 3.3 Euryale v2.3 70B (RP)",
-		Command: "euryale",
-		Providers: map[string]ModelProvider{
-			ProviderElectron: {
-				Codenames: []string{"l3.3-70b-euryale-v2.3"},
-			},
-			ProviderZukijourney: {
-				Codenames: []string{"euryale-70b"},
 			},
 		},
 	}
@@ -1008,20 +729,6 @@ var (
 			},
 			ProviderZukijourney: {
 				Codenames: []string{"command-a"},
-			},
-		},
-	}
-
-	ModelGrok3 = Model{
-		Name:        "xAI Grok 3",
-		Command:     "grok3",
-		Whitelisted: true,
-		Providers: map[string]ModelProvider{
-			ProviderMeow: {
-				Codenames: []string{"grok-3"},
-			},
-			ProviderFresed: {
-				Codenames: []string{"grok-3"},
 			},
 		},
 	}
@@ -1071,48 +778,25 @@ var (
 		ModelGpt41Mini, // gptslop
 		ModelGpt41,     // overly expensive gptslop
 		ModelGpt41Nano,
-		ModelGeminiFlash,  // this is insanely bad for coding
-		ModelMistralLarge, // uncensored; i wish i could make this the default, but it's very slow
+		ModelGeminiFlash,
+		ModelMistralLarge,
 		ModelMistralSmall,
 		ModelLlamaScout,
 		ModelLlamaMaverick,
 		ModelLlama405b,  // unstable api
-		ModelRogueRose,  // good RP model
 		ModelGemma27b,   // this is balls
 		ModelDeepSeekR1, // groq often cuts off the response
 		ModelDeepSeekV3, // pretty good but slow
-		ModelQwQ,        // groq often cuts off the response
-		//ModelQwen,       // very good and fast, default qwen model
-		ModelDeepSeekR1DistillLlama70b, // slightly better than qwq at writing
 		ModelCommandA,
-		ModelDolphin3Mistral, // fully uncensored, good
+		ModelQwen3A22b,
 		// discord menu cutoff (25) - only useless models should go below this
 		ModelGLM4,
 		ModelGLMZ1,
 		ModelGLM4V,
 		ModelClaudeSonnet,
 		ModelMistralNemo,
-		ModelAnubisPro105b,
-		ModelEuryale70b, // very unstable api
-		ModelLumimaid70b,
-		ModelHanamiX1,
-		ModelElectra70b,
-		ModelMai70b,
-		ModelMagnum72b,
-		ModelEva70b,
-		ModelEvaQwen32b,
-		ModelEvaQwen72b,
-		ModelDolphin3R1Mistral,        // pretty bad compared to the llama 70b distill
-		ModelDeepSeekR1DistillQwen32b, // useless when qwq is available
-		ModelPhi4,                     // synthetically trained microsoft slop
-		//ModelOlympicCoder32b,          // marginally better than qwq
-		ModelMythoMax13b, // ancient llama 2 finetune used by chub.ai
 		ModelGigaChatPro, // this is a joke
-		ModelSaigaNemo12b,
-		ModelQwQAbliterated,
 		ModelCommandRplus,
-		ModelGrok3,
-		ModelMistralSaba,
 		ModelLlama8b,
 		ModelLlama11b,
 		ModelLlama90b,
@@ -1133,6 +817,7 @@ var (
 		{Name: ProviderSelfhosted},
 		{Name: ProviderGroq},
 		{Name: ProviderZhipu},
+		{Name: ProviderChutes},
 		{Name: ProviderGithub},
 		{Name: ProviderGoogle},
 		{Name: ProviderCrof, PreferReasoning: true}, // above groq when reasoning
@@ -1264,6 +949,8 @@ func (m Model) Client(provider string) (baseUrls []string, tokens []string, code
 		tokenEnvKey, apiVar = "X3_VOIDAI_TOKEN", voidaiBaseURL
 	case ProviderZhipu:
 		tokenEnvKey, apiVar = "X3_BIGMODEL_TOKEN", zhipuBaseURL
+	case ProviderChutes:
+		tokenEnvKey, apiVar = "X3_CHUTES_TOKEN", chutesBaseURL
 	default:
 		return nil, nil, nil
 	}
