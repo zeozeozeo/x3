@@ -90,7 +90,7 @@ type Model struct {
 	Reasoning bool
 	Encoding  tokenizer.Encoding
 	Providers map[string]ModelProvider
-	IsLunaris bool
+	IsMagMell bool
 	IsMarkov  bool
 }
 
@@ -689,16 +689,13 @@ var (
 		},
 	}
 
-	ModelLunaris8b = Model{
-		Name:      "Llama 3 Lunaris 8B (Selfhosted, RP)",
-		Command:   "lunaris",
-		IsLunaris: true,
+	ModelMagMell = Model{
+		Name:      "Mag Mell R1 12B (Selfhosted, RP)",
+		Command:   "magmell",
+		IsMagMell: true,
 		Providers: map[string]ModelProvider{
 			ProviderSelfhosted: {
-				Codenames: []string{"L3-8B-Lunaris-v1-Q4_K_M"}, // https://huggingface.co/bartowski/L3-8B-Lunaris-v1-GGUF/blob/main/L3-8B-Lunaris-v1-Q4_K_M.gguf
-			},
-			ProviderElectron: {
-				Codenames: []string{"l3-lunaris-8b"},
+				Codenames: []string{"MN-12B-Mag-Mell-R1"},
 			},
 		},
 	}
@@ -773,7 +770,7 @@ var (
 	}
 
 	AllModels = []Model{
-		ModelLunaris8b,
+		ModelMagMell,
 		ModelLlama70b,  // default - fastest with specdec, mostly uncensored, good for RP
 		ModelGpt41Mini, // gptslop
 		ModelGpt41,     // overly expensive gptslop

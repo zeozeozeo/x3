@@ -315,8 +315,9 @@ func (l *Llmer) requestCompletionInternal2(
 		StreamOptions: &openai.StreamOptions{
 			IncludeUsage: true,
 		},
-		Temperature:      settings.Temperature,
-		TopP:             settings.TopP,
+		Temperature: settings.Temperature,
+		TopP:        settings.TopP,
+		// MinP anyone?
 		FrequencyPenalty: settings.FrequencyPenalty,
 		Seed:             settings.Seed,
 	}
@@ -395,10 +396,6 @@ func (l *Llmer) requestCompletionInternal2(
 		)
 		unescaped = replacer.Replace(unescaped)
 	}
-	// Nous Hermes 3 is dumb, too
-	unescaped = strings.TrimSuffix(unescaped, "@ [email protected]")
-	unescaped = strings.TrimSuffix(unescaped, "[email protected] ;")
-	unescaped = strings.TrimSuffix(unescaped, "[email protected];")
 	// and trim spaces again after our checks, for good measure
 	unescaped = strings.TrimSpace(unescaped)
 	slog.Info("response", slog.String("text", text.String()), slog.String("unescaped", unescaped), slog.Duration("duration", time.Since(completionStart)), slog.String("model", m.Name), slog.String("provider", provider))
