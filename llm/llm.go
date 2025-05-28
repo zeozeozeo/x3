@@ -415,7 +415,7 @@ func (l *Llmer) requestCompletionInternal(
 	settings persona.InferenceSettings,
 	prepend string,
 ) (string, Usage, error) {
-	slog.Info(
+	slog.Debug(
 		"request completion.. message history follows..",
 		slog.String("model", m.Name),
 		slog.String("provider", provider),
@@ -424,7 +424,7 @@ func (l *Llmer) requestCompletionInternal(
 		slog.Float64("frequency_penalty", float64(settings.FrequencyPenalty)),
 	)
 	for _, msg := range l.Messages {
-		slog.Info("    message", slog.String("role", msg.Role), slog.String("content", msg.Content), slog.Int("images", len(msg.Images)))
+		slog.Debug("    message", slog.String("role", msg.Role), slog.String("content", msg.Content), slog.Int("images", len(msg.Images)))
 	}
 
 	baseUrls, tokens, codenames := m.Client(provider)
