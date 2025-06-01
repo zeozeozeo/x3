@@ -43,7 +43,7 @@ const (
 	openRouterBaseURL = "https://openrouter.ai/api/v1"
 	g4fBaseURL        = "http://192.168.230.44:1337/v1"
 	crofBaseURL       = "https://ai.nahcrof.com/v2"
-	electronBaseURL   = "https://api.electronhub.top/v1"
+	electronBaseURL   = "https://api.electronhub.ai/v1"
 	cablyBaseURL      = "https://cablyai.com/v1"
 	meowBaseURL       = "https://meow.cablyai.com/v1"
 	cohereBaseURL     = "https://api.cohere.ai/compatibility/v1"
