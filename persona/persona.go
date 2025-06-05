@@ -387,7 +387,7 @@ var (
 	PersonaStableNarrator = PersonaMeta{
 		Name:          "Stable Narrator",
 		Desc:          "<internal>",
-		Models:        clone(model.DefaultModels),
+		Models:        clone(model.NarratorModels),
 		DisableImages: true,
 	}
 	PersonaImpersonate = PersonaMeta{

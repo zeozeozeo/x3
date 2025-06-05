@@ -777,7 +777,7 @@ var (
 	AllModels = []Model{
 		ModelMagMell,
 		ModelDeepSeekV3, // pretty good but slow
-		ModelLlama70b, // default - fastest with specdec, mostly uncensored, good for RP
+		ModelLlama70b,   // default - fastest with specdec, mostly uncensored, good for RP
 		ModelGpt4o,
 		ModelGpt4oMini,
 		ModelGeminiFlash,
@@ -809,7 +809,9 @@ var (
 		//ModelClaude3Haiku, // unstable api
 	}
 
-	DefaultModels       = []string{ModelDeepSeekV3.Name, ModelLlama70b.Name, ModelLlamaScout.Name, ModelLlamaMaverick.Name, ModelGpt41Mini.Name, ModelGpt41.Name, ModelGpt41Nano.Name, ModelGeminiFlash.Name}
+	DefaultModels = []string{ModelDeepSeekV3.Name, ModelLlama70b.Name, ModelLlamaScout.Name, ModelLlamaMaverick.Name, ModelGpt41Mini.Name, ModelGpt41.Name, ModelGpt41Nano.Name, ModelGeminiFlash.Name}
+	// Because chutes doesnt support prefill
+	NarratorModels      = []string{ModelLlama70b.Name, ModelLlamaScout.Name, ModelLlamaMaverick.Name, ModelGpt41Mini.Name, ModelGpt41.Name, ModelGpt41Nano.Name, ModelGeminiFlash.Name}
 	DefaultModel        = DefaultModels[0]
 	DefaultVisionModels = []string{ModelLlamaScout.Name, ModelLlamaMaverick.Name, ModelGpt41Mini.Name, ModelGpt41.Name, ModelGpt41Nano.Name, ModelGeminiFlash.Name}
 
