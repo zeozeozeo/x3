@@ -776,6 +776,7 @@ var (
 
 	AllModels = []Model{
 		ModelMagMell,
+		ModelDeepSeekV3, // pretty good but slow
 		ModelLlama70b, // default - fastest with specdec, mostly uncensored, good for RP
 		ModelGpt4o,
 		ModelGpt4oMini,
@@ -787,7 +788,6 @@ var (
 		ModelLlama405b,  // unstable api
 		ModelGemma27b,   // this is balls
 		ModelDeepSeekR1, // groq often cuts off the response
-		ModelDeepSeekV3, // pretty good but slow
 		ModelCommandA,
 		ModelQwen3A22b,
 		// discord menu cutoff (25) - only useless models should go below this
