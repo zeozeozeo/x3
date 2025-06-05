@@ -95,6 +95,7 @@ func HandleLlm(event *handler.CommandEvent, models []model.Model) error {
 	// Check if we need to use the cache (e.g., in DMs where history isn't readable)
 	// Note: AppPermissions might be nil in DMs, handle that.
 	useCache := event.GuildID() == nil || (event.AppPermissions() != nil && !event.AppPermissions().Has(discord.PermissionReadMessageHistory))
+	isDM := event.Channel().Type() == discord.ChannelTypeDM
 
 	if useCache {
 		slog.Debug("using channel cache for LLM context", slog.String("channel_id", event.Channel().ID().String()))
@@ -121,7 +122,7 @@ func HandleLlm(event *handler.CommandEvent, models []model.Model) error {
 					llmer.Lobotomize(getLobotomyAmountFromMessage(*msg))
 				} else {
 					// Use the user ID from the fetched message for memory retrieval
-					msgPersona := persona.GetPersonaByMeta(cache.PersonaMeta, db.GetMemories(msg.Author.ID, 0), msg.Author.EffectiveName())
+					msgPersona := persona.GetPersonaByMeta(cache.PersonaMeta, db.GetMemories(msg.Author.ID, 0), msg.Author.EffectiveName(), isDM)
 					llmer.SetPersona(msgPersona) // Temporarily set persona for formatting
 					llmer.AddMessage(llm.RoleUser, formatMsg(getMessageContentNoWhitelist(*msg), msg.Author.EffectiveName(), msg.ReferencedMessage), msg.ID)
 					addImageAttachments(llmer, msg.Attachments)
@@ -132,7 +133,7 @@ func HandleLlm(event *handler.CommandEvent, models []model.Model) error {
 	slog.Debug("prepared initial context", slog.Int("num_messages", llmer.NumMessages()))
 
 	// Set the final persona for the actual request
-	currentPersona := persona.GetPersonaByMeta(cache.PersonaMeta, db.GetMemories(event.User().ID, 0), event.User().EffectiveName())
+	currentPersona := persona.GetPersonaByMeta(cache.PersonaMeta, db.GetMemories(event.User().ID, 0), event.User().EffectiveName(), isDM)
 	llmer.SetPersona(currentPersona)
 
 	// Add the user's prompt from the slash command

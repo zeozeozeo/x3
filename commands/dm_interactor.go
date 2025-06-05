@@ -108,6 +108,7 @@ func InitiateDMInteraction(client bot.Client) {
 			nil,              // No event
 			nil,
 			false,
+			true, // dm
 		)
 
 		// Handle errors from the interaction attempt

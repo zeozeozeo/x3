@@ -112,6 +112,7 @@ func handleLlmInteraction2(
 	event *handler.CommandEvent, // Event to update the interaction of for the first split (optional)
 	systemPromptOverride *string, // Optional override for the system prompt
 	isImpersonate bool, // Whether this is an impersonate interaction
+	isDM bool, // Whether this is a DM
 ) (string, snowflake.ID, error) { // (Returns jumpURL if regenerating, otherwise response), the bot message id and error
 	cache := db.GetChannelCache(channelID)
 
@@ -165,7 +166,7 @@ func handleLlmInteraction2(
 	// --- End Validation ---
 
 	// Get persona using the determined userID
-	p := persona.GetPersonaByMeta(cache.PersonaMeta, db.GetMemories(userID, 0), username)
+	p := persona.GetPersonaByMeta(cache.PersonaMeta, db.GetMemories(userID, 0), username, isDM)
 
 	// Avoid formatting reply if the reference is the message we're about to regenerate
 	if reference != nil && isRegenerate && reference.ID == lastResponseMessage.ID {
@@ -199,11 +200,12 @@ func handleLlmInteraction2(
 	}
 
 	// --- Generate LLM Response ---
-	slog.Debug("requesting LLM completion",
-		slog.Int("num_models", len(models)),
-		slog.Int("num_messages", llmer.NumMessages()),
-		slog.Bool("is_regenerate", isRegenerate),
-		slog.String("prepend", prepend),
+	slog.Info("requesting LLM completion",
+		"num_models", len(models),
+		"num_messages", llmer.NumMessages(),
+		"is_regenerate", isRegenerate,
+		"prepend", prepend,
+		"isDM", isDM,
 	)
 	response, usage, err := llmer.RequestCompletion(models, usernames, cache.PersonaMeta.Settings, prepend)
 	if err != nil {
@@ -290,7 +292,6 @@ func handleLlmInteraction2(
 			return response, 0, fmt.Errorf("failed to update message: %w", err)
 		}
 		jumpURL = lastResponseMessage.JumpURL()
-
 	} else {
 		// Send new message(s)
 		var memories []string

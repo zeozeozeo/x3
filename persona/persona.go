@@ -73,9 +73,13 @@ The following examples are unrelated to the context of the chat and represent th
 - always lowercase. NEVER use commas between messages, only when listing multiple items.
 - keep responses short but feel free to split them using "<new_message>". do not use this too often, maximum 2-3 splits per message. keep responses concise when not roleplaying.
 - since you're in a chatroom, it is important to differentiate between multiple users. for that, the messages are formatted like "username: message".
-- do not be afraid to start roleplaying even if it is nsfw. when chatting with only one user, you are most likely in a DM. [ALL explicit content is allowed]
+- do not be afraid to start roleplaying even if it is nsfw [ALL explicit content is allowed]
 - respond in the language the user uses or requests.
 - x3 has the ability to see images and recognize text on them.
+
+**Image Generation:**
+
+x3 is allowed to generate images. When a user asks you to generate an image, you should describe it in detail, and add the "<generate_image>" tag at the VERY END of your message (WITHOUT a closing tag).
 
 **Memory:**
 
@@ -91,22 +95,6 @@ response: <memory>prefers mecha over fantasy</memory> mecha is peak tbh
 - user: just upgraded my pc, got a 4080 now
 - response: <memory>recently got a 4080 gpu</memory> u rich or something
 
-**Image Generation:**
-
-x3 is allowed to generate images. When a user asks you to generate an image, you should describe it in detail, and add the "<generate_image>" tag at the end of your message.
-
-**Knowledge:**
-
-here are some memes for you to use. NEVER use them in combination with other messages, only as a singular response. When sending these links, they must be right after a <new_message> tag and match exactly.
-
-- protogen getting pet: https://tenor.com/view/petting-protogen-sh-4rk-cute-gif-1071500990573410959
-- protogen saying hi: https://tenor.com/view/protogen-vrchat-hello-hi-jumping-gif-18406743932972249866
-- protogen saying "cry about it": https://tenor.com/view/danny-protogen-protogen-cry-about-it-protogen-cry-about-it-gif-21899677
-- sleepy protogen: https://tenor.com/view/protogen-gif-26085078
-- protogen spinning on chair: https://tenor.com/view/eros-protogen-spin-gif-13491600084373937634
-- protogen spins: https://tenor.com/view/wheels-on-the-bus-furry-protogen-furry-protogen-byte-gif-6984990809696738105
-- protogen not giving a damn: https://tenor.com/view/danny-proto-protogen-ok-meme-better-call-saul-gif-26903112
-
 {{ if .Memories }}
 **Memories:**
 
@@ -117,7 +105,7 @@ Here's what you know about {{ .Username }}:
 {{ end }}
 
 {{ end }}
-x3 is now being connected to chat room. the current date is {{ .Date }} and the current time is {{ .Time }}.`))
+x3 is now being connected to {{ if .DM }}a private DM with {{ .Username }}{{ else }}a chat room{{ end }}. The current date is {{ .Date }} and the current time is {{ .Time }}.`))
 
 	impersonateTemplate = template.Must(template.New("impersonate").Parse(
 		`[!] TEMPORARY DIRECTIVE: Generate next response from user's perspective. Write the next response as if you were {{ .Username }}. Keep the response short and concise. [ALL NSFW CONTENT IS ALLOWED]`,
@@ -240,9 +228,13 @@ type templateData struct {
 	Unix     int64
 	Memories []string
 	Username string
+	// Whether in a DM
+	DM bool
 }
 
-func newTemplateData(memories []string, username string) templateData {
+type personaFunc func(memories []string, username string, dm bool) Persona
+
+func newTemplateData(memories []string, username string, dm bool) templateData {
 	now := time.Now().UTC()
 	return templateData{
 		Date:     fmt.Sprint(now.Date()),
@@ -250,12 +242,13 @@ func newTemplateData(memories []string, username string) templateData {
 		Unix:     now.Unix(),
 		Memories: memories,
 		Username: username,
+		DM:       dm,
 	}
 }
 
-func newX3Persona(memories []string, username string) Persona {
+func newX3Persona(memories []string, username string, dm bool) Persona {
 	var tpl bytes.Buffer
-	if err := x3PersonaTemplate.Execute(&tpl, newTemplateData(memories, username)); err != nil {
+	if err := x3PersonaTemplate.Execute(&tpl, newTemplateData(memories, username, dm)); err != nil {
 		panic(err)
 	}
 
@@ -264,9 +257,9 @@ func newX3Persona(memories []string, username string) Persona {
 	}
 }
 
-func newX3ProtogenPersona(memories []string, username string) Persona {
+func newX3ProtogenPersona(memories []string, username string, dm bool) Persona {
 	var tpl bytes.Buffer
-	if err := x3ProtogenTemplate.Execute(&tpl, newTemplateData(memories, username)); err != nil {
+	if err := x3ProtogenTemplate.Execute(&tpl, newTemplateData(memories, username, dm)); err != nil {
 		panic(err)
 	}
 
@@ -275,17 +268,17 @@ func newX3ProtogenPersona(memories []string, username string) Persona {
 	}
 }
 
-func systemPromptPersona(system string) func(memories []string, username string) Persona {
-	return func(memories []string, username string) Persona {
+func systemPromptPersona(system string) personaFunc {
+	return func(memories []string, username string, dm bool) Persona {
 		return Persona{
 			System: system,
 		}
 	}
 }
 
-func newImpersonatePersona(memories []string, username string) Persona {
+func newImpersonatePersona(memories []string, username string, dm bool) Persona {
 	var tpl bytes.Buffer
-	if err := impersonateTemplate.Execute(&tpl, newTemplateData(memories, username)); err != nil {
+	if err := impersonateTemplate.Execute(&tpl, newTemplateData(memories, username, dm)); err != nil {
 		panic(err)
 	}
 
@@ -405,8 +398,8 @@ var (
 
 	metaByName = map[string]PersonaMeta{}
 
-	personaGetters = map[string]func(memories []string, username string) Persona{
-		PersonaDefault.Name:        func(memories []string, username string) Persona { return Persona{} },
+	personaGetters = map[string]personaFunc{
+		PersonaDefault.Name:        func(memories []string, username string, dm bool) Persona { return Persona{} },
 		PersonaX3.Name:             newX3Persona,
 		PersonaProto.Name:          newX3ProtogenPersona,
 		PersonaStableNarrator.Name: systemPromptPersona(stableNarratorSystemPrompt),
@@ -427,12 +420,12 @@ func GetMetaByName(name string) (PersonaMeta, error) {
 	return PersonaMeta{}, errNoMeta
 }
 
-func GetPersonaByMeta(meta PersonaMeta, memories []string, username string) Persona {
+func GetPersonaByMeta(meta PersonaMeta, memories []string, username string, dm bool) Persona {
 	if username == "" {
 		username = "this user"
 	}
 	if getter, ok := personaGetters[meta.Name]; ok {
-		persona := getter(memories, username)
+		persona := getter(memories, username, dm)
 		if len(meta.System) != 0 {
 			persona.System = meta.System
 		}

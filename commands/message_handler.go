@@ -30,13 +30,11 @@ func handleLlmInteraction(event *events.MessageCreate) error {
 	// Send typing indicator while processing
 	var wg sync.WaitGroup
 	wg.Add(1)
-	go sendTypingWithLog(event.Client(), event.ChannelID, &wg) // sendTypingWithLog is in utils.go
+	go sendTypingWithLog(event.Client(), event.ChannelID, &wg)
 
-	// Get message content, potentially stripping "x3"
-	content := getMessageContentNoWhitelist(event.Message) // getMessageContentNoWhitelist is in llm_context.go
+	content := getMessageContentNoWhitelist(event.Message)
 
 	// Call the core LLM interaction logic
-	// handleLlmInteraction2 is in llm_interact.go
 	_, _, err := handleLlmInteraction2(
 		event.Client(),
 		event.ChannelID,
@@ -53,16 +51,14 @@ func handleLlmInteraction(event *events.MessageCreate) error {
 		nil, // no event
 		nil,
 		false,
+		event.GuildID == nil, // if no guild this is a dm
 	)
 
-	// Handle potential errors from the interaction logic
 	if err != nil {
 		slog.Error("handleLlmInteraction failed", slog.Any("err", err))
-		// Send a user-facing error message
-		// sendPrettyError is in utils.go
 		sendPrettyError(event.Client(), "Sorry, I couldn't generate a response. Please try again.", event.ChannelID, event.MessageID)
 	}
-	return err // Return the original error for potential logging upstream
+	return err
 }
 
 // OnMessageCreate is the event listener for new messages.

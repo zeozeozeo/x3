@@ -59,6 +59,7 @@ func HandleRegenerate(event *handler.CommandEvent) error {
 		nil, // no event
 		nil,
 		false,
+		event.Channel().Type() == discord.ChannelTypeDM,
 	)
 	if err != nil {
 		// Send error back to the user ephemerally

@@ -235,7 +235,7 @@ func HandlePersona(event *handler.CommandEvent) error {
 				Build(),
 		)
 	}
-	
+
 	personaMeta, err := persona.GetMetaByName(dataPersona)
 	if err != nil {
 		slog.Warn("failed to get persona", "dataPersona", dataPersona, "err", err)
@@ -246,7 +246,7 @@ func HandlePersona(event *handler.CommandEvent) error {
 	// update persona meta in channel cache
 	prevMeta := cache.PersonaMeta
 	if prevMeta.System == "" {
-		prevMeta.System = persona.GetPersonaByMeta(cache.PersonaMeta, nil, "").System
+		prevMeta.System = persona.GetPersonaByMeta(cache.PersonaMeta, nil, "", event.Channel().Type() == discord.ChannelTypeDM).System
 	}
 	if dataPersona != "" {
 		cache.PersonaMeta = personaMeta

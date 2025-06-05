@@ -53,7 +53,7 @@ func HandleImpersonate(event *handler.CommandEvent) error {
 
 	//cache := db.GetChannelCache(event.Channel().ID())
 
-	impersonatePersona := persona.GetPersonaByMeta(persona.PersonaImpersonate, nil, event.User().EffectiveName())
+	impersonatePersona := persona.GetPersonaByMeta(persona.PersonaImpersonate, nil, event.User().EffectiveName(), false)
 
 	var prevResponse string
 	var referenceID snowflake.ID
@@ -102,6 +102,7 @@ func HandleImpersonate(event *handler.CommandEvent) error {
 			interactionEvent, // We want the first split to be sent as an update of this event
 			systemPromptOverride,
 			isImpersonateTurn,
+			event.Channel().Type() == discord.ChannelTypeDM,
 		)
 		if err != nil {
 			slog.Error("handleLlmInteraction2 failed", slog.Any("err", err), slog.String("channel_id", event.Channel().ID().String()))
