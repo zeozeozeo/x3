@@ -648,7 +648,7 @@ var (
 				Codenames: []string{"deepseek-chat"},
 			},
 			ProviderFresed: {
-				Codenames: []string{"deepseek-v3"},
+				Codenames: []string{"deepseek-v3-0324", "deepseek-v3"},
 			},
 			ProviderCrof: {
 				Codenames: []string{"DeepSeek-V3-0324"},
@@ -657,7 +657,7 @@ var (
 				Codenames: []string{"deepseek/DeepSeek-V3-0324"},
 			},
 			ProviderMNN: {
-				Codenames: []string{"deepseek-v3"},
+				Codenames: []string{"deepseek-v3-0324", "deepseek-v3"},
 			},
 			ProviderVoid: {
 				Codenames: []string{"deepseek-v3-0324", "deepseek-v3"},
@@ -809,7 +809,7 @@ var (
 		//ModelClaude3Haiku, // unstable api
 	}
 
-	DefaultModels       = []string{ModelLlama70b.Name, ModelLlamaScout.Name, ModelLlamaMaverick.Name, ModelGpt41Mini.Name, ModelGpt41.Name, ModelGpt41Nano.Name, ModelGeminiFlash.Name}
+	DefaultModels       = []string{ModelDeepSeekV3.Name, ModelLlama70b.Name, ModelLlamaScout.Name, ModelLlamaMaverick.Name, ModelGpt41Mini.Name, ModelGpt41.Name, ModelGpt41Nano.Name, ModelGeminiFlash.Name}
 	DefaultModel        = DefaultModels[0]
 	DefaultVisionModels = []string{ModelLlamaScout.Name, ModelLlamaMaverick.Name, ModelGpt41Mini.Name, ModelGpt41.Name, ModelGpt41Nano.Name, ModelGeminiFlash.Name}
 
