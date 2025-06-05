@@ -235,9 +235,10 @@ func HandlePersona(event *handler.CommandEvent) error {
 				Build(),
 		)
 	}
-
+	
 	personaMeta, err := persona.GetMetaByName(dataPersona)
 	if err != nil {
+		slog.Warn("failed to get persona", "dataPersona", dataPersona, "err", err)
 		personaMeta = cache.PersonaMeta
 	}
 	slog.Info("persona meta models", "dataPersona", dataPersona, "models", personaMeta.Models)

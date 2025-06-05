@@ -49,27 +49,22 @@ func (cache *ChannelCache) UpdateInteractionTime() {
 
 // NewChannelCache creates a ChannelCache with default values.
 func NewChannelCache() *ChannelCache {
-	// Initialize with default persona proto and context length
-	return &ChannelCache{PersonaMeta: persona.PersonaProto, ContextLength: DefaultContextMessages}
+	return &ChannelCache{PersonaMeta: persona.PersonaProto.DeepCopy(), ContextLength: DefaultContextMessages}
 }
 
 // unmarshalChannelCache decodes JSON data into a ChannelCache struct, applying defaults.
 func unmarshalChannelCache(data []byte) (*ChannelCache, error) {
-	// Start with defaults
 	cache := ChannelCache{
 		ContextLength: DefaultContextMessages,
-		PersonaMeta:   persona.PersonaProto, // Ensure default persona is set if missing in JSON
+		PersonaMeta:   persona.PersonaProto.DeepCopy(),
 	}
 	err := json.Unmarshal(data, &cache)
-	// Ensure ContextLength has a sensible default if JSON unmarshaling sets it to 0
 	if cache.ContextLength == 0 {
 		cache.ContextLength = DefaultContextMessages
 	}
-	// Ensure PersonaMeta has defaults if partially unmarshalled or empty
 	if cache.PersonaMeta.Name == "" {
-		cache.PersonaMeta = persona.PersonaProto
+		cache.PersonaMeta = persona.PersonaProto.DeepCopy()
 	} else {
-		// Ensure settings have defaults if missing
 		cache.PersonaMeta.Settings = cache.PersonaMeta.Settings.Fixup()
 	}
 

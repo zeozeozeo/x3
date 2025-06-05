@@ -355,6 +355,18 @@ func clone[T any](arr []T) []T {
 	return cloned
 }
 
+// DeepCopy creates a deep copy of PersonaMeta
+func (meta PersonaMeta) DeepCopy() PersonaMeta {
+	copied := meta
+	if meta.Models != nil {
+		copied.Models = clone(meta.Models)
+	}
+	if meta.FirstMes != nil {
+		copied.FirstMes = clone(meta.FirstMes)
+	}
+	return copied
+}
+
 var (
 	PersonaDefault = PersonaMeta{
 		Name:          "Default",
