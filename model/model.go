@@ -779,8 +779,9 @@ var (
 	}
 
 	ModelQwen332b = Model{
-		Name:    "Qwen 3 32B",
-		Command: "qwen32",
+		Name:      "Qwen 3 32B",
+		Command:   "qwen32",
+		Reasoning: true,
 		Providers: map[string]ModelProvider{
 			ProviderCerebras: {
 				Codenames: []string{"qwen-3-32b"},
@@ -843,6 +844,7 @@ var (
 	allProviders = []*ScoredProvider{
 		{Name: ProviderSelfhosted},
 		{Name: ProviderGroq},
+		{Name: ProviderCerebras},
 		{Name: ProviderZhipu},
 		{Name: ProviderChutes},
 		{Name: ProviderGithub},

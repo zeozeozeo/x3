@@ -68,6 +68,8 @@ func unmarshalChannelCache(data []byte) (*ChannelCache, error) {
 		cache.PersonaMeta.Settings = cache.PersonaMeta.Settings.Fixup()
 	}
 
+	cache.PersonaMeta.Migrate()
+
 	return &cache, err
 }
 

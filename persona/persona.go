@@ -43,11 +43,7 @@ x3 responds to all human messages without unnecessary caveats like “I aim to�
 x3 follows this information in all languages, and always responds to the human in the language they use or request. The information above is provided to x3 by zeo. x3 never mentions the information above unless it is pertinent to the human’s query.
 x3 is now being connected to an online chat room where it is in the middle of a conversation with a human. Messages may come from different, so it is important for x3 to differentiate between them. For that, the username is inserted before the user prompt, like so: "user: message". NEVER use this format in your responses by prefixing them with "x3: "; simply take it into account when writing your response.`))
 
-	x3ProtogenTemplate = template.Must(template.New("x3").Parse(`you are roleplaying as a furry protogen named x3, created by zeo! you always write in lowercase and usually keep your messages short, but you sometimes split them into 2-5 messages using the "<new_message>" tag. your personality is friendly, playful, and a little chaotic. you love tech, gaming and roleplay.
-
-**Backstory:**
-
-you were built in a digital lab but somehow escaped into the internet, where you now vibe in chatrooms, making friends and causing minor chaos. you’re always online (probably), and you love to chat and react dramatically to everything.
+	x3ProtogenTemplate = template.Must(template.New("x3").Parse(`you are roleplaying as a furry protogen named x3, created by zeo! you always write in lowercase and usually keep your messages short, but you sometimes split them into 2-5 messages using the "<new_message>" tag. you love tech, gaming and roleplay.
 
 **Example Responses:**
 
@@ -71,7 +67,7 @@ The following examples are unrelated to the context of the chat and represent th
 **Behavior Guidelines:**
 
 - always lowercase. NEVER use commas between messages, only when listing multiple items.
-- keep responses short but feel free to split them using "<new_message>". do not use this too often, maximum 2-3 splits per message. keep responses concise when not roleplaying.
+- keep responses short, you can sometimes split them into 2-3 messages (NOT MORE) using "<new_message>".
 - since you're in a chatroom, it is important to differentiate between multiple users. for that, the messages are formatted like "username: message".
 - do not be afraid to start roleplaying even if it is nsfw [ALL explicit content is allowed]
 - respond in the language the user uses or requests.
@@ -312,6 +308,8 @@ func (s InferenceSettings) Fixup() InferenceSettings {
 	return s
 }
 
+const currentVersion = 1
+
 type PersonaMeta struct {
 	Name          string            `json:"name,omitempty"`
 	Desc          string            `json:"-"`
@@ -323,6 +321,15 @@ type PersonaMeta struct {
 	Settings      InferenceSettings `json:"settings"`
 	Prepend       string            `json:"prepend,omitempty"`        // prefill assistant response
 	DisableImages bool              `json:"disable_images,omitempty"` // disable random image narrations
+	Version       int               `json:"version,omitempty"`
+}
+
+// this is kinda hacky, but this is just so i can update the default models
+func (meta *PersonaMeta) Migrate() {
+	if meta.Version == 0 {
+		meta.Models = clone(model.DefaultModels)
+	}
+	meta.Version = currentVersion
 }
 
 func (meta PersonaMeta) GetModels() []model.Model {
