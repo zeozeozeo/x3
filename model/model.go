@@ -51,6 +51,7 @@ const (
 	voidaiBaseURL     = "https://api.voidai.app/v1"
 	zhipuBaseURL      = "https://open.bigmodel.cn/api/paas/v4"
 	chutesBaseURL     = "https://llm.chutes.ai/v1"
+	cerebrasBaseURL   = "https://api.cerebras.ai/v1"
 )
 
 const (
@@ -71,6 +72,7 @@ const (
 	ProviderVoid        = "voidai"
 	ProviderZhipu       = "zhipu"
 	ProviderChutes      = "chutes"
+	ProviderCerebras    = "cerebras"
 )
 
 type ModelProvider struct {
@@ -520,6 +522,9 @@ var (
 			ProviderVoid: {
 				Codenames: []string{"meta-llama/Llama-3.3-70B-Instruct-Turbo", "meta-llama/Llama-3.3-70B-Instruct"},
 			},
+			ProviderCerebras: {
+				Codenames: []string{"llama-3.3-70b"},
+			},
 		},
 	}
 
@@ -552,13 +557,16 @@ var (
 			ProviderVoid: {
 				Codenames: []string{"meta-llama/Meta-Llama-3.1-8B-Instruct-Turbo"},
 			},
+			ProviderCerebras: {
+				Codenames: []string{"llama3.1-8b"},
+			},
 		},
 	}
 
 	ModelLlamaScout = Model{
 		Name:    "Meta Llama 4 Scout 109B/17A",
 		Command: "scout",
-		// no need for llamahacks, proper multimodality
+		// no need for llama hacks, proper multimodality
 		Vision: true,
 		Providers: map[string]ModelProvider{
 			ProviderGroq: {
@@ -584,6 +592,9 @@ var (
 			},
 			ProviderCrof: {
 				Codenames: []string{"llama-4-scout-131k"},
+			},
+			ProviderCerebras: {
+				Codenames: []string{"llama-4-scout-17b-16e-instruct"},
 			},
 		},
 	}
@@ -767,6 +778,16 @@ var (
 		},
 	}
 
+	ModelQwen332b = Model{
+		Name:    "Qwen 3 32B",
+		Command: "qwen32",
+		Providers: map[string]ModelProvider{
+			ProviderCerebras: {
+				Codenames: []string{"qwen-3-32b"},
+			},
+		},
+	}
+
 	ModelMarkovChain = Model{
 		Name:      "Markov Chain",
 		Command:   "markov",
@@ -790,6 +811,7 @@ var (
 		ModelDeepSeekR1, // groq often cuts off the response
 		ModelCommandA,
 		ModelQwen3A22b,
+		ModelQwen332b,
 		// discord menu cutoff (25) - only useless models should go below this
 		ModelGpt41Mini,
 		ModelGpt41,
@@ -950,6 +972,8 @@ func (m Model) Client(provider string) (baseUrls []string, tokens []string, code
 		tokenEnvKey, apiVar = "X3_BIGMODEL_TOKEN", zhipuBaseURL
 	case ProviderChutes:
 		tokenEnvKey, apiVar = "X3_CHUTES_TOKEN", chutesBaseURL
+	case ProviderCerebras:
+		tokenEnvKey, apiVar = "X3_CEREBRAS_TOKEN", cerebrasBaseURL
 	default:
 		return nil, nil, nil
 	}
