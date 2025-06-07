@@ -808,8 +808,9 @@ var (
 	}
 
 	ModelExaoneDeep = Model{
-		Name:    "LG EXAONE Deep 32B",
-		Command: "deep",
+		Name:      "LG EXAONE Deep 32B",
+		Reasoning: true,
+		Command:   "deep",
 		Providers: map[string]ModelProvider{
 			ProviderTogether: {
 				Codenames: []string{"lgai/exaone-deep-32b"},
