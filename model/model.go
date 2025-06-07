@@ -52,6 +52,7 @@ const (
 	zhipuBaseURL      = "https://open.bigmodel.cn/api/paas/v4"
 	chutesBaseURL     = "https://llm.chutes.ai/v1"
 	cerebrasBaseURL   = "https://api.cerebras.ai/v1"
+	togetherBaseURL   = "https://api.together.xyz/v1"
 )
 
 const (
@@ -73,6 +74,7 @@ const (
 	ProviderZhipu       = "zhipu"
 	ProviderChutes      = "chutes"
 	ProviderCerebras    = "cerebras"
+	ProviderTogether    = "together"
 )
 
 type ModelProvider struct {
@@ -484,6 +486,9 @@ var (
 			ProviderGithub: {
 				Codenames: []string{"meta/Llama-3.2-11B-Vision-Instruct"},
 			},
+			ProviderTogether: {
+				Codenames: []string{"meta-llama/Llama-Vision-Free"},
+			},
 		},
 	}
 
@@ -524,6 +529,9 @@ var (
 			},
 			ProviderCerebras: {
 				Codenames: []string{"llama-3.3-70b"},
+			},
+			ProviderTogether: {
+				Codenames: []string{"meta-llama/Llama-3.3-70B-Instruct-Turbo-Free"},
 			},
 		},
 	}
@@ -789,6 +797,26 @@ var (
 		},
 	}
 
+	ModelExaone32b = Model{
+		Name:    "LG EXAONE 3.5 32B",
+		Command: "exaone",
+		Providers: map[string]ModelProvider{
+			ProviderTogether: {
+				Codenames: []string{"lgai/exaone-3-5-32b-instruct"},
+			},
+		},
+	}
+
+	ModelExaoneDeep = Model{
+		Name:    "LG EXAONE Deep 32B",
+		Command: "deep",
+		Providers: map[string]ModelProvider{
+			ProviderTogether: {
+				Codenames: []string{"lgai/exaone-deep-32b"},
+			},
+		},
+	}
+
 	ModelMarkovChain = Model{
 		Name:      "Markov Chain",
 		Command:   "markov",
@@ -826,6 +854,8 @@ var (
 		ModelLlama8b,
 		ModelLlama11b,
 		ModelLlama90b,
+		ModelExaone32b,
+		ModelExaoneDeep,
 		ModelMarkovChain,
 
 		// TODO:
@@ -847,6 +877,7 @@ var (
 		{Name: ProviderCerebras},
 		{Name: ProviderZhipu},
 		{Name: ProviderChutes},
+		{Name: ProviderTogether},
 		{Name: ProviderGithub},
 		{Name: ProviderGoogle},
 		{Name: ProviderCrof, PreferReasoning: true}, // above groq when reasoning
@@ -976,6 +1007,8 @@ func (m Model) Client(provider string) (baseUrls []string, tokens []string, code
 		tokenEnvKey, apiVar = "X3_CHUTES_TOKEN", chutesBaseURL
 	case ProviderCerebras:
 		tokenEnvKey, apiVar = "X3_CEREBRAS_TOKEN", cerebrasBaseURL
+	case ProviderTogether:
+		tokenEnvKey, apiVar = "X3_TOGETHER_TOKEN", togetherBaseURL
 	default:
 		return nil, nil, nil
 	}
