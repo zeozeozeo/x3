@@ -53,6 +53,7 @@ const (
 	chutesBaseURL     = "https://llm.chutes.ai/v1"
 	cerebrasBaseURL   = "https://api.cerebras.ai/v1"
 	togetherBaseURL   = "https://api.together.xyz/v1"
+	nineteenBaseURL   = "https://api.nineteen.ai/v1"
 )
 
 const (
@@ -75,6 +76,7 @@ const (
 	ProviderChutes      = "chutes"
 	ProviderCerebras    = "cerebras"
 	ProviderTogether    = "together"
+	ProviderNineteen    = "nineteen"
 )
 
 type ModelProvider struct {
@@ -604,6 +606,9 @@ var (
 			ProviderCerebras: {
 				Codenames: []string{"llama-4-scout-17b-16e-instruct"},
 			},
+			ProviderChutes: {
+				Codenames: []string{"chutesai/Llama-4-Scout-17B-16E-Instruct"},
+			},
 		},
 	}
 
@@ -626,6 +631,9 @@ var (
 			},
 			ProviderGithub: {
 				Codenames: []string{"meta/Llama-4-Maverick-17B-128E-Instruct-FP8"},
+			},
+			ProviderChutes: {
+				Codenames: []string{"chutesai/Llama-4-Maverick-17B-128E-Instruct-FP8"},
 			},
 		},
 	}
@@ -761,6 +769,9 @@ var (
 			ProviderZhipu: {
 				Codenames: []string{"glm-4-flash"},
 			},
+			ProviderChutes: {
+				Codenames: []string{"THUDM/GLM-4-32B-0414"},
+			},
 		},
 	}
 
@@ -794,6 +805,9 @@ var (
 			ProviderCerebras: {
 				Codenames: []string{"qwen-3-32b"},
 			},
+			ProviderChutes: {
+				Codenames: []string{"Qwen/Qwen3-32B"},
+			},
 		},
 	}
 
@@ -814,6 +828,28 @@ var (
 		Providers: map[string]ModelProvider{
 			ProviderTogether: {
 				Codenames: []string{"lgai/exaone-deep-32b"},
+			},
+		},
+	}
+
+	ModelArliRpR = Model{
+		Name:      "QwQ 32B ArliAI RpR V1 (RP)",
+		Command:   "rpr",
+		Reasoning: true,
+		Providers: map[string]ModelProvider{
+			ProviderChutes: {
+				Codenames: []string{"ArliAI/QwQ-32B-ArliAI-RpR-v1"},
+			},
+		},
+	}
+
+	ModelQwQ = Model{
+		Name:      "QwQ 32B",
+		Command:   "qwq",
+		Reasoning: true,
+		Providers: map[string]ModelProvider{
+			ProviderNineteen: {
+				Codenames: []string{"Qwen/QwQ-32B"},
 			},
 		},
 	}
@@ -842,6 +878,8 @@ var (
 		ModelCommandA,
 		ModelQwen3A22b,
 		ModelQwen332b,
+		ModelArliRpR,
+		ModelQwQ,
 		// discord menu cutoff (25) - only useless models should go below this
 		ModelGpt41Mini,
 		ModelGpt41,
@@ -876,9 +914,10 @@ var (
 		{Name: ProviderSelfhosted},
 		{Name: ProviderGroq},
 		{Name: ProviderCerebras},
-		{Name: ProviderZhipu},
 		{Name: ProviderChutes},
+		{Name: ProviderZhipu},
 		{Name: ProviderTogether},
+		{Name: ProviderNineteen},
 		{Name: ProviderGithub},
 		{Name: ProviderGoogle},
 		{Name: ProviderCrof, PreferReasoning: true}, // above groq when reasoning
@@ -1010,6 +1049,8 @@ func (m Model) Client(provider string) (baseUrls []string, tokens []string, code
 		tokenEnvKey, apiVar = "X3_CEREBRAS_TOKEN", cerebrasBaseURL
 	case ProviderTogether:
 		tokenEnvKey, apiVar = "X3_TOGETHER_TOKEN", togetherBaseURL
+	case ProviderNineteen:
+		tokenEnvKey, apiVar = "X3_NINETEEN_TOKEN", nineteenBaseURL
 	default:
 		return nil, nil, nil
 	}
