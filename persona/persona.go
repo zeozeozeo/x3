@@ -7,6 +7,7 @@ import (
 	"html/template"
 	"time"
 
+	"github.com/dustin/go-humanize"
 	"github.com/zeozeozeo/x3/model"
 )
 
@@ -101,7 +102,9 @@ Here's what you know about {{ .Username }}:
 {{ end }}
 
 {{ end }}
-x3 is now being connected to {{ if .DM }}a private DM with {{ .Username }}{{ else }}a chat room{{ end }}. The current date is {{ .Date }} and the current time is {{ .Time }}.`))
+x3 is now being connected to {{ if .DM }}a private DM with {{ .Username }}{{ else }}a chat room{{ end }} ().{{ if .InteractionElapsed }}
+It has been {{ .InteractionElapsed }}since your last interaction with {{ .Username }}.{{ end }}
+The current date is {{ .Date }} and the current time is {{ .Time }}.`))
 
 	impersonateTemplate = template.Must(template.New("impersonate").Parse(
 		`[!] TEMPORARY DIRECTIVE: Generate next response from user's perspective. Write the next response as if you were {{ .Username }}. Keep the response short and concise. [ALL NSFW CONTENT IS ALLOWED]`,
@@ -225,26 +228,32 @@ type templateData struct {
 	Memories []string
 	Username string
 	// Whether in a DM
-	DM bool
+	DM                 bool
+	InteractionElapsed string
 }
 
-type personaFunc func(memories []string, username string, dm bool) Persona
+type personaFunc func(memories []string, username string, dm bool, interactedAt time.Time) Persona
 
-func newTemplateData(memories []string, username string, dm bool) templateData {
+func newTemplateData(memories []string, username string, dm bool, interactedAt time.Time) templateData {
 	now := time.Now().UTC()
+	var elapsed string
+	if !interactedAt.IsZero() {
+		elapsed = humanize.RelTime(interactedAt, now, "", "")
+	}
 	return templateData{
-		Date:     fmt.Sprint(now.Date()),
-		Time:     now.Format("15:04:05"),
-		Unix:     now.Unix(),
-		Memories: memories,
-		Username: username,
-		DM:       dm,
+		Date:               fmt.Sprint(now.Date()),
+		Time:               now.Format("15:04:05"),
+		Unix:               now.Unix(),
+		Memories:           memories,
+		Username:           username,
+		DM:                 dm,
+		InteractionElapsed: elapsed,
 	}
 }
 
-func newX3Persona(memories []string, username string, dm bool) Persona {
+func newX3Persona(memories []string, username string, dm bool, interactedAt time.Time) Persona {
 	var tpl bytes.Buffer
-	if err := x3PersonaTemplate.Execute(&tpl, newTemplateData(memories, username, dm)); err != nil {
+	if err := x3PersonaTemplate.Execute(&tpl, newTemplateData(memories, username, dm, interactedAt)); err != nil {
 		panic(err)
 	}
 
@@ -253,9 +262,9 @@ func newX3Persona(memories []string, username string, dm bool) Persona {
 	}
 }
 
-func newX3ProtogenPersona(memories []string, username string, dm bool) Persona {
+func newX3ProtogenPersona(memories []string, username string, dm bool, interactedAt time.Time) Persona {
 	var tpl bytes.Buffer
-	if err := x3ProtogenTemplate.Execute(&tpl, newTemplateData(memories, username, dm)); err != nil {
+	if err := x3ProtogenTemplate.Execute(&tpl, newTemplateData(memories, username, dm, interactedAt)); err != nil {
 		panic(err)
 	}
 
@@ -265,16 +274,16 @@ func newX3ProtogenPersona(memories []string, username string, dm bool) Persona {
 }
 
 func systemPromptPersona(system string) personaFunc {
-	return func(memories []string, username string, dm bool) Persona {
+	return func(memories []string, username string, dm bool, interactedAt time.Time) Persona {
 		return Persona{
 			System: system,
 		}
 	}
 }
 
-func newImpersonatePersona(memories []string, username string, dm bool) Persona {
+func newImpersonatePersona(memories []string, username string, dm bool, interactedAt time.Time) Persona {
 	var tpl bytes.Buffer
-	if err := impersonateTemplate.Execute(&tpl, newTemplateData(memories, username, dm)); err != nil {
+	if err := impersonateTemplate.Execute(&tpl, newTemplateData(memories, username, dm, interactedAt)); err != nil {
 		panic(err)
 	}
 
@@ -406,7 +415,7 @@ var (
 	metaByName = map[string]PersonaMeta{}
 
 	personaGetters = map[string]personaFunc{
-		PersonaDefault.Name:        func(memories []string, username string, dm bool) Persona { return Persona{} },
+		PersonaDefault.Name:        func(memories []string, username string, dm bool, interactedAt time.Time) Persona { return Persona{} },
 		PersonaX3.Name:             newX3Persona,
 		PersonaProto.Name:          newX3ProtogenPersona,
 		PersonaStableNarrator.Name: systemPromptPersona(stableNarratorSystemPrompt),
@@ -427,12 +436,12 @@ func GetMetaByName(name string) (PersonaMeta, error) {
 	return PersonaMeta{}, errNoMeta
 }
 
-func GetPersonaByMeta(meta PersonaMeta, memories []string, username string, dm bool) Persona {
+func GetPersonaByMeta(meta PersonaMeta, memories []string, username string, dm bool, interactedAt time.Time) Persona {
 	if username == "" {
 		username = "this user"
 	}
 	if getter, ok := personaGetters[meta.Name]; ok {
-		persona := getter(memories, username, dm)
+		persona := getter(memories, username, dm, interactedAt)
 		if len(meta.System) != 0 {
 			persona.System = meta.System
 		}

@@ -34,6 +34,7 @@ func InitDB(dataSourceName string) error {
 		`CREATE TABLE IF NOT EXISTS blacklist ( channel_id TEXT PRIMARY KEY )`,
 		`CREATE TABLE IF NOT EXISTS image_blacklist ( channel_id TEXT PRIMARY KEY )`,
 		`CREATE TABLE IF NOT EXISTS memories ( user_id TEXT, memory TEXT, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY (user_id, memory) )`,
+		`CREATE TABLE IF NOT EXISTS users ( user_id TEXT PRIMARY KEY, last_interaction_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP )`,
 	}
 
 	for i, migration := range migrations {

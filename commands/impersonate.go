@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log/slog"
 	"sync"
+	"time"
 
 	"github.com/disgoorg/disgo/discord"
 	"github.com/disgoorg/disgo/handler"
@@ -53,7 +54,7 @@ func HandleImpersonate(event *handler.CommandEvent) error {
 
 	//cache := db.GetChannelCache(event.Channel().ID())
 
-	impersonatePersona := persona.GetPersonaByMeta(persona.PersonaImpersonate, nil, event.User().EffectiveName(), false)
+	impersonatePersona := persona.GetPersonaByMeta(persona.PersonaImpersonate, nil, event.User().EffectiveName(), false, time.Time{})
 
 	var prevResponse string
 	var referenceID snowflake.ID

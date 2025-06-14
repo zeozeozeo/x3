@@ -166,7 +166,7 @@ func handleLlmInteraction2(
 	// --- End Validation ---
 
 	// Get persona using the determined userID
-	p := persona.GetPersonaByMeta(cache.PersonaMeta, db.GetMemories(userID, 0), username, isDM)
+	p := persona.GetPersonaByMeta(cache.PersonaMeta, db.GetMemories(userID, 0), username, isDM, db.GetInteractionTime(userID))
 
 	// Avoid formatting reply if the reference is the message we're about to regenerate
 	if reference != nil && isRegenerate && reference.ID == lastResponseMessage.ID {
@@ -360,6 +360,7 @@ func handleLlmInteraction2(
 		// Log error but don't fail the interaction
 		slog.Error("failed to update global stats after interaction", slog.Any("err", err))
 	}
+	db.SetInteractionTime(userID, time.Now())
 
 	// maybe queue narration + generation
 	if !isImpersonate && !models[0].IsMarkov {
