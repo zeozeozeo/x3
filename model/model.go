@@ -54,6 +54,7 @@ const (
 	cerebrasBaseURL   = "https://api.cerebras.ai/v1"
 	togetherBaseURL   = "https://api.together.xyz/v1"
 	nineteenBaseURL   = "https://api.nineteen.ai/v1"
+	hcapBaseURL       = "https://hcap.ai/v1"
 )
 
 const (
@@ -77,6 +78,7 @@ const (
 	ProviderCerebras    = "cerebras"
 	ProviderTogether    = "together"
 	ProviderNineteen    = "nineteen"
+	ProviderHcap        = "hcap"
 )
 
 type ModelProvider struct {
@@ -135,6 +137,9 @@ var (
 			ProviderVoid: {
 				Codenames: []string{"gpt-4o-mini"},
 			},
+			ProviderHcap: {
+				Codenames: []string{"gpt-4o-mini"},
+			},
 		},
 	}
 
@@ -166,6 +171,9 @@ var (
 				Codenames: []string{"gpt-4o"},
 			},
 			ProviderVoid: {
+				Codenames: []string{"gpt-4o"},
+			},
+			ProviderHcap: {
 				Codenames: []string{"gpt-4o"},
 			},
 		},
@@ -201,6 +209,9 @@ var (
 			ProviderVoid: {
 				Codenames: []string{"gpt-4.1-mini"},
 			},
+			ProviderHcap: {
+				Codenames: []string{"gpt-4.1-mini"},
+			},
 		},
 	}
 
@@ -234,6 +245,9 @@ var (
 			ProviderVoid: {
 				Codenames: []string{"gpt-4.1"},
 			},
+			ProviderHcap: {
+				Codenames: []string{"gpt-4.1"},
+			},
 		},
 	}
 
@@ -265,6 +279,9 @@ var (
 				Codenames: []string{"gpt-4.1-nano"},
 			},
 			ProviderVoid: {
+				Codenames: []string{"gpt-4.1-nano"},
+			},
+			ProviderHcap: {
 				Codenames: []string{"gpt-4.1-nano"},
 			},
 		},
@@ -718,6 +735,9 @@ var (
 			ProviderVoid: {
 				Codenames: []string{"deepseek-r1-0528"},
 			},
+			ProviderHcap: {
+				Codenames: []string{"deepseek-r1"},
+			},
 		},
 	}
 
@@ -854,6 +874,28 @@ var (
 		},
 	}
 
+	ModelO3 = Model{
+		Name:      "OpenAI o3",
+		Command:   "o3",
+		Reasoning: true,
+		Providers: map[string]ModelProvider{
+			ProviderHcap: {
+				Codenames: []string{"o3"},
+			},
+		},
+	}
+
+	ModelO4Mini = Model{
+		Name:      "OpenAI o4-mini",
+		Command:   "o4mini",
+		Reasoning: true,
+		Providers: map[string]ModelProvider{
+			ProviderHcap: {
+				Codenames: []string{"o4-mini"},
+			},
+		},
+	}
+
 	ModelMarkovChain = Model{
 		Name:      "Markov Chain",
 		Command:   "markov",
@@ -866,7 +908,8 @@ var (
 		ModelDeepSeekV3, // pretty good but slow
 		ModelLlama70b,   // default - fastest with specdec, mostly uncensored, good for RP
 		ModelGpt4o,
-		ModelGpt4oMini,
+		ModelGpt41,
+		ModelO3,
 		ModelGeminiFlash,
 		ModelMistralLarge,
 		ModelMistralSmall,
@@ -880,10 +923,8 @@ var (
 		ModelQwen332b,
 		ModelArliRpR,
 		ModelQwQ,
+		ModelO4Mini,
 		// discord menu cutoff (25) - only useless models should go below this
-		ModelGpt41Mini,
-		ModelGpt41,
-		ModelGpt41Nano,
 		ModelGLM4,
 		ModelGLMZ1,
 		ModelGLM4V,
@@ -893,6 +934,9 @@ var (
 		ModelLlama8b,
 		ModelLlama11b,
 		ModelLlama90b,
+		ModelGpt41Mini,
+		ModelGpt41Nano,
+		ModelGpt4oMini,
 		ModelExaone32b,
 		ModelExaoneDeep,
 		ModelMarkovChain,
@@ -918,17 +962,18 @@ var (
 		{Name: ProviderZhipu},
 		{Name: ProviderTogether},
 		{Name: ProviderNineteen},
-		{Name: ProviderGithub},
 		{Name: ProviderGoogle},
 		{Name: ProviderCrof, PreferReasoning: true}, // above groq when reasoning
 		{Name: ProviderCloudflare},
 		{Name: ProviderZukijourney},
-		{Name: ProviderOpenRouter},
+		{Name: ProviderHcap},
 		{Name: ProviderFresed},
 		{Name: ProviderMNN},
 		{Name: ProviderElectron},
 		{Name: ProviderHelixmind},
 		{Name: ProviderCohere}, // 1,000 reqs/mo limit
+		{Name: ProviderGithub},
+		{Name: ProviderOpenRouter},
 		//{Name: ProviderG4F},
 	}
 
@@ -1051,6 +1096,8 @@ func (m Model) Client(provider string) (baseUrls []string, tokens []string, code
 		tokenEnvKey, apiVar = "X3_TOGETHER_TOKEN", togetherBaseURL
 	case ProviderNineteen:
 		tokenEnvKey, apiVar = "X3_NINETEEN_TOKEN", nineteenBaseURL
+	case ProviderHcap:
+		tokenEnvKey, apiVar = "X3_HCAP_TOKEN", hcapBaseURL
 	default:
 		return nil, nil, nil
 	}
