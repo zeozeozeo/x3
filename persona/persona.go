@@ -237,7 +237,7 @@ type personaFunc func(memories []string, username string, dm bool, interactedAt 
 func newTemplateData(memories []string, username string, dm bool, interactedAt time.Time) templateData {
 	now := time.Now().UTC()
 	var elapsed string
-	if !interactedAt.IsZero() {
+	if !interactedAt.IsZero() && now.Sub(interactedAt) >= 5*time.Minute {
 		elapsed = humanize.RelTime(interactedAt, now, "", "")
 	}
 	return templateData{
