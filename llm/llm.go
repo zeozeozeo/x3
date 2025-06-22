@@ -11,9 +11,9 @@ import (
 	"time"
 
 	"github.com/disgoorg/snowflake/v2"
-	openai "github.com/sashabaranov/go-openai"
 	"github.com/zeozeozeo/x3/markov"
 	"github.com/zeozeozeo/x3/model"
+	"github.com/zeozeozeo/x3/openai"
 	"github.com/zeozeozeo/x3/persona"
 )
 
@@ -308,6 +308,9 @@ func (l *Llmer) requestCompletionInternal2(
 	client *openai.Client,
 	prepend string,
 ) (string, Usage, error) {
+	if m.Limited {
+		settings = persona.InferenceSettings{}
+	}
 	req := openai.ChatCompletionRequest{
 		Model:    codename,
 		Messages: l.convertMessages(m.Vision, m.IsLlama, prepend),
@@ -320,6 +323,7 @@ func (l *Llmer) requestCompletionInternal2(
 		// MinP anyone?
 		FrequencyPenalty: settings.FrequencyPenalty,
 		Seed:             settings.Seed,
+		Private:          provider == model.ProviderPollinations,
 	}
 
 	completionStart := time.Now()

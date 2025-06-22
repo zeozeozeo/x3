@@ -290,7 +290,7 @@ func HandlePersona(event *handler.CommandEvent) error {
 		}
 		// "Mag Mell R1 was tested with Temp 1.25 and MinP 0.2"
 		// But, as always, the OpenAI API doesn't support MinP, so this is a TODO
-		// rel https://github.com/sashabaranov/go-openai/issues/1007
+		// rel https://github.com/zeozeozeo/x3/openai/issues/1007
 	}
 
 	cache.PersonaMeta.Settings = cache.PersonaMeta.Settings.Fixup()

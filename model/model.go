@@ -34,49 +34,51 @@ var (
 )
 
 const (
-	azureBaseURL      = "https://models.inference.ai.azure.com"
-	zjBaseURL         = "https://api.zukijourney.com/v1"
-	hmBaseURL         = "https://helixmind.online/v1"
-	fresedBaseURL     = "https://fresedapi.fun/v1"
-	groqBaseURL       = "https://api.groq.com/openai/v1"
-	googleBaseURL     = "https://generativelanguage.googleapis.com/v1beta/openai"
-	openRouterBaseURL = "https://openrouter.ai/api/v1"
-	g4fBaseURL        = "http://192.168.230.44:1337/v1"
-	crofBaseURL       = "https://ai.nahcrof.com/v2"
-	electronBaseURL   = "https://api.electronhub.ai/v1"
-	cohereBaseURL     = "https://api.cohere.ai/compatibility/v1"
-	mnnBaseURL        = "https://api.mnnai.ru/v1"
-	voidaiBaseURL     = "https://api.voidai.app/v1"
-	zhipuBaseURL      = "https://open.bigmodel.cn/api/paas/v4"
-	chutesBaseURL     = "https://llm.chutes.ai/v1"
-	cerebrasBaseURL   = "https://api.cerebras.ai/v1"
-	togetherBaseURL   = "https://api.together.xyz/v1"
-	nineteenBaseURL   = "https://api.nineteen.ai/v1"
-	hcapBaseURL       = "https://hcap.ai/v1"
+	azureBaseURL        = "https://models.inference.ai.azure.com"
+	zjBaseURL           = "https://api.zukijourney.com/v1"
+	hmBaseURL           = "https://helixmind.online/v1"
+	fresedBaseURL       = "https://fresedapi.fun/v1"
+	groqBaseURL         = "https://api.groq.com/openai/v1"
+	googleBaseURL       = "https://generativelanguage.googleapis.com/v1beta/openai"
+	openRouterBaseURL   = "https://openrouter.ai/api/v1"
+	g4fBaseURL          = "http://192.168.230.44:1337/v1"
+	crofBaseURL         = "https://ai.nahcrof.com/v2"
+	electronBaseURL     = "https://api.electronhub.ai/v1"
+	cohereBaseURL       = "https://api.cohere.ai/compatibility/v1"
+	mnnBaseURL          = "https://api.mnnai.ru/v1"
+	voidaiBaseURL       = "https://api.voidai.app/v1"
+	zhipuBaseURL        = "https://open.bigmodel.cn/api/paas/v4"
+	chutesBaseURL       = "https://llm.chutes.ai/v1"
+	cerebrasBaseURL     = "https://api.cerebras.ai/v1"
+	togetherBaseURL     = "https://api.together.xyz/v1"
+	nineteenBaseURL     = "https://api.nineteen.ai/v1"
+	hcapBaseURL         = "https://hcap.ai/v1"
+	pollinationsBaseURL = "https://text.pollinations.ai/openai"
 )
 
 const (
-	ProviderGithub      = "github"
-	ProviderZukijourney = "zukijourney"
-	ProviderFresed      = "fresed"
-	ProviderHelixmind   = "helixmind"
-	ProviderGroq        = "groq"
-	ProviderGoogle      = "google"
-	ProviderOpenRouter  = "openrouter"
-	ProviderG4F         = "g4f"
-	ProviderCrof        = "crof"
-	ProviderElectron    = "electronhub"
-	ProviderCloudflare  = "cloudflare"
-	ProviderCohere      = "cohere"
-	ProviderMNN         = "mnn"
-	ProviderSelfhosted  = "selfhosted"
-	ProviderVoid        = "voidai"
-	ProviderZhipu       = "zhipu"
-	ProviderChutes      = "chutes"
-	ProviderCerebras    = "cerebras"
-	ProviderTogether    = "together"
-	ProviderNineteen    = "nineteen"
-	ProviderHcap        = "hcap"
+	ProviderGithub       = "github"
+	ProviderZukijourney  = "zukijourney"
+	ProviderFresed       = "fresed"
+	ProviderHelixmind    = "helixmind"
+	ProviderGroq         = "groq"
+	ProviderGoogle       = "google"
+	ProviderOpenRouter   = "openrouter"
+	ProviderG4F          = "g4f"
+	ProviderCrof         = "crof"
+	ProviderElectron     = "electronhub"
+	ProviderCloudflare   = "cloudflare"
+	ProviderCohere       = "cohere"
+	ProviderMNN          = "mnn"
+	ProviderSelfhosted   = "selfhosted"
+	ProviderVoid         = "voidai"
+	ProviderZhipu        = "zhipu"
+	ProviderChutes       = "chutes"
+	ProviderCerebras     = "cerebras"
+	ProviderTogether     = "together"
+	ProviderNineteen     = "nineteen"
+	ProviderHcap         = "hcap"
+	ProviderPollinations = "pollinations"
 )
 
 type ModelProvider struct {
@@ -96,6 +98,7 @@ type Model struct {
 	Providers map[string]ModelProvider
 	IsMagMell bool
 	IsMarkov  bool
+	Limited   bool // disable custom inference settings
 }
 
 type ScoredProvider struct {
@@ -210,6 +213,9 @@ var (
 			ProviderHcap: {
 				Codenames: []string{"gpt-4.1-mini"},
 			},
+			ProviderPollinations: {
+				Codenames: []string{"gpt-4.1-mini"},
+			},
 		},
 	}
 
@@ -246,6 +252,9 @@ var (
 			ProviderHcap: {
 				Codenames: []string{"gpt-4.1"},
 			},
+			ProviderPollinations: {
+				Codenames: []string{"gpt-4.1"},
+			},
 		},
 	}
 
@@ -280,6 +289,9 @@ var (
 				Codenames: []string{"gpt-4.1-nano"},
 			},
 			ProviderHcap: {
+				Codenames: []string{"gpt-4.1-nano"},
+			},
+			ProviderPollinations: {
 				Codenames: []string{"gpt-4.1-nano"},
 			},
 		},
@@ -397,6 +409,9 @@ var (
 			},
 			ProviderVoid: {
 				Codenames: []string{"mistral-small-latest"},
+			},
+			ProviderPollinations: {
+				Codenames: []string{"mistral-small-3.1-24b-instruct"},
 			},
 		},
 	}
@@ -624,6 +639,9 @@ var (
 			ProviderChutes: {
 				Codenames: []string{"chutesai/Llama-4-Scout-17B-16E-Instruct"},
 			},
+			ProviderPollinations: {
+				Codenames: []string{"llama-4-scout-17b-16e-instruct"},
+			},
 		},
 	}
 
@@ -704,6 +722,9 @@ var (
 			ProviderVoid: {
 				Codenames: []string{"deepseek-v3-0324", "deepseek-v3"},
 			},
+			ProviderPollinations: {
+				Codenames: []string{"deepseek-v3"},
+			},
 		},
 	}
 
@@ -735,6 +756,9 @@ var (
 			},
 			ProviderHcap: {
 				Codenames: []string{"deepseek-r1"},
+			},
+			ProviderPollinations: {
+				Codenames: []string{"deepseek-r1-0528"},
 			},
 		},
 	}
@@ -876,8 +900,12 @@ var (
 		Name:      "OpenAI o3",
 		Command:   "o3",
 		Reasoning: true,
+		Limited:   true,
 		Providers: map[string]ModelProvider{
 			ProviderHcap: {
+				Codenames: []string{"o3"},
+			},
+			ProviderPollinations: {
 				Codenames: []string{"o3"},
 			},
 		},
@@ -894,6 +922,16 @@ var (
 		},
 	}
 
+	ModelGrok3Mini = Model{
+		Name:    "xAI Grok 3 mini",
+		Command: "grok",
+		Providers: map[string]ModelProvider{
+			ProviderPollinations: {
+				Codenames: []string{"grok-3-mini"},
+			},
+		},
+	}
+
 	ModelMarkovChain = Model{
 		Name:      "Markov Chain",
 		Command:   "markov",
@@ -902,11 +940,11 @@ var (
 	}
 
 	AllModels = []Model{
-		ModelMagMell,
+		//ModelMagMell,
 		ModelDeepSeekV3, // pretty good but slow
 		ModelLlama70b,   // default - fastest with specdec, mostly uncensored, good for RP
-		ModelGpt4o,
 		ModelGpt41,
+		ModelGpt4o,
 		ModelO3,
 		ModelGeminiFlash,
 		ModelMistralLarge,
@@ -919,6 +957,7 @@ var (
 		ModelCommandA,
 		ModelQwen3A22b,
 		ModelQwen332b,
+		ModelGrok3Mini,
 		ModelArliRpR,
 		ModelQwQ,
 		ModelO4Mini,
@@ -964,6 +1003,7 @@ var (
 		{Name: ProviderCrof, PreferReasoning: true}, // above groq when reasoning
 		{Name: ProviderCloudflare},
 		{Name: ProviderZukijourney},
+		{Name: ProviderPollinations},
 		{Name: ProviderHcap},
 		{Name: ProviderFresed},
 		{Name: ProviderMNN},
@@ -1096,6 +1136,8 @@ func (m Model) Client(provider string) (baseUrls []string, tokens []string, code
 		tokenEnvKey, apiVar = "X3_NINETEEN_TOKEN", nineteenBaseURL
 	case ProviderHcap:
 		tokenEnvKey, apiVar = "X3_HCAP_TOKEN", hcapBaseURL
+	case ProviderPollinations:
+		tokenEnvKey, apiVar = "X3_POLLINATIONS_TOKEN", pollinationsBaseURL
 	default:
 		return nil, nil, nil
 	}
