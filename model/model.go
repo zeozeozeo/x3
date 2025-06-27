@@ -1003,11 +1003,12 @@ var (
 		{Name: ProviderCrof, PreferReasoning: true}, // above groq when reasoning
 		{Name: ProviderCloudflare},
 		{Name: ProviderZukijourney},
+		{Name: ProviderVoid},
+		{Name: ProviderMNN},
+		{Name: ProviderFresed},
+		{Name: ProviderElectron},
 		{Name: ProviderPollinations},
 		{Name: ProviderHcap},
-		{Name: ProviderFresed},
-		{Name: ProviderMNN},
-		{Name: ProviderElectron},
 		{Name: ProviderHelixmind},
 		{Name: ProviderCohere}, // 1,000 reqs/mo limit
 		{Name: ProviderGithub},
