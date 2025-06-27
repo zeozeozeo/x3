@@ -995,7 +995,7 @@ var (
 		{Name: ProviderSelfhosted},
 		{Name: ProviderGroq},
 		{Name: ProviderCerebras},
-		{Name: ProviderChutes},
+		//{Name: ProviderChutes},
 		{Name: ProviderZhipu},
 		{Name: ProviderTogether},
 		{Name: ProviderNineteen},
