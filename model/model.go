@@ -982,7 +982,7 @@ var (
 		//ModelClaude3Haiku, // unstable api
 	}
 
-	DefaultModels = []string{ModelDeepSeekV3.Name, ModelLlama70b.Name, ModelLlamaScout.Name, ModelLlamaMaverick.Name, ModelGpt41Mini.Name, ModelGpt41.Name, ModelGpt41Nano.Name, ModelGeminiFlash.Name}
+	DefaultModels = []string{ModelLlamaMaverick.Name, ModelLlama70b.Name, ModelLlamaScout.Name, ModelDeepSeekV3.Name, ModelGpt41.Name, ModelGeminiFlash.Name}
 	// Because chutes doesnt support prefill
 	NarratorModels      = []string{ModelLlama70b.Name, ModelLlamaScout.Name, ModelLlamaMaverick.Name, ModelGpt41Mini.Name, ModelGpt41.Name, ModelGpt41Nano.Name, ModelGeminiFlash.Name}
 	DefaultModel        = DefaultModels[0]
