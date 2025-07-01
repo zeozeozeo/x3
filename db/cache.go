@@ -15,7 +15,7 @@ import (
 
 const (
 	// DefaultContextMessages is the default number of surrounding messages used for LLM context.
-	DefaultContextMessages = 30
+	DefaultContextMessages = 60
 )
 
 // ChannelCache holds per-channel settings and temporary state.

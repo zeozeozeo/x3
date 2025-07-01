@@ -213,24 +213,10 @@ func HandlePersona(event *handler.CommandEvent) error {
 	cache := db.GetChannelCache(event.Channel().ID())
 	m := model.GetModelByName(dataModel)
 
-	// only query whitelist if we need to
-	inWhitelist := false
-	if m.Whitelisted || dataContext > 50 {
-		inWhitelist = db.IsInWhitelist(event.User().ID)
-	}
-
-	if m.Whitelisted && !inWhitelist {
+	if m.Whitelisted && !db.IsInWhitelist(event.User().ID) {
 		return event.CreateMessage(
 			discord.NewMessageCreateBuilder().
-				SetContentf("You need to be whitelisted to set the model `%s`. Try `%s`", dataModel, model.ModelGpt41Mini.Name).
-				SetEphemeral(true).
-				Build(),
-		)
-	}
-	if dataContext > 50 && !inWhitelist {
-		return event.CreateMessage(
-			discord.NewMessageCreateBuilder().
-				SetContent("The maximum allowed context length for users outside the whitelist is 50").
+				SetContentf("You need to be whitelisted to set the model `%s`. Try `%s`", dataModel, model.DefaultModel).
 				SetEphemeral(true).
 				Build(),
 		)
@@ -262,6 +248,7 @@ func HandlePersona(event *handler.CommandEvent) error {
 		if dataContext < 0 {
 			dataContext = db.DefaultContextMessages
 		}
+		dataContext = min(100, dataContext)
 		cache.ContextLength = dataContext
 	}
 	if dataSeed != 0 {

@@ -338,8 +338,8 @@ type PersonaMeta struct {
 func (meta *PersonaMeta) Migrate() {
 	if meta.Version < currentVersion {
 		meta.Models = clone(model.DefaultModels)
+		meta.Version = currentVersion
 	}
-	meta.Version = currentVersion
 }
 
 func (meta PersonaMeta) GetModels() []model.Model {
