@@ -54,6 +54,7 @@ const (
 	nineteenBaseURL     = "https://api.nineteen.ai/v1"
 	hcapBaseURL         = "https://hcap.ai/v1"
 	pollinationsBaseURL = "https://text.pollinations.ai/openai"
+	targonBaseURL       = "https://api.targon.com/v1"
 )
 
 const (
@@ -79,6 +80,7 @@ const (
 	ProviderNineteen     = "nineteen"
 	ProviderHcap         = "hcap"
 	ProviderPollinations = "pollinations"
+	ProviderTargon       = "targon"
 )
 
 type ModelProvider struct {
@@ -722,9 +724,18 @@ var (
 			ProviderVoid: {
 				Codenames: []string{"deepseek-v3-0324", "deepseek-v3"},
 			},
-			ProviderPollinations: {
+			ProviderTargon: {
+				Codenames: []string{"deepseek-ai/DeepSeek-V3-0324"},
+			},
+			ProviderElectron: {
+				Codenames: []string{"deepseek-v3-0324"},
+			},
+			ProviderHcap: {
 				Codenames: []string{"deepseek-v3"},
 			},
+			//ProviderPollinations: {
+			//	Codenames: []string{"deepseek-v3"},
+			//},
 		},
 	}
 
@@ -759,6 +770,9 @@ var (
 			},
 			ProviderPollinations: {
 				Codenames: []string{"deepseek-r1-0528"},
+			},
+			ProviderTargon: {
+				Codenames: []string{"deepseek-ai/DeepSeek-R1-0528"},
 			},
 		},
 	}
@@ -982,7 +996,7 @@ var (
 		//ModelClaude3Haiku, // unstable api
 	}
 
-	DefaultModels = []string{ModelLlamaMaverick.Name, ModelLlama70b.Name, ModelLlamaScout.Name, ModelDeepSeekV3.Name, ModelGpt41.Name, ModelGeminiFlash.Name}
+	DefaultModels = []string{ModelDeepSeekV3.Name, ModelLlama70b.Name, ModelLlamaMaverick.Name, ModelLlamaScout.Name, ModelGpt41.Name, ModelGeminiFlash.Name}
 	// Because chutes doesnt support prefill
 	NarratorModels      = []string{ModelLlama70b.Name, ModelLlamaScout.Name, ModelLlamaMaverick.Name, ModelGpt41Mini.Name, ModelGpt41.Name, ModelGpt41Nano.Name, ModelGeminiFlash.Name}
 	DefaultModel        = DefaultModels[0]
@@ -1000,19 +1014,20 @@ var (
 		{Name: ProviderTogether},
 		{Name: ProviderNineteen},
 		{Name: ProviderGoogle},
-		{Name: ProviderCrof, PreferReasoning: true}, // above groq when reasoning
+		{Name: ProviderTargon},
 		{Name: ProviderCloudflare},
 		{Name: ProviderZukijourney},
 		{Name: ProviderVoid},
 		{Name: ProviderMNN},
 		{Name: ProviderFresed},
 		{Name: ProviderElectron},
-		{Name: ProviderPollinations},
 		{Name: ProviderHcap},
 		{Name: ProviderHelixmind},
 		{Name: ProviderCohere}, // 1,000 reqs/mo limit
-		{Name: ProviderGithub},
 		{Name: ProviderOpenRouter},
+		{Name: ProviderGithub},
+		{Name: ProviderPollinations},
+		{Name: ProviderCrof},
 		//{Name: ProviderG4F},
 	}
 
@@ -1139,6 +1154,8 @@ func (m Model) Client(provider string) (baseUrls []string, tokens []string, code
 		tokenEnvKey, apiVar = "X3_HCAP_TOKEN", hcapBaseURL
 	case ProviderPollinations:
 		tokenEnvKey, apiVar = "X3_POLLINATIONS_TOKEN", pollinationsBaseURL
+	case ProviderTargon:
+		tokenEnvKey, apiVar = "X3_TARGON_TOKEN", targonBaseURL
 	default:
 		return nil, nil, nil
 	}
