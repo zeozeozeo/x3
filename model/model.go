@@ -55,6 +55,7 @@ const (
 	hcapBaseURL         = "https://hcap.ai/v1"
 	pollinationsBaseURL = "https://text.pollinations.ai/openai"
 	targonBaseURL       = "https://api.targon.com/v1"
+	atlasBaseURL        = "https://api.atlascloud.ai/v1"
 )
 
 const (
@@ -81,6 +82,7 @@ const (
 	ProviderHcap         = "hcap"
 	ProviderPollinations = "pollinations"
 	ProviderTargon       = "targon"
+	ProviderAtlas        = "atlas"
 )
 
 type ModelProvider struct {
@@ -644,6 +646,9 @@ var (
 			ProviderPollinations: {
 				Codenames: []string{"llama-4-scout-17b-16e-instruct"},
 			},
+			ProviderAtlas: {
+				Codenames: []string{"meta-llama/Llama-4-Scout-17B-16E-Instruct"},
+			},
 		},
 	}
 
@@ -736,6 +741,9 @@ var (
 			//ProviderPollinations: {
 			//	Codenames: []string{"deepseek-v3"},
 			//},
+			ProviderAtlas: {
+				Codenames: []string{"deepseek-ai/DeepSeek-V3-0324"},
+			},
 		},
 	}
 
@@ -862,6 +870,9 @@ var (
 				Codenames: []string{"qwen-3-32b"},
 			},
 			ProviderChutes: {
+				Codenames: []string{"Qwen/Qwen3-32B"},
+			},
+			ProviderAtlas: {
 				Codenames: []string{"Qwen/Qwen3-32B"},
 			},
 		},
@@ -1009,6 +1020,7 @@ var (
 		{Name: ProviderSelfhosted},
 		{Name: ProviderGroq},
 		{Name: ProviderCerebras},
+		{Name: ProviderAtlas},
 		{Name: ProviderChutes},
 		{Name: ProviderZhipu},
 		{Name: ProviderTogether},
@@ -1156,6 +1168,8 @@ func (m Model) Client(provider string) (baseUrls []string, tokens []string, code
 		tokenEnvKey, apiVar = "X3_POLLINATIONS_TOKEN", pollinationsBaseURL
 	case ProviderTargon:
 		tokenEnvKey, apiVar = "X3_TARGON_TOKEN", targonBaseURL
+	case ProviderAtlas:
+		tokenEnvKey, apiVar = "X3_ATLAS_TOKEN", atlasBaseURL
 	default:
 		return nil, nil, nil
 	}
