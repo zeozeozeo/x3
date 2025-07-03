@@ -396,8 +396,9 @@ func handleLlmInteraction2(
 const stableNarratorPrepend = "```json\n{\n  \"tags\":"
 
 func parseStableNarratorTags(response string) (string, error) {
-	//_, response = llm.ExtractThinking(response)
-	response = strings.Replace(response, "**", "", 2)
+	slog.Debug("init response", "response", response)
+
+	// remove garbage from response
 	replacer := strings.NewReplacer(
 		"**", "",
 		"_", " ",
@@ -405,24 +406,53 @@ func parseStableNarratorTags(response string) (string, error) {
 		"```", "",
 	)
 	response = replacer.Replace(response)
+	response = strings.TrimSpace(response)
 
-	// unmarshal json ({"tags": "tag1, tag2, tag3, ..."})
-	var t struct {
-		Tags string `json:"tags"`
-	}
-	if err := json.Unmarshal([]byte(response), &t); err != nil {
-		// perhaps the model just wanted to yap about something
-		slog.Error("narrator: failed to unmarshal json", slog.Any("err", err), slog.String("response", response))
-		return "", err
+	// try to find the innermost JSON object
+	startIdx := strings.LastIndex(response, "{")
+	endIdx := strings.LastIndex(response, "}")
+	if startIdx != -1 && endIdx != -1 && endIdx > startIdx {
+		jsonStr := response[startIdx : endIdx+1]
+		slog.Debug("extracted json", "json", jsonStr)
+
+		// try to parse as {"tags": "..."}
+		var t struct {
+			Tags string `json:"tags"`
+		}
+		if err := json.Unmarshal([]byte(jsonStr), &t); err == nil {
+			t.Tags = strings.TrimSpace(t.Tags)
+			if t.Tags != "" && strings.Contains(t.Tags, ",") {
+				return t.Tags, nil
+			}
+		}
+
+		// if that fails, try to parse as just the tag string directly
+		var tags string
+		if err := json.Unmarshal([]byte(jsonStr), &tags); err == nil {
+			tags = strings.TrimSpace(tags)
+			if tags != "" && strings.Contains(tags, ",") {
+				return tags, nil
+			}
+		}
 	}
 
-	t.Tags = strings.TrimSpace(t.Tags)
-	if t.Tags == "" || !strings.Contains(t.Tags, ",") {
-		slog.Info("narrator: model deemed text irrelevant (no tags)", slog.String("response", response))
-		return "", fmt.Errorf("narrator: model deemed text irrelevant (no tags)")
+	// if all else fails, try to extract tags by looking for the content after "tags":
+	tagsPrefix := `"tags":`
+	tagsIdx := strings.Index(response, tagsPrefix)
+	if tagsIdx != -1 {
+		tagsStr := response[tagsIdx+len(tagsPrefix):]
+		// find the closing quote or brace
+		endQuote := strings.Index(tagsStr, `"`)
+		if endQuote != -1 {
+			tags := strings.Trim(tagsStr[:endQuote], ` "`)
+			if tags != "" && strings.Contains(tags, ",") {
+				return tags, nil
+			}
+		}
 	}
 
-	return t.Tags, nil
+	slog.Error("narrator: failed to parse tags", slog.String("response", response))
+	return "", fmt.Errorf("narrator: failed to parse tags")
 }
 
 func handleNarration(client bot.Client, channelID, messageID snowflake.ID, llmer llm.Llmer, triggerContent string) {
