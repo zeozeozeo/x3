@@ -396,8 +396,6 @@ func handleLlmInteraction2(
 const stableNarratorPrepend = "```json\n{\n  \"tags\":"
 
 func parseStableNarratorTags(response string) (string, error) {
-	slog.Debug("init response", "response", response)
-
 	// remove garbage from response
 	replacer := strings.NewReplacer(
 		"**", "",
@@ -413,7 +411,6 @@ func parseStableNarratorTags(response string) (string, error) {
 	endIdx := strings.LastIndex(response, "}")
 	if startIdx != -1 && endIdx != -1 && endIdx > startIdx {
 		jsonStr := response[startIdx : endIdx+1]
-		slog.Debug("extracted json", "json", jsonStr)
 
 		// try to parse as {"tags": "..."}
 		var t struct {
