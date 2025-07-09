@@ -56,6 +56,7 @@ func replaceLlmTagsWithNewlines(response string, userID snowflake.ID) (string, b
 
 // splitLlmTags splits the response by <new_message> and extracts <memory> tags.
 func splitLlmTags(response string) (messages []string, memories []string) {
+	hasSplit := strings.Contains(response, "<new_message>")
 	for content := range strings.SplitSeq(response, "<new_message>") {
 		content = strings.TrimSpace(content)
 		if content == "" {
@@ -85,6 +86,9 @@ func splitLlmTags(response string) (messages []string, memories []string) {
 				messages = append(messages, subMessages...)
 				memories = append(memories, subMemories...)
 			}
+		} else if hasSplit {
+			// deepseek sometimes does this instead of starting a new message
+			messages = append(messages, strings.Split(content, "\n\n")...)
 		} else {
 			messages = append(messages, content)
 		}
