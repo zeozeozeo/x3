@@ -314,7 +314,7 @@ func (l *Llmer) requestCompletionInternal2(
 	req := openai.ChatCompletionRequest{
 		Model:    codename,
 		Messages: l.convertMessages(m.Vision, m.IsLlama, prepend),
-		Stream:   false,
+		Stream:   true,
 		StreamOptions: &openai.StreamOptions{
 			IncludeUsage: true,
 		},
