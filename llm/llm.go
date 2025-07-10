@@ -303,7 +303,7 @@ func (l *Llmer) requestCompletionInternal2(
 	m model.Model,
 	codename,
 	provider string,
-	usernames map[string]bool,
+	usernames map[string]struct{},
 	settings persona.InferenceSettings,
 	client *openai.Client,
 	prepend string,
@@ -381,9 +381,9 @@ func (l *Llmer) requestCompletionInternal2(
 
 	// if the model is dumb enough to prepend usernames, cut them off
 	if usernames == nil {
-		usernames = map[string]bool{}
+		usernames = map[string]struct{}{}
 	}
-	usernames["x3"] = true
+	usernames["x3"] = struct{}{}
 	for username := range usernames {
 		prefix := username + ": "
 		for strings.HasPrefix(strings.ToLower(unescaped), strings.ToLower(prefix)) {
@@ -415,7 +415,7 @@ func (l *Llmer) requestCompletionInternal2(
 func (l *Llmer) requestCompletionInternal(
 	m model.Model,
 	provider string,
-	usernames map[string]bool,
+	usernames map[string]struct{},
 	settings persona.InferenceSettings,
 	prepend string,
 ) (string, Usage, error) {
@@ -479,7 +479,7 @@ func (l *Llmer) requestCompletionInternal(
 	return "", Usage{}, fmt.Errorf("all configurations for provider %s failed: %w", provider, lastErr) // all baseUrls/tokens/codenames errored
 }
 
-func (l *Llmer) inferMarkovChain(usernames map[string]bool) string {
+func (l *Llmer) inferMarkovChain(usernames map[string]struct{}) string {
 	if len(l.Messages) == 0 {
 		return ""
 	}
@@ -549,7 +549,7 @@ func (l Llmer) shouldSwapToVision() bool {
 	return false
 }
 
-func (l *Llmer) RequestCompletion(models []model.Model, usernames map[string]bool, settings persona.InferenceSettings, prepend string) (res string, usage Usage, err error) {
+func (l *Llmer) RequestCompletion(models []model.Model, usernames map[string]struct{}, settings persona.InferenceSettings, prepend string) (res string, usage Usage, err error) {
 	if len(models) == 0 {
 		err = errNoModelsForCompletion
 		return

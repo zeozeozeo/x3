@@ -99,6 +99,8 @@ func HandleLlm(event *handler.CommandEvent, models []model.Model) error {
 	isDM := event.Channel().Type() == discord.ChannelTypeDM
 	lastInteracted := db.GetInteractionTime(event.User().ID)
 
+	usernames := map[string]struct{}{}
+
 	if useCache {
 		slog.Debug("using channel cache for LLM context", slog.String("channel_id", event.Channel().ID().String()))
 		llmer = cache.Llmer
@@ -114,7 +116,7 @@ func HandleLlm(event *handler.CommandEvent, models []model.Model) error {
 		lastMessage := event.Channel().MessageChannel.LastMessageID()
 		if lastMessage != nil {
 			// Add context messages from history
-			_, _, _, _, _ = addContextMessagesIfPossible(event.Client(), llmer, event.Channel().ID(), *lastMessage, cache.ContextLength)
+			_, usernames, _, _, _ = addContextMessagesIfPossible(event.Client(), llmer, event.Channel().ID(), *lastMessage, cache.ContextLength)
 
 			// Add the very last message in the channel if it wasn't the interaction itself
 			// This might fetch the interaction trigger message again, but addContextMessagesIfPossible handles duplicates by ID.
@@ -132,6 +134,7 @@ func HandleLlm(event *handler.CommandEvent, models []model.Model) error {
 			}
 		}
 	}
+	usernames[event.User().EffectiveName()] = struct{}{} // to be safe when not using cache
 	slog.Debug("prepared initial context", slog.Int("num_messages", llmer.NumMessages()))
 
 	// Set the final persona for the actual request
@@ -155,7 +158,7 @@ func HandleLlm(event *handler.CommandEvent, models []model.Model) error {
 		slog.Int("num_messages", llmer.NumMessages()),
 		slog.String("prepend", cache.PersonaMeta.Prepend),
 	)
-	response, usage, err := llmer.RequestCompletion(targetModels, nil, cache.PersonaMeta.Settings, cache.PersonaMeta.Prepend) // Pass nil for usernames map as it's not easily available here
+	response, usage, err := llmer.RequestCompletion(targetModels, usernames, cache.PersonaMeta.Settings, cache.PersonaMeta.Prepend) // Pass nil for usernames map as it's not easily available here
 	if err != nil {
 		slog.Error("LLM request failed", slog.Any("err", err))
 		return updateInteractionError(event, fmt.Sprintf("LLM request failed: %s", err.Error())) // Use updateInteractionError as we deferred

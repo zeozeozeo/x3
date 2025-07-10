@@ -224,17 +224,17 @@ func addContextMessagesIfPossible(
 	channelID,
 	messageID snowflake.ID, // The ID of the message *before* which to fetch context
 	contextLen int,
-) (int, map[string]bool, *discord.Message, snowflake.ID, snowflake.ID) {
+) (int, map[string]struct{}, *discord.Message, snowflake.ID, snowflake.ID) {
 
 	if contextLen <= 0 {
-		return 0, make(map[string]bool), nil, 0, 0 // No context requested
+		return 0, make(map[string]struct{}), nil, 0, 0 // No context requested
 	}
 
 	// Fetch messages *before* the given messageID
 	messages, err := client.Rest().GetMessages(channelID, 0, messageID, 0, contextLen)
 	if err != nil {
 		slog.Error("failed to get context messages", slog.Any("err", err), slog.String("channel_id", channelID.String()))
-		return 0, make(map[string]bool), nil, 0, 0
+		return 0, make(map[string]struct{}), nil, 0, 0
 	}
 
 	// --- Process fetched messages (newest to oldest) ---
@@ -250,7 +250,7 @@ func addContextMessagesIfPossible(
 		}
 	}
 
-	usernames := make(map[string]bool)
+	usernames := make(map[string]struct{})
 	var lastResponseMessage *discord.Message
 	var lastAssistantMessageID snowflake.ID
 	var lastUserID snowflake.ID
@@ -336,7 +336,7 @@ func addContextMessagesIfPossible(
 		// Add the processed message to the llmer
 		if content != "" { // Avoid adding empty messages
 			llmer.AddMessage(role, content, msg.ID)
-			usernames[msg.Author.EffectiveName()] = true // Track username
+			usernames[msg.Author.EffectiveName()] = struct{}{} // Track username
 		}
 
 		// Add image attachments if this is the newest message containing one
