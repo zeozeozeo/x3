@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"math/rand"
 	"slices"
 	"strings"
 	"sync"
@@ -223,8 +222,6 @@ func handleLlmInteraction2(
 	// Add random DM reminder if applicable
 	if timeInteraction && !cache.EverUsedRandomDMs && !isRegenerate {
 		response += interactionReminder
-	} else if !isDM && rand.Intn(100) < 5 {
-		response += "\n-# add me to your server - it's free!"
 	}
 
 	if isImpersonate {
