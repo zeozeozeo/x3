@@ -158,7 +158,7 @@ func HandleLlm(event *handler.CommandEvent, models []model.Model) error {
 		slog.Int("num_messages", llmer.NumMessages()),
 		slog.String("prepend", cache.PersonaMeta.Prepend),
 	)
-	response, usage, err := llmer.RequestCompletion(targetModels, usernames, cache.PersonaMeta.Settings, cache.PersonaMeta.Prepend) // Pass nil for usernames map as it's not easily available here
+	response, usage, err := llmer.RequestCompletion(targetModels, usernames, cache.PersonaMeta.Settings, cache.PersonaMeta.Prepend)
 	if err != nil {
 		slog.Error("LLM request failed", slog.Any("err", err))
 		return updateInteractionError(event, fmt.Sprintf("LLM request failed: %s", err.Error())) // Use updateInteractionError as we deferred
