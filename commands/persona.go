@@ -266,20 +266,6 @@ func HandlePersona(event *handler.CommandEvent) error {
 		cache.PersonaMeta.Settings.FrequencyPenalty = float32(dataFreqPenalty)
 	}
 
-	// default settings for lunaris (HACK: maybe add per-model default settings instead of this?):
-	// temp = 1.4, top_p = 0.9
-	if m.IsMagMell {
-		if !hasTemperature {
-			cache.PersonaMeta.Settings.Temperature = 1.25 + 0.4 // remaps to 1.25
-		}
-		if !hasTopP {
-			cache.PersonaMeta.Settings.TopP = 1.0 // remaps to 0.9
-		}
-		// "Mag Mell R1 was tested with Temp 1.25 and MinP 0.2"
-		// But, as always, the OpenAI API doesn't support MinP, so this is a TODO
-		// rel https://github.com/zeozeozeo/x3/openai/issues/1007
-	}
-
 	cache.PersonaMeta.Settings = cache.PersonaMeta.Settings.Fixup()
 
 	// apply character card

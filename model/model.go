@@ -102,7 +102,6 @@ type Model struct {
 	Reasoning bool
 	Encoding  tokenizer.Encoding
 	Providers map[string]ModelProvider
-	IsMagMell bool
 	IsMarkov  bool
 	Limited   bool // disable custom inference settings
 }
@@ -807,7 +806,6 @@ var (
 	ModelMagMell = Model{
 		Name:      "Mag Mell R1 12B (RP)",
 		Command:   "magmell",
-		IsMagMell: true,
 		Providers: map[string]ModelProvider{
 			ProviderSelfhosted: {
 				Codenames: []string{"MN-12B-Mag-Mell-R1"},
