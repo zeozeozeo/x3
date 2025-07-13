@@ -56,6 +56,7 @@ const (
 	pollinationsBaseURL = "https://text.pollinations.ai/openai"
 	targonBaseURL       = "https://api.targon.com/v1"
 	atlasBaseURL        = "https://api.atlascloud.ai/v1"
+	huggingfaceBaseURL  = "https://router.huggingface.co/featherless-ai/v1"
 )
 
 const (
@@ -83,6 +84,7 @@ const (
 	ProviderPollinations = "pollinations"
 	ProviderTargon       = "targon"
 	ProviderAtlas        = "atlas"
+	ProviderHuggingface  = "huggingface"
 )
 
 type ModelProvider struct {
@@ -810,6 +812,9 @@ var (
 			ProviderSelfhosted: {
 				Codenames: []string{"MN-12B-Mag-Mell-R1"},
 			},
+			ProviderHuggingface: {
+				Codenames: []string{"inflatebot/MN-12B-Mag-Mell-R1"},
+			},
 		},
 	}
 
@@ -959,6 +964,9 @@ var (
 			ProviderMNN: {
 				Codenames: []string{"kimi-k2"},
 			},
+			ProviderChutes: {
+				Codenames: []string{"moonshotai/Kimi-K2-Instruct"},
+			},
 		},
 	}
 
@@ -970,7 +978,6 @@ var (
 	}
 
 	AllModels = []Model{
-		//ModelMagMell,
 		ModelDeepSeekV3,
 		ModelLlama70b,
 		ModelKimiK2, // peak
@@ -991,6 +998,7 @@ var (
 		ModelGrok3Mini,
 		ModelQwQ,
 		ModelO4Mini,
+		ModelMagMell,
 		// discord menu cutoff (25) - only useless models should go below this
 		ModelGLM4,
 		ModelGLMZ1,
@@ -1022,11 +1030,11 @@ var (
 
 	// default errors are set for default order of trial
 	allProviders = []*ScoredProvider{
-		{Name: ProviderSelfhosted},
+		//{Name: ProviderSelfhosted},
 		{Name: ProviderGroq},
 		{Name: ProviderCerebras},
 		{Name: ProviderAtlas},
-		{Name: ProviderChutes},
+		//{Name: ProviderChutes},
 		{Name: ProviderZhipu},
 		{Name: ProviderTogether},
 		{Name: ProviderNineteen},
@@ -1175,6 +1183,8 @@ func (m Model) Client(provider string) (baseUrls []string, tokens []string, code
 		tokenEnvKey, apiVar = "X3_TARGON_TOKEN", targonBaseURL
 	case ProviderAtlas:
 		tokenEnvKey, apiVar = "X3_ATLAS_TOKEN", atlasBaseURL
+	case ProviderHuggingface:
+		tokenEnvKey, apiVar = "X3_HUGGINGFACE_TOKEN", huggingfaceBaseURL
 	default:
 		return nil, nil, nil
 	}
