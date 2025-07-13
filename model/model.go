@@ -718,7 +718,7 @@ var (
 				Codenames: []string{"deepseek-v3-0324", "deepseek-v3"},
 			},
 			ProviderCrof: {
-				Codenames: []string{"DeepSeek-V3-0324"},
+				Codenames: []string{"deepseek-v3-0324"},
 			},
 			ProviderGithub: {
 				Codenames: []string{"deepseek/DeepSeek-V3-0324"},
@@ -899,17 +899,6 @@ var (
 		},
 	}
 
-	ModelArliRpR = Model{
-		Name:      "QwQ 32B ArliAI RpR V1 (RP)",
-		Command:   "rpr",
-		Reasoning: true,
-		Providers: map[string]ModelProvider{
-			ProviderChutes: {
-				Codenames: []string{"ArliAI/QwQ-32B-ArliAI-RpR-v1"},
-			},
-		},
-	}
-
 	ModelQwQ = Model{
 		Name:      "QwQ 32B",
 		Command:   "qwq",
@@ -933,6 +922,9 @@ var (
 			ProviderPollinations: {
 				Codenames: []string{"o3"},
 			},
+			ProviderMNN: {
+				Codenames: []string{"o3"},
+			},
 		},
 	}
 
@@ -942,6 +934,9 @@ var (
 		Reasoning: true,
 		Providers: map[string]ModelProvider{
 			ProviderHcap: {
+				Codenames: []string{"o4-mini"},
+			},
+			ProviderMNN: {
 				Codenames: []string{"o4-mini"},
 			},
 		},
@@ -957,6 +952,16 @@ var (
 		},
 	}
 
+	ModelKimiK2 = Model{
+		Name:    "Moonshot AI Kimi K2",
+		Command: "kimi",
+		Providers: map[string]ModelProvider{
+			ProviderMNN: {
+				Codenames: []string{"kimi-k2"},
+			},
+		},
+	}
+
 	ModelMarkovChain = Model{
 		Name:      "Markov Chain",
 		Command:   "markov",
@@ -966,8 +971,9 @@ var (
 
 	AllModels = []Model{
 		//ModelMagMell,
-		ModelDeepSeekV3, // pretty good but slow
-		ModelLlama70b,   // default - fastest with specdec, mostly uncensored, good for RP
+		ModelDeepSeekV3,
+		ModelLlama70b,
+		ModelKimiK2, // peak
 		ModelGpt41,
 		ModelGpt4o,
 		ModelO3,
@@ -976,14 +982,13 @@ var (
 		ModelMistralSmall,
 		ModelLlamaScout,
 		ModelLlamaMaverick,
-		ModelLlama405b,  // unstable api
-		ModelGemma27b,   // this is balls
-		ModelDeepSeekR1, // groq often cuts off the response
+		ModelLlama405b,
+		ModelGemma27b,
+		ModelDeepSeekR1,
 		ModelCommandA,
 		ModelQwen3A22b,
 		ModelQwen332b,
 		ModelGrok3Mini,
-		ModelArliRpR,
 		ModelQwQ,
 		ModelO4Mini,
 		// discord menu cutoff (25) - only useless models should go below this
@@ -1028,6 +1033,7 @@ var (
 		{Name: ProviderGoogle},
 		{Name: ProviderTargon},
 		{Name: ProviderCloudflare},
+		{Name: ProviderCrof},
 		{Name: ProviderVoid},
 		{Name: ProviderMNN},
 		{Name: ProviderZukijourney},
@@ -1039,7 +1045,6 @@ var (
 		{Name: ProviderOpenRouter},
 		{Name: ProviderGithub},
 		{Name: ProviderPollinations},
-		{Name: ProviderCrof},
 		//{Name: ProviderG4F},
 	}
 
