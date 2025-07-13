@@ -804,8 +804,8 @@ var (
 	}
 
 	ModelMagMell = Model{
-		Name:      "Mag Mell R1 12B (RP)",
-		Command:   "magmell",
+		Name:    "Mag Mell R1 12B (RP)",
+		Command: "magmell",
 		Providers: map[string]ModelProvider{
 			ProviderSelfhosted: {
 				Codenames: []string{"MN-12B-Mag-Mell-R1"},
@@ -964,6 +964,9 @@ var (
 			},
 			ProviderChutes: {
 				Codenames: []string{"moonshotai/Kimi-K2-Instruct"},
+			},
+			ProviderCrof: {
+				Codenames: []string{"kimi-k2"},
 			},
 		},
 	}
