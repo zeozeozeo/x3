@@ -805,7 +805,7 @@ var (
 	}
 
 	ModelMagMell = Model{
-		Name:      "Mag Mell R1 12B (Selfhosted, RP)",
+		Name:      "Mag Mell R1 12B (RP)",
 		Command:   "magmell",
 		IsMagMell: true,
 		Providers: map[string]ModelProvider{
@@ -1053,6 +1053,7 @@ var (
 		{Name: ProviderOpenRouter},
 		{Name: ProviderGithub},
 		{Name: ProviderPollinations},
+		{Name: ProviderHuggingface},
 		//{Name: ProviderG4F},
 	}
 
