@@ -16,7 +16,7 @@ import (
 )
 
 var (
-	containsX3Regex       = regexp.MustCompile(`(?i)(^|\P{L})[Xx]3(\P{L}|$)`)
+	containsX3Regex       = regexp.MustCompile(`(?i)(^|\P{L})clanker(\P{L}|$)`)
 	containsProtogenRegex = regexp.MustCompile(`(?i)(^|\W)(protogen|протоген)($|\W)`)
 	containsSigmaRegex    = regexp.MustCompile(`(?i)(^|\W)(sigma|сигма)($|\W)`)
 )
