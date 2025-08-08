@@ -285,9 +285,9 @@ func (h *Horder) Done() {
 func (h *Horder) Wait() { h.wg.Wait() }
 
 // IsFree returns true if there are no active requests.
-//func (h *Horder) IsFree() bool { return h.activeRequests.Load() == 0 }
+func (h *Horder) IsFree() bool { return h.activeRequests.Load() == 0 }
 
-func (h *Horder) IsFree() bool { return false }
+// func (h *Horder) IsFree() bool { return false }
 
 func (h *Horder) GetStatus(id string) (*aihorde.RequestStatusCheck, error) {
 	return h.horde.GetAsyncGenerationCheck(id)
