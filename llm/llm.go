@@ -383,7 +383,7 @@ func (l *Llmer) requestCompletionInternal2(
 	if usernames == nil {
 		usernames = map[string]struct{}{}
 	}
-	usernames["x3"] = struct{}{}
+	usernames["clanker"] = struct{}{}
 	for username := range usernames {
 		prefix := username + ": "
 		for strings.HasPrefix(strings.ToLower(unescaped), strings.ToLower(prefix)) {
