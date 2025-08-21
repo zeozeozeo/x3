@@ -297,7 +297,7 @@ func addContextMessagesIfPossible(
 
 			// Handle potential message splitting indicator (\u200B)
 			if strings.HasSuffix(content, "\u200B") {
-				content = content + " <new_message> "
+				content = content + " " + newMessageTag + " "
 			}
 			if strings.HasPrefix(content, "\u200B") {
 				// means impersonate message!

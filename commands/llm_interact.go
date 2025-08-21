@@ -30,15 +30,17 @@ var (
 )
 
 const (
-	generateImageTag    = "<generate_image>"
-	memoryUpdatedAppend = "\n-# memory updated"
+	generateImageTag          = "<generate_image>"
+	memoryUpdatedAppend       = "\n-# memory updated"
+	newMessageTag             = "<new_message>"
+	excessiveSplitPunishThres = 4
 )
 
 // replaceLlmTagsWithNewlines replaces <new_message> tags with newlines and handles <memory> tags.
 // Returns the modified response and a boolean indicating if any <memory> tags were found.
-func replaceLlmTagsWithNewlines(response string, userID snowflake.ID) (string, bool) {
+func replaceLlmTagsWithNewlines(response string, userID snowflake.ID, personaMeta *persona.PersonaMeta) (string, bool) {
 	var b strings.Builder
-	messages, memories := splitLlmTags(response)
+	messages, memories := splitLlmTags(response, personaMeta)
 	memoryUpdated := len(memories) > 0
 	if err := db.HandleMemories(userID, memories); err != nil {
 		slog.Error("failed to handle memories", slog.Any("err", err))
@@ -55,9 +57,15 @@ func replaceLlmTagsWithNewlines(response string, userID snowflake.ID) (string, b
 }
 
 // splitLlmTags splits the response by <new_message> and extracts <memory> tags.
-func splitLlmTags(response string) (messages []string, memories []string) {
-	hasSplit := strings.Contains(response, "<new_message>")
-	for content := range strings.SplitSeq(response, "<new_message>") {
+func splitLlmTags(response string, personaMeta *persona.PersonaMeta) (messages []string, memories []string) {
+	defer func() {
+		if personaMeta != nil {
+			personaMeta.ExcessiveSplit = len(messages) >= excessiveSplitPunishThres
+		}
+	}()
+
+	hasSplit := strings.Contains(response, newMessageTag)
+	for content := range strings.SplitSeq(response, newMessageTag) {
 		content = strings.TrimSpace(content)
 		if content == "" {
 			continue
@@ -82,7 +90,7 @@ func splitLlmTags(response string) (messages []string, memories []string) {
 			}
 			if afterMemory != "" {
 				// Recursively split the part after memory in case of multiple tags
-				subMessages, subMemories := splitLlmTags(afterMemory)
+				subMessages, subMemories := splitLlmTags(afterMemory, nil)
 				messages = append(messages, subMessages...)
 				memories = append(memories, subMemories...)
 			}
@@ -139,7 +147,7 @@ func handleLlmInteraction2(
 	// Note: addContextMessagesIfPossible modifies the llmer by adding messages.
 	ctxLen := cache.ContextLength
 	if models[0].IsMarkov {
-		ctxLen = 70
+		ctxLen = 99
 	}
 	numCtxMessages, usernames, lastResponseMessage, lastAssistantMessageID, lastUserID := addContextMessagesIfPossible(
 		client,
@@ -193,7 +201,7 @@ func handleLlmInteraction2(
 	if systemPromptOverride != nil {
 		p.System = *systemPromptOverride
 	}
-	llmer.SetPersona(p)
+	llmer.SetPersona(p, &cache.PersonaMeta.ExcessiveSplit)
 
 	// Determine prepend text for the assistant response
 	var prepend string
@@ -264,7 +272,7 @@ func handleLlmInteraction2(
 	if isRegenerate {
 		// Edit the previous message for regeneration
 		var memoryUpdated bool
-		response, memoryUpdated = replaceLlmTagsWithNewlines(response, userID) // Handle tags before sending
+		response, memoryUpdated = replaceLlmTagsWithNewlines(response, userID, &cache.PersonaMeta) // Handle tags before sending
 		if memoryUpdated {
 			response += memoryUpdatedAppend
 		}
@@ -299,7 +307,7 @@ func handleLlmInteraction2(
 	} else {
 		// Send new message(s)
 		var memories []string
-		messages, memories = splitLlmTags(response)
+		messages, memories = splitLlmTags(response, &cache.PersonaMeta)
 		if err := db.HandleMemories(userID, memories); err != nil {
 			// Log error but continue sending messages
 			slog.Error("failed to handle memories during send", slog.Any("err", err))
@@ -349,8 +357,10 @@ func handleLlmInteraction2(
 	{
 		// since this function may run for seconds,
 		// the persona may have changed, refetch it for good measure
+		excessiveSplit := cache.PersonaMeta.ExcessiveSplit
 		newCache := db.GetChannelCache(channelID)
 		cache.PersonaMeta = newCache.PersonaMeta
+		cache.PersonaMeta.ExcessiveSplit = excessiveSplit
 	}
 
 	// Update cache and global stats after successful send/edit

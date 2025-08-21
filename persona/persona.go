@@ -321,17 +321,18 @@ func (s InferenceSettings) Fixup() InferenceSettings {
 const currentVersion = 3
 
 type PersonaMeta struct {
-	Name          string            `json:"name,omitempty"`
-	Desc          string            `json:"-"`
-	Models        []string          `json:"model,omitempty"`
-	System        string            `json:"system,omitempty"`
-	FirstMes      []string          `json:"first_mes,omitempty"`
-	NextMes       *int              `json:"next_mes,omitempty"`
-	IsFirstMes    bool              `json:"is_first_mes,omitempty"`
-	Settings      InferenceSettings `json:"settings"`
-	Prepend       string            `json:"prepend,omitempty"`        // prefill assistant response
-	DisableImages bool              `json:"disable_images,omitempty"` // disable random image narrations
-	Version       int               `json:"version,omitempty"`
+	Name           string            `json:"name,omitempty"`
+	Desc           string            `json:"-"`
+	Models         []string          `json:"model,omitempty"`
+	System         string            `json:"system,omitempty"`
+	FirstMes       []string          `json:"first_mes,omitempty"`
+	NextMes        *int              `json:"next_mes,omitempty"`
+	IsFirstMes     bool              `json:"is_first_mes,omitempty"`
+	Settings       InferenceSettings `json:"settings"`
+	Prepend        string            `json:"prepend,omitempty"`         // prefill assistant response
+	DisableImages  bool              `json:"disable_images,omitempty"`  // disable random image narrations
+	ExcessiveSplit bool              `json:"excessive_split,omitempty"` // model produces too much <new_message> tags, punish it
+	Version        int               `json:"version,omitempty"`
 }
 
 // this is kinda hacky, but this is just so i can update the default models

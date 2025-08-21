@@ -63,7 +63,7 @@ func (n *Narrator) Run() {
 		slog.Info("narrator: requesting completion")
 		meta := persona.PersonaStableNarrator
 		p := persona.GetPersonaByMeta(meta, nil, "", false /* dm */, time.Time{})
-		qn.llmer.SetPersona(p) // TODO: custom personas
+		qn.llmer.SetPersona(p, nil) // TODO: custom personas
 		res, _, err := qn.llmer.RequestCompletion(meta.GetModels(), nil, meta.Settings, qn.prepend)
 
 		// update last interaction time

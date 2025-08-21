@@ -32,7 +32,7 @@ func makeGptCommand(name, desc string) discord.SlashCommandCreate {
 		Options: []discord.ApplicationCommandOption{
 			discord.ApplicationCommandOptionString{
 				Name:        "prompt",
-				Description: "Your message to the LLM", // Simplified description
+				Description: "Your message to the LLM",
 				Required:    true,
 			},
 			discord.ApplicationCommandOptionBool{
@@ -127,7 +127,7 @@ func HandleLlm(event *handler.CommandEvent, models []model.Model) error {
 				} else {
 					// Use the user ID from the fetched message for memory retrieval
 					msgPersona := persona.GetPersonaByMeta(cache.PersonaMeta, db.GetMemories(msg.Author.ID, 0), msg.Author.EffectiveName(), isDM, lastInteracted)
-					llmer.SetPersona(msgPersona) // Temporarily set persona for formatting
+					llmer.SetPersona(msgPersona, nil) // Temporarily set persona for formatting
 					llmer.AddMessage(llm.RoleUser, formatMsg(getMessageContentNoWhitelist(*msg), msg.Author.EffectiveName(), msg.ReferencedMessage), msg.ID)
 					addImageAttachments(llmer, msg.Attachments)
 				}
@@ -139,7 +139,7 @@ func HandleLlm(event *handler.CommandEvent, models []model.Model) error {
 
 	// Set the final persona for the actual request
 	currentPersona := persona.GetPersonaByMeta(cache.PersonaMeta, db.GetMemories(event.User().ID, 0), event.User().EffectiveName(), isDM, lastInteracted)
-	llmer.SetPersona(currentPersona)
+	llmer.SetPersona(currentPersona, &cache.PersonaMeta.ExcessiveSplit)
 
 	// Add the user's prompt from the slash command
 	llmer.AddMessage(llm.RoleUser, formatMsg(prompt, event.User().EffectiveName(), nil), 0) // ID 0 for interaction message
@@ -196,7 +196,7 @@ func HandleLlm(event *handler.CommandEvent, models []model.Model) error {
 	// We must combine messages and handle memories before sending.
 	if ephemeral || useCache {
 		var memoryUpdated bool
-		response, memoryUpdated = replaceLlmTagsWithNewlines(response, event.User().ID)
+		response, memoryUpdated = replaceLlmTagsWithNewlines(response, event.User().ID, &cache.PersonaMeta)
 		if memoryUpdated {
 			response += memoryUpdatedAppend
 		}
@@ -229,7 +229,7 @@ func HandleLlm(event *handler.CommandEvent, models []model.Model) error {
 		// Use sendMessageSplits for non-ephemeral, non-cached responses
 		// This requires splitting tags *after* sending potentially.
 		// Let's adjust: handle memories first, then send splits.
-		messages, memories := splitLlmTags(response)
+		messages, memories := splitLlmTags(response, &cache.PersonaMeta)
 		if err := db.HandleMemories(event.User().ID, memories); err != nil {
 			slog.Error("failed to handle memories", slog.Any("err", err))
 		} else if len(memories) > 0 && len(messages) > 0 {

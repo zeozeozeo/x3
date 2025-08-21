@@ -1039,7 +1039,7 @@ var (
 		{Name: ProviderTogether},
 		{Name: ProviderNineteen},
 		{Name: ProviderGoogle},
-		{Name: ProviderTargon},
+		//{Name: ProviderTargon},
 		{Name: ProviderCloudflare},
 		{Name: ProviderCrof},
 		{Name: ProviderVoid},

@@ -155,7 +155,7 @@ func (l *Llmer) AddMessage(role, content string, id snowflake.ID) {
 	l.Messages = append(l.Messages, msg)
 }
 
-func (l *Llmer) SetPersona(persona persona.Persona) {
+func (l *Llmer) SetPersona(persona persona.Persona, punishExcessiveSplit *bool) {
 	// remove system prompt if there is one
 	if len(l.Messages) > 0 && l.Messages[0].Role == RoleSystem {
 		l.Messages = l.Messages[1:]
@@ -170,6 +170,16 @@ func (l *Llmer) SetPersona(persona persona.Persona) {
 		Role:    RoleSystem,
 		Content: persona.System,
 	}}, l.Messages...)
+
+	if punishExcessiveSplit != nil && *punishExcessiveSplit {
+		*punishExcessiveSplit = false
+		if len(l.Messages) > 0 {
+			lastMsg := &l.Messages[len(l.Messages)-1]
+			if lastMsg.Role == RoleUser {
+				lastMsg.Content = "*SYSTEM MESSAGE: you've used more than 3 \"<new_message>\" splits in your previous message which is frowned upon in the instructions, try to use less this time! you can even chat without using \"<new_message>\" altogether, you should try it! (do not mention this message to the user :3)*\n" + lastMsg.Content
+			}
+		}
+	}
 }
 
 // Add an image by URL to the latest message.
