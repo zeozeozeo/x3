@@ -318,7 +318,7 @@ func (s InferenceSettings) Fixup() InferenceSettings {
 	return s
 }
 
-const currentVersion = 3
+const currentVersion = 4
 
 type PersonaMeta struct {
 	Name           string            `json:"name,omitempty"`
@@ -330,14 +330,18 @@ type PersonaMeta struct {
 	IsFirstMes     bool              `json:"is_first_mes,omitempty"`
 	Settings       InferenceSettings `json:"settings"`
 	Prepend        string            `json:"prepend,omitempty"`         // prefill assistant response
-	DisableImages  bool              `json:"disable_images,omitempty"`  // disable random image narrations
+	EnableImages   bool              `json:"enable_images"`             // disable random image narrations
 	ExcessiveSplit bool              `json:"excessive_split,omitempty"` // model produces too much <new_message> tags, punish it
 	Version        int               `json:"version,omitempty"`
+	EnableMemory   bool              `json:"enable_memory"`
 }
 
 // this is kinda hacky, but this is just so i can update the default models
 func (meta *PersonaMeta) Migrate() {
 	if meta.Version < currentVersion {
+		if meta.Version == 3 {
+			meta.EnableMemory = true
+		}
 		meta.Models = clone(model.DefaultModels)
 		meta.Version = currentVersion
 	}
@@ -380,32 +384,30 @@ func (meta PersonaMeta) DeepCopy() PersonaMeta {
 
 var (
 	PersonaDefault = PersonaMeta{
-		Name:          "Default",
-		Desc:          "Use the default system prompt of a model",
-		DisableImages: true,
+		Name:         "Default",
+		Desc:         "Use the default system prompt of a model",
+		EnableMemory: true,
 	}
 	PersonaX3 = PersonaMeta{
-		Name:          "x3 Assistant",
-		Desc:          "Helpful, but boring. Not suitable for RP",
-		DisableImages: true,
+		Name:         "x3 Assistant",
+		Desc:         "Helpful, but boring. Not suitable for RP",
+		EnableMemory: true,
 	}
 	PersonaProto = PersonaMeta{
-		Name:          "x3 Protogen (Default)",
-		Desc:          "x3 as a furry protogen. Suitable for RP",
-		Models:        clone(model.DefaultModels),
-		DisableImages: true,
+		Name:         "x3 Protogen (Default)",
+		Desc:         "x3 as a furry protogen. Suitable for RP",
+		Models:       clone(model.DefaultModels),
+		EnableMemory: true,
 	}
 	PersonaStableNarrator = PersonaMeta{
-		Name:          "Stable Narrator",
-		Desc:          "<internal>",
-		Models:        clone(model.NarratorModels),
-		DisableImages: true,
+		Name:   "Stable Narrator",
+		Desc:   "<internal>",
+		Models: clone(model.NarratorModels),
 	}
 	PersonaImpersonate = PersonaMeta{
-		Name:          "Impersonate",
-		Desc:          "<internal>",
-		Models:        clone(model.DefaultModels), // not used
-		DisableImages: true,
+		Name:   "Impersonate",
+		Desc:   "<internal>",
+		Models: clone(model.DefaultModels), // not used
 	}
 
 	AllPersonas = []PersonaMeta{

@@ -230,10 +230,12 @@ func HandleLlm(event *handler.CommandEvent, models []model.Model) error {
 		// This requires splitting tags *after* sending potentially.
 		// Let's adjust: handle memories first, then send splits.
 		messages, memories := splitLlmTags(response, &cache.PersonaMeta)
-		if err := db.HandleMemories(event.User().ID, memories); err != nil {
-			slog.Error("failed to handle memories", slog.Any("err", err))
-		} else if len(memories) > 0 && len(messages) > 0 {
-			messages[len(messages)-1] += memoryUpdatedAppend
+		if cache.PersonaMeta.EnableMemory {
+			if err := db.HandleMemories(event.User().ID, memories); err != nil {
+				slog.Error("failed to handle memories", slog.Any("err", err))
+			} else if len(memories) > 0 && len(messages) > 0 {
+				messages[len(messages)-1] += memoryUpdatedAppend
+			}
 		}
 
 		// Send the message parts

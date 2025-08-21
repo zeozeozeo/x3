@@ -41,11 +41,13 @@ const (
 func replaceLlmTagsWithNewlines(response string, userID snowflake.ID, personaMeta *persona.PersonaMeta) (string, bool) {
 	var b strings.Builder
 	messages, memories := splitLlmTags(response, personaMeta)
-	memoryUpdated := len(memories) > 0
-	if err := db.HandleMemories(userID, memories); err != nil {
-		slog.Error("failed to handle memories", slog.Any("err", err))
-		memoryUpdated = false
-		// Continue processing messages even if memory saving fails
+	memoryUpdated := len(memories) > 0 && personaMeta.EnableMemory
+	if !personaMeta.EnableMemory {
+		if err := db.HandleMemories(userID, memories); err != nil {
+			slog.Error("failed to handle memories", slog.Any("err", err))
+			memoryUpdated = false
+			// Continue processing messages even if memory saving fails
+		}
 	}
 	for i, message := range messages {
 		b.WriteString(message)
@@ -308,11 +310,13 @@ func handleLlmInteraction2(
 		// Send new message(s)
 		var memories []string
 		messages, memories = splitLlmTags(response, &cache.PersonaMeta)
-		if err := db.HandleMemories(userID, memories); err != nil {
-			// Log error but continue sending messages
-			slog.Error("failed to handle memories during send", slog.Any("err", err))
-		} else if len(memories) > 0 && len(messages) > 0 {
-			messages[len(messages)-1] += memoryUpdatedAppend
+		if cache.PersonaMeta.EnableMemory {
+			if err := db.HandleMemories(userID, memories); err != nil {
+				// Log error but continue sending messages
+				slog.Error("failed to handle memories during send", slog.Any("err", err))
+			} else if len(memories) > 0 && len(messages) > 0 {
+				messages[len(messages)-1] += memoryUpdatedAppend
+			}
 		}
 
 		var firstBotMessage *discord.Message
@@ -379,10 +383,9 @@ func handleLlmInteraction2(
 	// maybe queue narration + generation
 	if !isImpersonate && !models[0].IsMarkov {
 		realMeta, _ := persona.GetMetaByName(cache.PersonaMeta.Name)
-		disableRandomNarrations := realMeta.DisableImages
 		if !db.IsChannelInImageBlacklist(channelID) &&
 			(strings.Contains(response, generateImageTag) ||
-				(!disableRandomNarrations && horder.GetHorder().IsFree())) {
+				(realMeta.EnableImages && horder.GetHorder().IsFree())) {
 			narrationMessageID := messageID
 			if botMessage != nil {
 				narrationMessageID = botMessage.ID
@@ -393,7 +396,7 @@ func handleLlmInteraction2(
 			}
 			handleNarration(client, channelID, narrationMessageID, *llmer, content)
 		} else {
-			slog.Info("narrator: skipping narration", slog.Bool("disableImages", disableRandomNarrations), slog.Bool("timeSinceLastInteraction", time.Since(GetNarrator().LastInteractionTime()) > 2*time.Minute), slog.Bool("isFree", horder.GetHorder().IsFree()))
+			slog.Info("narrator: skipping narration", slog.Bool("enableImages", realMeta.EnableImages), slog.Bool("timeSinceLastInteraction", time.Since(GetNarrator().LastInteractionTime()) > 2*time.Minute), slog.Bool("isFree", horder.GetHorder().IsFree()))
 		}
 	}
 
