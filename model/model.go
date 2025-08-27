@@ -333,8 +333,9 @@ var (
 	}
 
 	ModelDeepSeekV31 = Model{
-		Name:    "DeepSeek V3.1 671B",
-		Command: "deepseekv31",
+		Name:      "DeepSeek V3.1 671B",
+		Command:   "deepseekv31",
+		Reasoning: true,
 		Providers: map[string]ModelProvider{
 			ProviderCrof: {
 				Codenames: []string{"deepseek-v3.1"},
