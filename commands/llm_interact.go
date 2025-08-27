@@ -66,6 +66,7 @@ func splitLlmTags(response string, personaMeta *persona.PersonaMeta) (messages [
 		}
 	}()
 
+	response = strings.ReplaceAll(response, "\n\n", newMessageTag) // fuck you, deepseek
 	hasSplit := strings.Contains(response, newMessageTag)
 	for content := range strings.SplitSeq(response, newMessageTag) {
 		content = strings.TrimSpace(content)
