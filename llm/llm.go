@@ -400,16 +400,6 @@ func (l *Llmer) requestCompletionInternal2(
 			unescaped = unescaped[len(prefix):]
 		}
 	}
-
-	if m.Name == model.ModelLlama90b.Name || m.Name == model.ModelLlama70b.Name {
-		// this model is so stupid that it often ignores the instruction to
-		// not put a space before the tilde
-		replacer := strings.NewReplacer(
-			" ~", "~",
-			">///&", ">///<",
-		)
-		unescaped = replacer.Replace(unescaped)
-	}
 	// and trim spaces again after our checks, for good measure
 	unescaped = strings.TrimSpace(unescaped)
 	slog.Info("response", slog.String("text", text.String()), slog.String("unescaped", unescaped), slog.Duration("duration", time.Since(completionStart)), slog.String("model", m.Name), slog.String("provider", provider))
