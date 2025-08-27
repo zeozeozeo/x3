@@ -376,11 +376,9 @@ func (l *Llmer) requestCompletionInternal2(
 		//if tokens%10 == 0 {
 		//	slog.Debug("stream progress", slog.Int("tokens", tokens), slog.Duration("in", time.Since(completionStart)), "text", text.String())
 		//}
-		fmt.Print(response.Choices[0].Delta.Content)
 		text.WriteString(response.Choices[0].Delta.Content)
 	}
 
-	fmt.Print("\n")
 	in := time.Since(firstTokenTime)
 	slog.Info("stream closed", "sinceFirst", in, "sinceStart", time.Since(completionStart), "tok/s", float64(usage.ResponseTokens)/in.Seconds())
 
