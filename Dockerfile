@@ -1,4 +1,4 @@
-FROM docker.io/library/golang:1.24.1-alpine3.21
+FROM docker.io/library/golang:1.25.1-alpine3.22
 
 RUN apk add build-base exiftool
 
