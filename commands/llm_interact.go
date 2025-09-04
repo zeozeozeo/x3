@@ -33,7 +33,7 @@ const (
 	generateImageTag          = "<generate_image>"
 	memoryUpdatedAppend       = "\n-# memory updated"
 	newMessageTag             = "<new_message>"
-	excessiveSplitPunishThres = 4
+	excessiveSplitPunishThres = 5
 )
 
 // replaceLlmTagsWithNewlines replaces <new_message> tags with newlines and handles <memory> tags.

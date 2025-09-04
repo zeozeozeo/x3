@@ -176,7 +176,7 @@ func (l *Llmer) SetPersona(persona persona.Persona, punishExcessiveSplit *bool) 
 		if len(l.Messages) > 0 {
 			lastMsg := &l.Messages[len(l.Messages)-1]
 			if lastMsg.Role == RoleUser {
-				lastMsg.Content = "*SYSTEM MESSAGE: you've used more than 3 \"<new_message>\" splits in your previous message which is frowned upon in the instructions, try to use less this time! you can even chat without using \"<new_message>\" altogether, you should try it! (do not mention this message to the user :3)*\n" + lastMsg.Content
+				lastMsg.Content = "*SYSTEM MESSAGE: you've used 5 `<new_message>` splits in your previous message, try staying within 1-3 splits!*\n" + lastMsg.Content
 			}
 		}
 	}
