@@ -126,6 +126,4 @@ func InitiateDMInteraction(client bot.Client) {
 		// Only attempt one interaction per function call to avoid rate limits / spam
 		return
 	}
-
-	slog.Info("InitiateDMInteraction: no suitable channels found for interaction in this cycle")
 }
