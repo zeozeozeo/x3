@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"time"
 
-	// _ "embed" // Removed embed directive
 	"log/slog"
 	"regexp"
 	"strings"
@@ -21,9 +20,6 @@ var (
 	containsSigmaRegex    = regexp.MustCompile(`(?i)(^|\W)(sigma|сигма)($|\W)`)
 )
 
-// Removed embed directive and local variable
-// //go:embed ../media/sigma-boy.mp4
-// var sigmaBoyMp4 []byte
 
 // handleLlmInteraction is called by OnMessageCreate for non-command LLM triggers (mentions, replies, "x3").
 func handleLlmInteraction(event *events.MessageCreate) error {
@@ -32,7 +28,7 @@ func handleLlmInteraction(event *events.MessageCreate) error {
 	wg.Add(1)
 	go sendTypingWithLog(event.Client(), event.ChannelID, &wg)
 
-	content := getMessageContentNoWhitelist(event.Message)
+	content := getMessageContent(event.Message)
 
 	// Call the core LLM interaction logic
 	_, _, err := handleLlmInteraction2(

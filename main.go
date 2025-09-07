@@ -2,8 +2,7 @@ package main
 
 import (
 	"context"
-	// "database/sql" // Removed unused import
-	_ "embed" // For sigmaBoyMp4
+	_ "embed"
 	"log/slog"
 	"os"
 	"os/signal"
@@ -20,7 +19,7 @@ import (
 	"github.com/disgoorg/disgo/handler"
 	"github.com/disgoorg/disgo/sharding"
 
-	"github.com/zeozeozeo/x3/commands" // Import the new commands package
+	"github.com/zeozeozeo/x3/commands"
 	"github.com/zeozeozeo/x3/db"
 )
 

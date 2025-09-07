@@ -26,7 +26,7 @@ const (
 	interactionReminder = "\n-# if you wish to disable this, use `/random_dms enable: false`"
 )
 
-// sendInteractionError sends a formatted error message as a response to a command event.
+// sendInteractionError sends a formatted error message as a response to a command event
 func sendInteractionError(event *handler.CommandEvent, msg string, ephemeral bool) error {
 	return event.CreateMessage(
 		discord.NewMessageCreateBuilder().
@@ -88,7 +88,7 @@ func sendPrettyError(client bot.Client, msg string, channelID, messageID snowfla
 	return err
 }
 
-// sendTypingWithLog sends a typing indicator and logs any errors. Runs in a goroutine.
+// sendTypingWithLog sends a typing indicator and logs any errors.
 func sendTypingWithLog(client bot.Client, channelID snowflake.ID, wg *sync.WaitGroup) {
 	defer wg.Done()
 	// typing state lasts for 10s
@@ -157,7 +157,6 @@ func pluralize(count int, singular string) string {
 	}
 
 	plural := singular + "s"
-	// Handle special cases (basic English rules)
 	if strings.HasSuffix(singular, "y") && !strings.ContainsAny(string(singular[len(singular)-2]), "aeiou") {
 		plural = singular[:len(singular)-1] + "ies"
 	} else if strings.HasSuffix(singular, "ch") || strings.HasSuffix(singular, "sh") || strings.HasSuffix(singular, "x") || strings.HasSuffix(singular, "s") || strings.HasSuffix(singular, "z") {
@@ -168,45 +167,44 @@ func pluralize(count int, singular string) string {
 }
 
 // sendMessageSplits sends a potentially long message by splitting it into multiple messages if necessary.
-// It handles interaction responses vs regular messages and message references.
 func sendMessageSplits(
 	client bot.Client,
-	messageID snowflake.ID, // Message to reply to (0 if not replying or using interaction event)
-	event *handler.CommandEvent, // Interaction event (nil if sending regular message)
-	flags discord.MessageFlags, // Message flags (e.g., ephemeral)
-	channelID snowflake.ID, // Channel to send to
-	runes []rune, // Content runes
-	files []*discord.File, // Files to attach (only sent with the last split)
-	sepFlag bool, // Add an invisible character to the last split to indicate joining needed
+	messageID snowflake.ID, // message to reply to (0 if not replying or using interaction event)
+	event *handler.CommandEvent, // interaction event (nil if sending regular message)
+	flags discord.MessageFlags, // message flags (e.g., ephemeral)
+	channelID snowflake.ID, // channel to send to
+	runes []rune, // content runes
+	files []*discord.File, // files to attach (only sent with the last split)
+	sepFlag bool, // add an invisible character to the last split to indicate joining needed
 ) (*discord.Message, error) {
 	maxLen := 2000
 	if sepFlag {
-		maxLen-- // Reserve one char for the separator
+		maxLen-- // reserve one char for the separator
 	}
 	messageLen := len(runes)
 	numMessages := (messageLen + maxLen - 1) / maxLen
-	if numMessages == 0 && len(files) > 0 { // Handle case where only files are sent
+	if numMessages == 0 && len(files) > 0 { // handle case where only files are sent
 		numMessages = 1
 	} else if numMessages == 0 {
-		return nil, nil // Nothing to send
+		return nil, nil
 	}
 
-	var firstBotMessage *discord.Message // Store the first message sent/updated
+	var firstBotMessage *discord.Message
 
 	for i := range numMessages {
 		start := i * maxLen
 		end := min(start+maxLen, messageLen)
 		segment := ""
-		if start < end { // Avoid creating empty segments if only files are sent
+		if start < end { // avoid creating empty segments if only files are sent
 			segment = string(runes[start:end])
 		}
 
-		// Add separator to the last message if needed
+		// add separator to the last message if needed
 		if sepFlag && i == numMessages-1 {
-			segment += "\u200B" // Zero width space
+			segment += "\u200B"
 		}
 
-		// Attach files only to the last message
+		// attach files only to the last message
 		currentFiles := []*discord.File{}
 		if i == numMessages-1 {
 			currentFiles = files
@@ -215,23 +213,18 @@ func sendMessageSplits(
 		var message *discord.Message
 		var err error
 
-		// Determine how to send: interaction update, reply, or new message
-		if i == 0 && event != nil {
-			// First message and it's an interaction response
+		if i == 0 && event != nil { // (interaction update)
 			message, err = event.UpdateInteractionResponse(discord.MessageUpdate{
 				Content: &segment,
 				Flags:   &flags,
-				Files:   currentFiles, // Attach files here if it's the only message
+				Files:   currentFiles,
 			})
-		} else {
-			// Subsequent splits or non-interaction message
+		} else { // (new message)
 			builder := discord.NewMessageCreateBuilder().
 				SetContent(segment).
-				SetFlags(flags). // Flags apply to all splits? Check Discord behavior. Ephemeral likely only works on first.
+				SetFlags(flags).
 				SetAllowedMentions(&discord.AllowedMentions{RepliedUser: false}).
 				AddFiles(currentFiles...)
-
-			// Add reply reference only to the very first message split if messageID is provided
 			if i == 0 && messageID != 0 {
 				builder.SetMessageReferenceByID(messageID)
 			}
@@ -240,18 +233,16 @@ func sendMessageSplits(
 		}
 
 		if err != nil {
-			// Log error? Return immediately?
 			return firstBotMessage, fmt.Errorf("failed to send message split %d: %w", i+1, err)
 		}
 
-		// Store the first message object
 		if i == 0 {
 			firstBotMessage = message
 		}
 
-		// If it was an interaction event, subsequent messages must be follow-ups (or regular messages)
+		// if it was an interaction event, subsequent messages must be regular messages
 		event = nil
-		messageID = 0 // Don't reply to the original message on subsequent splits
+		messageID = 0
 	}
 
 	return firstBotMessage, nil
@@ -327,4 +318,9 @@ func makeSpoilerFlag(isSpoiler bool) discord.FileFlags {
 		return discord.FileFlagSpoiler
 	}
 	return discord.FileFlagsNone
+}
+
+// ptr is a helper function to create a pointer to a value.
+func ptr[T any](v T) *T {
+	return &v
 }

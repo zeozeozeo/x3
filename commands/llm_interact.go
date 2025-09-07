@@ -36,8 +36,7 @@ const (
 	excessiveSplitPunishThres = 5
 )
 
-// replaceLlmTagsWithNewlines replaces <new_message> tags with newlines and handles <memory> tags.
-// Returns the modified response and a boolean indicating if any <memory> tags were found.
+// replaceLlmTagsWithNewlines replaces <new_message> tags with newlines and handles <memory> tags
 func replaceLlmTagsWithNewlines(response string, userID snowflake.ID, personaMeta *persona.PersonaMeta) (string, bool) {
 	var b strings.Builder
 	messages, memories := splitLlmTags(response, personaMeta)
@@ -46,19 +45,18 @@ func replaceLlmTagsWithNewlines(response string, userID snowflake.ID, personaMet
 		if err := db.HandleMemories(userID, memories); err != nil {
 			slog.Error("failed to handle memories", slog.Any("err", err))
 			memoryUpdated = false
-			// Continue processing messages even if memory saving fails
 		}
 	}
 	for i, message := range messages {
 		b.WriteString(message)
-		if i < len(messages)-1 { // Add newline between messages
+		if i < len(messages)-1 { // add newline between messages
 			b.WriteRune('\n')
 		}
 	}
 	return b.String(), memoryUpdated
 }
 
-// splitLlmTags splits the response by <new_message> and extracts <memory> tags.
+// splitLlmTags splits the response by <new_message> and extracts <memory> tags
 func splitLlmTags(response string, personaMeta *persona.PersonaMeta) (messages []string, memories []string) {
 	defer func() {
 		if personaMeta != nil {
@@ -77,13 +75,13 @@ func splitLlmTags(response string, personaMeta *persona.PersonaMeta) (messages [
 		endIdx := strings.Index(content, "</memory>")
 
 		if startIdx != -1 && endIdx != -1 && startIdx < endIdx {
-			// Extract memory
+			// extract memory
 			memory := strings.TrimSpace(content[startIdx+len("<memory>") : endIdx])
 			if memory != "" {
 				memories = append(memories, memory)
 			}
 
-			// Extract content before and after memory tag
+			// extract content before and after memory tag
 			beforeMemory := strings.TrimSpace(content[:startIdx])
 			afterMemory := strings.TrimSpace(content[endIdx+len("</memory>"):])
 
@@ -91,7 +89,7 @@ func splitLlmTags(response string, personaMeta *persona.PersonaMeta) (messages [
 				messages = append(messages, beforeMemory)
 			}
 			if afterMemory != "" {
-				// Recursively split the part after memory in case of multiple tags
+				// recursively split the part after memory in case of multiple tags
 				subMessages, subMemories := splitLlmTags(afterMemory, nil)
 				messages = append(messages, subMessages...)
 				memories = append(memories, subMemories...)
@@ -106,9 +104,6 @@ func splitLlmTags(response string, personaMeta *persona.PersonaMeta) (messages [
 	return
 }
 
-// handleLlmInteraction2 handles the core logic for generating and sending LLM responses.
-// It takes various parameters to control context, regeneration, and interaction type.
-// If isRegenerate is true and err is nil, the first return is the jump url to the edited message.
 // Doesn't call SendTyping!
 func handleLlmInteraction2(
 	client bot.Client,
@@ -130,8 +125,7 @@ func handleLlmInteraction2(
 ) (string, snowflake.ID, error) { // (Returns jumpURL if regenerating, otherwise response), the bot message id and error
 	cache := db.GetChannelCache(channelID)
 
-	// Handle character card logic first if applicable
-	// Note: handleCard might modify the cache (IsFirstMes, NextMes) and writes it.
+	// might be the first message for a character card
 	exit, err := handleCard(client, channelID, messageID, cache, preMsgWg)
 	if err != nil {
 		slog.Error("handleCard failed", slog.Any("err", err), slog.String("channel_id", channelID.String()))
@@ -145,59 +139,53 @@ func handleLlmInteraction2(
 	llmer := llm.NewLlmer()
 	models := cache.PersonaMeta.GetModels()
 
-	// Fetch surrounding messages for context
-	// Note: addContextMessagesIfPossible modifies the llmer by adding messages.
+	// fetch surrounding messages for context
 	ctxLen := cache.ContextLength
 	if models[0].IsMarkov {
-		ctxLen = 99
+		ctxLen = 200
 	}
-	numCtxMessages, usernames, lastResponseMessage, lastAssistantMessageID, lastUserID := addContextMessagesIfPossible(
+	numCtxMessages, usernames, lastResponseMessage, lastAssistantMessageID, lastUserID := addContextMessages(
 		client,
 		llmer,
 		channelID,
 		messageID,
 		ctxLen,
 	)
-	slog.Debug("interaction; added context messages", slog.Int("added", numCtxMessages), slog.Int("count", llmer.NumMessages()))
 
-	// --- Input Validation and Error Handling ---
+	// sanity check
 	if timeInteraction && numCtxMessages == 0 {
-		slog.Warn("time interaction triggered in empty channel", slog.String("channel_id", channelID.String()))
+		slog.Warn("time interaction triggered in empty channel", "channel_id", channelID)
 		return "", 0, errTimeInteractionNoMessages
 	}
 	if isRegenerate && lastResponseMessage == nil {
-		slog.Warn("regenerate called but no previous assistant message found", slog.String("channel_id", channelID.String()))
+		slog.Warn("regenerate called but no previous assistant message found", "channel_id", channelID)
 		return "", 0, errRegenerateNoMessage
 	}
 	if timeInteraction && userID == 0 {
 		if lastUserID == 0 {
-			slog.Error("time interaction failed: cannot determine target user ID", slog.String("channel_id", channelID.String()))
+			slog.Error("time interaction failed: cannot determine target user ID", "channel_id", channelID)
 			return "", 0, errors.New("cannot determine target user for time interaction")
 		}
-		userID = lastUserID // Use the ID of the last user who sent a message
-		slog.Debug("inferred user ID for time interaction", slog.String("user_id", userID.String()))
+		userID = lastUserID
 	}
-	// --- End Validation ---
 
-	// Get persona using the determined userID
 	p := persona.GetPersonaByMeta(cache.PersonaMeta, db.GetMemories(userID, 0), username, isDM, db.GetInteractionTime(userID))
 
-	// Avoid formatting reply if the reference is the message we're about to regenerate
+	// avoid formatting reply if the reference is the message we're about to regenerate
 	if reference != nil && isRegenerate && reference.ID == lastResponseMessage.ID {
 		reference = nil
 	}
-	// Avoid formatting reply if the reference is the last assistant message (prevents self-reply formatting)
+	// avoid formatting reply if the reference is the last assistant message
 	if reference != nil && reference.ID == lastAssistantMessageID {
 		reference = nil
 	}
 	llmer.AddMessage(llm.RoleUser, formatMsg(content, username, reference), messageID)
 	addImageAttachments(llmer, attachments)
 
-	// Handle regeneration logic
 	if isRegenerate {
-		// Remove messages up to (but not including) the message being regenerated
+		// remove messages up to (but not including) the message being regenerated
 		llmer.LobotomizeUntilID(lastResponseMessage.ID)
-		slog.Debug("regenerating: lobotomized history", slog.String("until_id", lastResponseMessage.ID.String()), slog.Int("remaining_messages", llmer.NumMessages()))
+		slog.Debug("regenerating: lobotomized history", "until_id", lastResponseMessage.ID, "remaining_messages", llmer.NumMessages())
 	}
 
 	if systemPromptOverride != nil {
@@ -205,15 +193,13 @@ func handleLlmInteraction2(
 	}
 	llmer.SetPersona(p, &cache.PersonaMeta.ExcessiveSplit)
 
-	// Determine prepend text for the assistant response
 	var prepend string
 	if regeneratePrepend != "" {
 		prepend = regeneratePrepend
 	} else {
-		prepend = cache.PersonaMeta.Prepend // Use persona's default prepend if not regenerating with specific prepend
+		prepend = cache.PersonaMeta.Prepend
 	}
 
-	// --- Generate LLM Response ---
 	slog.Info("requesting LLM completion",
 		"num_models", len(models),
 		"num_messages", llmer.NumMessages(),
@@ -226,24 +212,20 @@ func handleLlmInteraction2(
 		slog.Error("LLM request failed", slog.Any("err", err))
 		return "", 0, fmt.Errorf("LLM request failed: %w", err)
 	}
-	slog.Debug("LLM response received", slog.Int("response_len", len(response)), slog.String("usage", usage.String()))
-	// --- End Generation ---
 
-	// Add random DM reminder if applicable
+	// maybe add random DM reminder
 	if timeInteraction && !cache.EverUsedRandomDMs && !isRegenerate {
 		response += interactionReminder
 	}
-
 	if isImpersonate {
-		// Prefix with a \u200B to detect this inside addContextMessagesIfPossible
+		// prefix with a \u200B to detect this inside addContextMessages
 		response = "\u200B" + response
 	}
 
-	// Update channel usage stats (before potentially erroring out on send)
 	cache.Usage = cache.Usage.Add(usage)
 	cache.LastUsage = usage
 
-	// Extract <think> tags if model supports reasoning
+	// extract <think> tags
 	var thinking string
 	{
 		var answer string
@@ -254,7 +236,7 @@ func handleLlmInteraction2(
 		}
 	}
 
-	// Prepare reasoning file if present
+	// prepare to send reasoning trace as a file
 	var files []*discord.File
 	if thinking != "" {
 		files = append(files, &discord.File{
@@ -263,43 +245,40 @@ func handleLlmInteraction2(
 		})
 	}
 
-	// --- Send Response ---
 	if preMsgWg != nil {
-		preMsgWg.Wait() // Wait for e.g., typing indicator to finish
+		preMsgWg.Wait() // wait for e.g., typing indicator to finish
 	}
 
 	var jumpURL string
 	var botMessage *discord.Message
 	var messages []string
 	if isRegenerate {
-		// Edit the previous message for regeneration
+		// edit the previous message for regeneration
 		var memoryUpdated bool
-		response, memoryUpdated = replaceLlmTagsWithNewlines(response, userID, &cache.PersonaMeta) // Handle tags before sending
+		response, memoryUpdated = replaceLlmTagsWithNewlines(response, userID, &cache.PersonaMeta)
 		if memoryUpdated {
 			response += memoryUpdatedAppend
 		}
 
 		builder := discord.NewMessageUpdateBuilder().SetAllowedMentions(&discord.AllowedMentions{RepliedUser: false})
 		if utf8.RuneCountInString(response) > 2000 {
-			// If too long, send as file attachment
+			// if too long, send as file attachment
 			builder.SetContent("")
 			builder.AddFiles(&discord.File{
 				Reader: strings.NewReader(response),
 				Name:   fmt.Sprintf("response-%v.txt", lastResponseMessage.ID),
 			})
-			// Add reasoning file if it exists
+			// add reasoning file if it exists
 			if len(files) > 0 {
 				builder.AddFiles(files...)
 			}
 		} else {
 			builder.SetContent(response)
-			// Attach reasoning file if it exists
 			if len(files) > 0 {
 				builder.AddFiles(files...)
 			}
 		}
 
-		slog.Debug("updating message for regeneration", slog.String("message_id", lastResponseMessage.ID.String()))
 		_, err = client.Rest().UpdateMessage(channelID, lastResponseMessage.ID, builder.Build())
 		if err != nil {
 			slog.Error("failed to update message for regeneration", slog.Any("err", err))
@@ -307,56 +286,43 @@ func handleLlmInteraction2(
 		}
 		jumpURL = lastResponseMessage.JumpURL()
 	} else {
-		// Send new message(s)
 		var memories []string
 		messages, memories = splitLlmTags(response, &cache.PersonaMeta)
 		if cache.PersonaMeta.EnableMemory {
 			if err := db.HandleMemories(userID, memories); err != nil {
-				// Log error but continue sending messages
 				slog.Error("failed to handle memories during send", slog.Any("err", err))
 			} else if len(memories) > 0 && len(messages) > 0 {
 				messages[len(messages)-1] += memoryUpdatedAppend
 			}
 		}
 
-		var firstBotMessage *discord.Message
 		for i, content := range messages {
 			content = strings.TrimSpace(content)
 			if content == "" {
-				continue // Skip empty splits
+				continue // skip empty splits
 			}
 
-			// Only attach files to the last message split
+			// only attach files to the last split
 			currentFiles := []*discord.File{}
 			if i == len(messages)-1 {
 				currentFiles = files
 			}
 
-			// Use messageID for reply reference only on the first split
+			// use messageID for reply reference only on the first split
 			replyMessageID := snowflake.ID(0)
 			if i == 0 {
 				replyMessageID = messageID
 			}
 
-			// Send the split
+			// send the split
 			botMessage, err = sendMessageSplits(client, replyMessageID, event, 0, channelID, []rune(content), currentFiles, i != len(messages)-1)
 			if err != nil {
 				slog.Error("failed to send message split", slog.Any("err", err), slog.Int("split_index", i))
-				// Attempt to continue sending other splits? Or return error?
-				// For now, return the error encountered.
 				return response, 0, fmt.Errorf("failed to send message split %d: %w", i+1, err)
-			}
-			if i == 0 && botMessage != nil {
-				firstBotMessage = botMessage // Keep track of the first message sents
 			}
 			event = nil // updated the event, send the next split as a new message
 		}
-		// If the first message was sent successfully, use its jump URL if needed elsewhere (though not returned here)
-		if firstBotMessage != nil {
-			// jumpURL = firstBotMessage.JumpURL() // Not returned for non-regenerate
-		}
 	}
-	// --- End Send ---
 
 	{
 		// since this function may run for seconds,
@@ -367,15 +333,12 @@ func handleLlmInteraction2(
 		cache.PersonaMeta.ExcessiveSplit = excessiveSplit
 	}
 
-	// Update cache and global stats after successful send/edit
 	cache.IsLastRandomDM = timeInteraction
 	cache.UpdateInteractionTime()
 	if err := cache.Write(channelID); err != nil {
-		// Log error but don't fail the interaction
 		slog.Error("failed to write channel cache after interaction", slog.Any("err", err), slog.String("channel_id", channelID.String()))
 	}
 	if err := db.UpdateGlobalStats(usage); err != nil {
-		// Log error but don't fail the interaction
 		slog.Error("failed to update global stats after interaction", slog.Any("err", err))
 	}
 	db.SetInteractionTime(userID, time.Now())

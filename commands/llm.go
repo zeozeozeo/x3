@@ -116,7 +116,7 @@ func HandleLlm(event *handler.CommandEvent, models []model.Model) error {
 		lastMessage := event.Channel().MessageChannel.LastMessageID()
 		if lastMessage != nil {
 			// Add context messages from history
-			_, usernames, _, _, _ = addContextMessagesIfPossible(event.Client(), llmer, event.Channel().ID(), *lastMessage, cache.ContextLength)
+			_, usernames, _, _, _ = addContextMessages(event.Client(), llmer, event.Channel().ID(), *lastMessage, cache.ContextLength)
 
 			// Add the very last message in the channel if it wasn't the interaction itself
 			// This might fetch the interaction trigger message again, but addContextMessagesIfPossible handles duplicates by ID.
@@ -128,7 +128,7 @@ func HandleLlm(event *handler.CommandEvent, models []model.Model) error {
 					// Use the user ID from the fetched message for memory retrieval
 					msgPersona := persona.GetPersonaByMeta(cache.PersonaMeta, db.GetMemories(msg.Author.ID, 0), msg.Author.EffectiveName(), isDM, lastInteracted)
 					llmer.SetPersona(msgPersona, nil) // Temporarily set persona for formatting
-					llmer.AddMessage(llm.RoleUser, formatMsg(getMessageContentNoWhitelist(*msg), msg.Author.EffectiveName(), msg.ReferencedMessage), msg.ID)
+					llmer.AddMessage(llm.RoleUser, formatMsg(getMessageContent(*msg), msg.Author.EffectiveName(), msg.ReferencedMessage), msg.ID)
 					addImageAttachments(llmer, msg.Attachments)
 				}
 			}

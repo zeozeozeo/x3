@@ -13,10 +13,8 @@ import (
 )
 
 // StartTime records when the bot started.
-// TODO: This should ideally be initialized once in main and passed down.
 var StartTime = time.Now()
 
-// StatsCommand is the definition for the /stats command
 var StatsCommand = discord.SlashCommandCreate{
 	Name:        "stats",
 	Description: "Bot and per-chat usage stats",

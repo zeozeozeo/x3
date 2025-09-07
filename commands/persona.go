@@ -21,11 +21,6 @@ import (
 	"github.com/zeozeozeo/x3/persona"
 )
 
-// ptr is a helper function to create a pointer to a value.
-func ptr[T any](v T) *T {
-	return &v
-}
-
 // makePersonaOptionChoices generates the choices for the persona command option.
 func makePersonaOptionChoices() []discord.ApplicationCommandOptionChoiceString {
 	var choices []discord.ApplicationCommandOptionChoiceString
@@ -268,7 +263,7 @@ func HandlePersona(event *handler.CommandEvent) error {
 		if dataContext < 0 {
 			dataContext = db.DefaultContextMessages
 		}
-		dataContext = min(100, dataContext)
+		dataContext = min(500, dataContext)
 		cache.ContextLength = dataContext
 	}
 	if dataSeed != 0 {

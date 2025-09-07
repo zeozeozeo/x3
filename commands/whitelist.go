@@ -1,16 +1,13 @@
 package commands
 
 import (
-	// "database/sql" // Removed unused import
 	"log/slog"
 
 	"github.com/disgoorg/disgo/discord"
 	"github.com/disgoorg/disgo/handler"
 	"github.com/zeozeozeo/x3/db"
-	// "github.com/disgoorg/snowflake/v2" // Removed unused import
 )
 
-// WhitelistCommand is the definition for the /whitelist command
 var WhitelistCommand = discord.SlashCommandCreate{
 	Name:        "whitelist",
 	Description: "Add or remove yourself from the whitelist",
@@ -36,9 +33,8 @@ var WhitelistCommand = discord.SlashCommandCreate{
 	},
 }
 
-// HandleWhitelist handles the /whitelist command logic
+// HandleWhitelist handles the /whitelist command
 func HandleWhitelist(event *handler.CommandEvent) error {
-	// Use isInWhitelist from db_whitelist.go
 	if !db.IsInWhitelist(event.User().ID) {
 		return event.CreateMessage(discord.MessageCreate{Content: "You are not in the whitelist, therefore you cannot whitelist other users", Flags: discord.MessageFlagEphemeral})
 	}

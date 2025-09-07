@@ -1,22 +1,19 @@
 package commands
 
 import (
-	// "fmt" // Removed unused import
-
 	"github.com/disgoorg/disgo/discord"
 	"github.com/disgoorg/disgo/handler"
 	"github.com/zeozeozeo/x3/db"
 )
 
-// BlacklistCommand is the definition for the /blacklist command
 var BlacklistCommand = discord.SlashCommandCreate{
 	Name:        "blacklist",
 	Description: "For server moderators: blacklist a channel from the bot",
 	IntegrationTypes: []discord.ApplicationIntegrationType{
-		discord.ApplicationIntegrationTypeGuildInstall, // Guild only
+		discord.ApplicationIntegrationTypeGuildInstall,
 	},
 	Contexts: []discord.InteractionContextType{
-		discord.InteractionContextTypeGuild, // Guild only
+		discord.InteractionContextTypeGuild,
 	},
 	Options: []discord.ApplicationCommandOption{
 		discord.ApplicationCommandOptionChannel{
@@ -48,9 +45,8 @@ var BlacklistCommand = discord.SlashCommandCreate{
 	},
 }
 
-// HandleBlacklist handles the /blacklist command logic.
+// HandleBlacklist handles the /blacklist command
 func HandleBlacklist(event *handler.CommandEvent) error {
-	// This command is guild-only, so Member should not be nil
 	if event.Member() == nil {
 		return sendInteractionError(event, "This command can only be used in a server.", true)
 	}
@@ -60,10 +56,9 @@ func HandleBlacklist(event *handler.CommandEvent) error {
 
 	data := event.SlashCommandInteractionData()
 	channelID := data.Snowflake("channel")
-	ephemeral := data.Bool("ephemeral") // Defaults to false if not provided
+	ephemeral := data.Bool("ephemeral")
 	imageBlacklist := data.Bool("image_generation")
 
-	// Determine the blacklist type
 	var actionMessage string
 	if imageBlacklist {
 		if db.IsChannelInImageBlacklist(channelID) {
