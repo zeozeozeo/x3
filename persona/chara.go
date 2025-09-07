@@ -110,7 +110,6 @@ var (
 {{ .Examples }}
 """{{ end }}
 
-Write character dialogue in quotation marks. Write {{ .Char }}'s thoughts in asterisks.
 Write {{ .Char }}'s next replies in a fictional chat between {{ .Char }} and {{ .User }}.`))
 
 	errCharaExifNotFound = errors.New("character card not found in image exif")
