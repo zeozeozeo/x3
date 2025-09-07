@@ -309,11 +309,6 @@ func (l Llmer) estimateUsage(m model.Model) Usage {
 	return usage
 }
 
-var emdashReplacer = strings.NewReplacer(
-	"—", "-",
-	"–", "-",
-)
-
 func (l *Llmer) requestCompletionInternal2(
 	m model.Model,
 	codename,
@@ -403,7 +398,6 @@ func (l *Llmer) requestCompletionInternal2(
 			unescaped = unescaped[len(prefix):]
 		}
 	}
-	unescaped = emdashReplacer.Replace(unescaped)
 	// and trim spaces again after our checks, for good measure
 	unescaped = strings.TrimSpace(unescaped)
 	slog.Info("response", "len", len(unescaped), "duration", time.Since(completionStart), "model", m.Name, "provider", provider)
