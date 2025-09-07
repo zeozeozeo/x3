@@ -400,7 +400,7 @@ func (l *Llmer) requestCompletionInternal2(
 	}
 	// and trim spaces again after our checks, for good measure
 	unescaped = strings.TrimSpace(unescaped)
-	slog.Info("response", slog.String("text", text.String()), slog.String("unescaped", unescaped), slog.Duration("duration", time.Since(completionStart)), slog.String("model", m.Name), slog.String("provider", provider))
+	slog.Info("response", "len", len(unescaped), "duration", time.Since(completionStart), "model", m.Name, "provider", provider)
 
 	l.Messages = append(l.Messages, Message{
 		Role:    RoleAssistant,
