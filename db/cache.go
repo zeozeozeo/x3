@@ -82,7 +82,7 @@ func (cache ChannelCache) Write(id snowflake.ID) error {
 	}
 	_, err = DB.Exec("INSERT OR REPLACE INTO channel_cache (channel_id, cache) VALUES (?, ?)", id.String(), data)
 	if err != nil {
-		slog.Error("failed to write channel cache to DB", slog.Any("err", err), slog.String("channel_id", id.String()))
+		slog.Error("failed to write channel cache to DB", "err", err, slog.String("channel_id", id.String()))
 	}
 	return err
 }
@@ -95,7 +95,7 @@ func GetChannelCache(id snowflake.ID) *ChannelCache {
 	if err != nil {
 		if err != sql.ErrNoRows {
 			// Log errors other than simply not found
-			slog.Warn("failed to get channel cache from DB", slog.Any("err", err), slog.String("channel_id", id.String()))
+			slog.Warn("failed to get channel cache from DB", "err", err, slog.String("channel_id", id.String()))
 		}
 		// Return a new cache if not found or on error
 		return NewChannelCache()
@@ -104,7 +104,7 @@ func GetChannelCache(id snowflake.ID) *ChannelCache {
 	// Decode JSON
 	cache, err := unmarshalChannelCache(data)
 	if err != nil {
-		slog.Warn("failed to unmarshal channel cache", slog.Any("err", err), slog.String("channel_id", id.String()))
+		slog.Warn("failed to unmarshal channel cache", "err", err, slog.String("channel_id", id.String()))
 		// Return a new cache and attempt to overwrite the corrupted one
 		cache = NewChannelCache()
 		go cache.Write(id) // Attempt to fix the corrupted entry asynchronously
@@ -125,7 +125,7 @@ func GetCachedChannelIDs() ([]snowflake.ID, error) {
 		var id snowflake.ID
 		if err := rows.Scan(&id); err != nil {
 			// Log error and continue if possible? Or return error immediately?
-			slog.Error("Failed to scan channel ID from cache table", slog.Any("err", err))
+			slog.Error("Failed to scan channel ID from cache table", "err", err)
 			continue // Skip this row
 		}
 		ids = append(ids, id)

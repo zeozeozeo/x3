@@ -297,18 +297,18 @@ func HandlePersona(event *handler.CommandEvent) error {
 		slog.Debug("fetching character card", slog.String("url", dataCard))
 		resp, err := http.Get(dataCard)
 		if err != nil {
-			slog.Error("failed to fetch character card", slog.Any("err", err))
+			slog.Error("failed to fetch character card", "err", err)
 			return updateInteractionError(event, err.Error())
 		}
 		defer resp.Body.Close()
 		body, err := io.ReadAll(resp.Body)
 		if err != nil {
-			slog.Error("failed to read character card resp body", slog.Any("err", err))
+			slog.Error("failed to read character card resp body", "err", err)
 			return updateInteractionError(event, err.Error())
 		}
 		card, err := cache.PersonaMeta.ApplyChara(body, event.User().EffectiveName())
 		if err != nil {
-			slog.Error("failed to apply character card", slog.Any("err", err))
+			slog.Error("failed to apply character card", "err", err)
 			return updateInteractionError(event, err.Error())
 		}
 		if card.Data != nil {

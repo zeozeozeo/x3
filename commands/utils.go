@@ -93,7 +93,7 @@ func sendTypingWithLog(client bot.Client, channelID snowflake.ID, wg *sync.WaitG
 	defer wg.Done()
 	// typing state lasts for 10s
 	if err := client.Rest().SendTyping(channelID); err != nil {
-		slog.Error("failed to SendTyping", slog.Any("err", err), slog.String("channel_id", channelID.String()))
+		slog.Error("failed to SendTyping", "err", err, slog.String("channel_id", channelID.String()))
 	}
 }
 
@@ -323,4 +323,9 @@ func makeSpoilerFlag(isSpoiler bool) discord.FileFlags {
 // ptr is a helper function to create a pointer to a value.
 func ptr[T any](v T) *T {
 	return &v
+}
+
+// isImageAttachment checks if a message attachment is an image.
+func isImageAttachment(attachment discord.Attachment) bool {
+	return attachment.ContentType != nil && strings.HasPrefix(*attachment.ContentType, "image/")
 }

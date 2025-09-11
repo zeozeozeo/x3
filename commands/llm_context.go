@@ -60,11 +60,6 @@ func formatMsg(msg, username string, reference *discord.Message) string {
 	return msg
 }
 
-// isImageAttachment checks if a Discord attachment is an image.
-func isImageAttachment(attachment discord.Attachment) bool {
-	return attachment.ContentType != nil && strings.HasPrefix(*attachment.ContentType, "image/")
-}
-
 // addImageAttachments adds image URLs from attachments.
 func addImageAttachments(llmer *llm.Llmer, attachments []discord.Attachment) {
 	if attachments == nil {
@@ -142,7 +137,7 @@ func getMessageContent(message discord.Message) string {
 			slog.Info("downloading attachment", slog.String("url", attachment.URL))
 			resp, err := http.Get(attachment.URL)
 			if err != nil {
-				slog.Error("failed to fetch attachment", slog.Any("err", err), slog.String("url", attachment.URL))
+				slog.Error("failed to fetch attachment", "err", err, slog.String("url", attachment.URL))
 				continue
 			}
 			defer resp.Body.Close()
@@ -164,7 +159,7 @@ func getMessageContent(message discord.Message) string {
 
 			// write to cache
 			if err := writeTxtCache(attachment.ID, body); err != nil {
-				slog.Error("failed to write txt cache", slog.Any("err", err), slog.String("id", attachment.ID.String()))
+				slog.Error("failed to write txt cache", "err", err, slog.String("id", attachment.ID.String()))
 			}
 		}
 
@@ -201,9 +196,7 @@ func fetchMessagesBefore(
 	lastID := beforeID
 
 	for wanted > 0 {
-		batchSize := min(wanted, 500)
-
-		msgs, err := client.Rest().GetMessages(channelID, 0, lastID, 0, batchSize)
+		msgs, err := client.Rest().GetMessages(channelID, 0, lastID, 0, min(wanted, 100))
 		if err != nil {
 			if len(all) != 0 {
 				return all, nil
@@ -236,7 +229,7 @@ func addContextMessages(
 
 	messages, err := fetchMessagesBefore(client, channelID, messageID, contextLen)
 	if err != nil {
-		slog.Error("failed to get context messages", slog.Any("err", err), slog.String("channel_id", channelID.String()))
+		slog.Error("failed to get context messages", "err", err, "channel_id", channelID)
 		return 0, make(map[string]struct{}), nil, 0, 0
 	}
 

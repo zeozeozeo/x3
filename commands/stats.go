@@ -63,7 +63,7 @@ func HandleStats(event *handler.CommandEvent) error {
 
 	stats, err := db.GetGlobalStats()
 	if err != nil {
-		slog.Error("failed to get global stats", slog.Any("err", err))
+		slog.Error("failed to get global stats", "err", err)
 		return sendInteractionError(event, err.Error(), true)
 	}
 	cache := db.GetChannelCache(event.Channel().ID())

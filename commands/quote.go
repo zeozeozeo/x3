@@ -146,7 +146,7 @@ func getServerFromEvent(event *handler.CommandEvent) (db.ServerStats, snowflake.
 
 	server, err := db.GetServerStats(serverID)
 	if err != nil {
-		slog.Error("failed to get server stats", slog.Any("err", err), slog.String("server_id", serverID.String()))
+		slog.Error("failed to get server stats", "err", err, slog.String("server_id", serverID.String()))
 	}
 	return server, serverID, err
 }
@@ -162,7 +162,7 @@ func HandleQuoteGetAutocomplete(event *handler.AutocompleteEvent) error {
 
 	server, err := db.GetServerStats(serverID)
 	if err != nil {
-		slog.Error("autocomplete: failed to get server stats", slog.Any("err", err))
+		slog.Error("autocomplete: failed to get server stats", "err", err)
 		return event.AutocompleteResult(nil)
 	}
 
@@ -261,7 +261,7 @@ func HandleQuoteNew(event *handler.CommandEvent) error {
 	nr := server.AddQuote(quote)
 
 	if err := server.Write(serverID); err != nil {
-		slog.Error("failed to save server stats after adding quote", slog.Any("err", err))
+		slog.Error("failed to save server stats after adding quote", "err", err)
 		return sendInteractionError(event, "Failed to save the new quote.", true)
 	}
 
@@ -298,7 +298,7 @@ func HandleQuoteRemove(event *handler.CommandEvent) error {
 	server.RemoveQuote(idx)
 
 	if err := server.Write(serverID); err != nil {
-		slog.Error("failed to save server stats after removing quote", slog.Any("err", err))
+		slog.Error("failed to save server stats after removing quote", "err", err)
 		return sendInteractionError(event, "Failed to save changes after removing the quote.", true)
 	}
 
@@ -338,7 +338,7 @@ func HandleQuoteReply(event *events.MessageCreate) error {
 
 	server, err := db.GetServerStats(serverID)
 	if err != nil {
-		slog.Error("HandleQuoteReply: failed to get server stats", slog.Any("err", err))
+		slog.Error("HandleQuoteReply: failed to get server stats", "err", err)
 		return sendPrettyError(event.Client(), "Failed to load server quotes.", event.ChannelID, event.MessageID)
 	}
 
@@ -386,7 +386,7 @@ func HandleQuoteReply(event *events.MessageCreate) error {
 	nr := server.AddQuote(quote)
 
 	if err := server.Write(serverID); err != nil {
-		slog.Error("HandleQuoteReply: failed to save server stats", slog.Any("err", err))
+		slog.Error("HandleQuoteReply: failed to save server stats", "err", err)
 		return sendPrettyError(event.Client(), "Failed to save the new quote.", event.ChannelID, event.MessageID)
 	}
 

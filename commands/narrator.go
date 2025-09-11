@@ -72,7 +72,7 @@ func (n *Narrator) Run() {
 		n.mu.Unlock()
 
 		if err != nil {
-			slog.Error("narrator: failed to request completion", slog.Any("err", err))
+			slog.Error("narrator: failed to request completion", "err", err)
 			continue
 		}
 

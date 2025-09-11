@@ -56,14 +56,14 @@ func GetGlobalStats() (GlobalStats, error) {
 func UpdateGlobalStats(usage llm.Usage) error {
 	stats, err := GetGlobalStats()
 	if err != nil {
-		slog.Error("updateGlobalStats: failed to get global stats", slog.Any("err", err))
+		slog.Error("updateGlobalStats: failed to get global stats", "err", err)
 		return err
 	}
 	stats.Usage = stats.Usage.Add(usage)
 	stats.MessageCount++
 	stats.LastMessageTime = time.Now()
 	if err := stats.Write(); err != nil {
-		slog.Error("updateGlobalStats: failed to write global stats", slog.Any("err", err))
+		slog.Error("updateGlobalStats: failed to write global stats", "err", err)
 		return err
 	}
 	return nil

@@ -11,24 +11,20 @@ import (
 	_ "github.com/mattn/go-sqlite3"
 )
 
-var (
-	SigmaBoyMp4 []byte
-
-	AllCommands []discord.ApplicationCommandCreate = []discord.ApplicationCommandCreate{
-		WhitelistCommand,
-		LobotomyCommand,
-		PersonaCommand,
-		StatsCommand,
-		QuoteCommand,
-		RandomDMsCommand,
-		RegenerateCommand,
-		BlacklistCommand,
-		MemoryCommand,
-		ChatCommand, // generic /chat command
-		GenerateCommand,
-		ImpersonateCommand,
-	}
-)
+var AllCommands []discord.ApplicationCommandCreate = []discord.ApplicationCommandCreate{
+	WhitelistCommand,
+	LobotomyCommand,
+	PersonaCommand,
+	StatsCommand,
+	QuoteCommand,
+	RandomDMsCommand,
+	RegenerateCommand,
+	BlacklistCommand,
+	MemoryCommand,
+	ChatCommand, // generic /chat command
+	GenerateCommand,
+	ImpersonateCommand,
+}
 
 func init() {
 	AllCommands = append(AllCommands, GptCommands...)

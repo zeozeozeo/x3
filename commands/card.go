@@ -59,7 +59,7 @@ func handleCard(client bot.Client, channelID, messageID snowflake.ID, cache *db.
 		// Update cache only after successful send
 		if err := cache.Write(channelID); err != nil {
 			// Log error but the message was already sent, so don't revert IsFirstMes
-			slog.Error("failed to write cache after sending card message", slog.Any("err", err), slog.String("channel_id", channelID.String()))
+			slog.Error("failed to write cache after sending card message", "err", err, slog.String("channel_id", channelID.String()))
 		}
 		return true, nil // Message sent successfully
 	}

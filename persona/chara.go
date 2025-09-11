@@ -200,7 +200,7 @@ func (meta *PersonaMeta) ApplyChara(data []byte, user string) (TavernCardV2, err
 	if err == nil {
 		return card, nil
 	}
-	slog.Warn("ApplyChara: failed to parse json chara, trying exif", slog.Any("err", err))
+	slog.Warn("ApplyChara: failed to parse json chara, trying exif", "err", err)
 
 	// not json, try extracting the "Chara" field from exif
 	et, err := exiftool.NewExiftool()

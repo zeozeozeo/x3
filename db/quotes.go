@@ -80,12 +80,12 @@ func GetServerStats(serverID snowflake.ID) (ServerStats, error) {
 			// If no stats exist for the server, return empty stats.
 			return ServerStats{}, nil
 		}
-		slog.Error("failed to get server stats from db", slog.Any("err", err), slog.String("server_id", serverID.String()))
+		slog.Error("failed to get server stats from db", "err", err, slog.String("server_id", serverID.String()))
 		return ServerStats{}, err
 	}
 	stats, err := unmarshalServerStats(data)
 	if err != nil {
-		slog.Error("failed to unmarshal server stats", slog.Any("err", err), slog.String("server_id", serverID.String()))
+		slog.Error("failed to unmarshal server stats", "err", err, slog.String("server_id", serverID.String()))
 		return ServerStats{}, err
 	}
 	return stats, nil

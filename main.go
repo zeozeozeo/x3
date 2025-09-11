@@ -23,9 +23,6 @@ import (
 	"github.com/zeozeozeo/x3/db"
 )
 
-//go:embed media/sigma-boy.mp4
-var sigmaBoyMp4 []byte
-
 var (
 	token     = os.Getenv("X3_DISCORD_TOKEN")
 	dbPath    = "x3.db"
@@ -52,38 +49,30 @@ func main() {
 	slog.Info("x3 booting up...")
 	slog.Info("disgo version", slog.String("version", disgo.Version))
 
-	// Initialize Database via commands package
 	if err := db.InitDB(dbPath); err != nil {
-		slog.Error("error while initializing database", slog.Any("err", err))
-		panic(err) // Panic if DB init fails
+		slog.Error("error while initializing database", "err", err)
+		panic(err)
 	}
-	// Close DB on exit
 	defer func() {
 		if db.DB != nil {
 			if err := db.DB.Close(); err != nil {
-				slog.Error("error closing database", slog.Any("err", err))
+				slog.Error("error closing database", "err", err)
 			} else {
 				slog.Info("database connection closed")
 			}
 		}
 	}()
 
-	// Pass embedded data to commands package
-	commands.SigmaBoyMp4 = sigmaBoyMp4
-	// Pass start time to commands package
 	commands.StartTime = startTime
 
-	// Create command handler router
 	r := handler.New()
-	// r.Use(middleware.Logger)
+	//r.Use(middleware.Logger)
 
-	// Register all command handlers from the commands package
 	if err := commands.RegisterHandlers(r); err != nil {
-		slog.Error("error while registering command handlers", slog.Any("err", err))
+		slog.Error("error while registering command handlers", "err", err)
 		return
 	}
 
-	// Create bot client
 	client, err := disgo.New(token,
 		bot.WithShardManagerConfigOpts(
 			sharding.WithShardIDs(0),
@@ -91,7 +80,7 @@ func main() {
 			sharding.WithAutoScaling(true),
 			sharding.WithGatewayConfigOpts(
 				gateway.WithIntents(
-					// gateway.IntentGuilds,
+					//gateway.IntentGuilds,
 					gateway.IntentGuildMessages,
 					gateway.IntentMessageContent,
 					gateway.IntentDirectMessages,
@@ -100,8 +89,7 @@ func main() {
 			),
 		),
 		bot.WithEventListeners(
-			r, // Add the command handler router
-			// Keep basic readiness listeners
+			r,
 			&events.ListenerAdapter{
 				OnGuildReady: func(event *events.GuildReady) {
 					slog.Info("guild ready", slog.Uint64("id", uint64(event.GuildID)))
@@ -114,38 +102,33 @@ func main() {
 		bot.WithEventManagerConfigOpts(
 			bot.WithAsyncEventsEnabled(),
 		),
-		// Register the message handler from the commands package
 		bot.WithEventListenerFunc(commands.OnMessageCreate),
 	)
 	if err != nil {
-		slog.Error("error while building disgo instance", slog.Any("err", err))
+		slog.Error("error while building disgo instance", "err", err)
 		return
 	}
 	defer client.Close(context.TODO())
 
-	// Register slash commands with Discord
 	if _, err = client.Rest().SetGlobalCommands(client.ApplicationID(), commands.AllCommands); err != nil {
 		panic(err)
 	} else {
 		slog.Info("global commands registered successfully")
 	}
 
-	// Start the random DM interaction goroutine
 	go func() {
-		ticker := time.NewTicker(5 * time.Minute) // Check every 5 minutes
+		ticker := time.NewTicker(5 * time.Minute)
 		defer ticker.Stop()
 		for range ticker.C {
-			// Pass the client instance to the exported function
 			commands.InitiateDMInteraction(client)
 		}
 	}()
 
-	// Start narrator mainloop
+	// start narrator mainloop
 	go commands.GetNarrator().Run()
 
-	// Connect to gateway
 	if err = client.OpenShardManager(context.TODO()); err != nil {
-		slog.Error("error while connecting to gateway", slog.Any("err", err))
+		slog.Error("error while connecting to gateway", "err", err)
 		return
 	}
 
@@ -153,5 +136,5 @@ func main() {
 	s := make(chan os.Signal, 1)
 	signal.Notify(s, syscall.SIGINT, syscall.SIGTERM, os.Interrupt)
 	<-s
-	slog.Info("shutting down...")
+	slog.Info("shutting down (SIGINT/SIGTERM)...")
 }

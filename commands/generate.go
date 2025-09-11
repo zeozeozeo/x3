@@ -225,7 +225,7 @@ func HandleGenerate(event *handler.CommandEvent) error {
 			if failures >= 10 {
 				return updateInteractionError(event, err.Error())
 			}
-			slog.Error("HandleGenerate: failed to query progress", slog.Any("err", err))
+			slog.Error("HandleGenerate: failed to query progress", "err", err)
 			failures++
 			continue
 		}
@@ -323,7 +323,7 @@ func HandleGenerate(event *handler.CommandEvent) error {
 	for i, gen := range finalStatus.Generations {
 		imgData, filename, err := processImageData(gen.Img, fmt.Sprintf("%d", i+1))
 		if err != nil {
-			slog.Error("HandleGenerate: failed to process image data", slog.Any("err", err), slog.String("img_src", gen.Img))
+			slog.Error("HandleGenerate: failed to process image data", "err", err, slog.String("img_src", gen.Img))
 			continue
 		}
 
@@ -380,7 +380,7 @@ func HandleGenerate(event *handler.CommandEvent) error {
 		if err == nil {
 			stats.ImagesGenerated++
 			if err := stats.Write(); err != nil {
-				slog.Error("handleNarrationGenerate: failed to write global stats", slog.Any("err", err))
+				slog.Error("handleNarrationGenerate: failed to write global stats", "err", err)
 			}
 		}
 	}
@@ -414,7 +414,7 @@ func HandleGenerateCancel(data discord.ButtonInteractionData, event *handler.Com
 	event.DeferUpdateMessage()
 
 	if err := horder.GetHorder().Cancel(id); err != nil {
-		slog.Error("HandleGenerateCancel: failed to cancel", slog.Any("err", err))
+		slog.Error("HandleGenerateCancel: failed to cancel", "err", err)
 		// TODO: should we update or create here? doubt this is documented
 		_, err := event.UpdateInteractionResponse(discord.NewMessageUpdateBuilder().
 			SetContent("❌ " + err.Error()).

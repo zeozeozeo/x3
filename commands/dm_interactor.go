@@ -20,7 +20,7 @@ import (
 func InitiateDMInteraction(client bot.Client) {
 	channels, err := db.GetCachedChannelIDs()
 	if err != nil {
-		slog.Error("InitiateDMInteraction: failed to get cached channel IDs", slog.Any("err", err))
+		slog.Error("InitiateDMInteraction: failed to get cached channel IDs", "err", err)
 		return
 	}
 	slog.Info("InitiateDMInteraction check", slog.Int("cached_channels", len(channels)))
@@ -69,7 +69,7 @@ func InitiateDMInteraction(client bot.Client) {
 		// Verify channel type (as a final check)
 		channel, err := client.Rest().GetChannel(id)
 		if err != nil {
-			slog.Warn("InitiateDMInteraction: failed to get channel info; marking as non-DM", slog.Any("err", err), slog.String("channel_id", id.String()))
+			slog.Warn("InitiateDMInteraction: failed to get channel info; marking as non-DM", "err", err, slog.String("channel_id", id.String()))
 			cache.KnownNonDM = true
 			cache.Write(id) // Persist the KnownNonDM flag
 			continue
@@ -116,7 +116,7 @@ func InitiateDMInteraction(client bot.Client) {
 			slog.Warn("InitiateDMInteraction: cannot interact in empty DM channel", slog.String("channel_id", id.String()))
 			// No action needed, just skip this channel for now
 		} else if err != nil {
-			slog.Error("InitiateDMInteraction: failed to handle LLM interaction", slog.Any("err", err), slog.String("channel_id", id.String()))
+			slog.Error("InitiateDMInteraction: failed to handle LLM interaction", "err", err, slog.String("channel_id", id.String()))
 			cache.NoRandomDMs = true
 			cache.Write(id)
 		} else {

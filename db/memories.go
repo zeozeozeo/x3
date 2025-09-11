@@ -70,9 +70,9 @@ func GetMemories(userID snowflake.ID, limit int) []string {
 	rows, err := DB.Query(query, args...)
 	if err != nil {
 		slog.Error("failed to get memories",
-			slog.Any("err", err),
-			slog.String("user_id", userID.String()),
-			slog.Int("limit_requested", limit),
+			"err", err,
+			"user_id", userID,
+			"limit_requested", limit,
 		)
 		return memories
 	}
@@ -81,7 +81,7 @@ func GetMemories(userID snowflake.ID, limit int) []string {
 	for rows.Next() {
 		var memory string
 		if err := rows.Scan(&memory); err != nil {
-			slog.Error("failed to scan memory", slog.Any("err", err), slog.String("user_id", userID.String()))
+			slog.Error("failed to scan memory", "err", err, "user_id", userID)
 			continue
 		}
 		memories = append(memories, memory)
@@ -89,8 +89,8 @@ func GetMemories(userID snowflake.ID, limit int) []string {
 
 	if err := rows.Err(); err != nil {
 		slog.Error("rows iteration error while getting memories",
-			slog.Any("err", err),
-			slog.String("user_id", userID.String()),
+			"err", err,
+			"user_id", userID,
 		)
 	}
 
@@ -107,7 +107,7 @@ func DeleteMemories(userID snowflake.ID) error {
 	}
 	_, err := DB.Exec("DELETE FROM memories WHERE user_id = ?", userID.String())
 	if err != nil {
-		slog.Error("failed to delete memories", slog.Any("err", err), slog.String("user_id", userID.String()))
+		slog.Error("failed to delete memories", "err", err, "user_id", userID)
 	}
 	return err
 }
@@ -134,9 +134,9 @@ func DeleteMemory(userID snowflake.ID, idx int) error {
 	result, err := DB.Exec(query, userID.String(), idx)
 	if err != nil {
 		slog.Error("failed to execute delete memory query",
-			slog.Any("err", err),
-			slog.String("user_id", userID.String()),
-			slog.Int("index", idx),
+			"err", err,
+			"user_id", userID,
+			"index", idx,
 		)
 		return fmt.Errorf("failed to delete memory at index %d for user %s: %w", idx, userID, err)
 	}
@@ -144,9 +144,9 @@ func DeleteMemory(userID snowflake.ID, idx int) error {
 	rowsAffected, err := result.RowsAffected()
 	if err != nil {
 		slog.Warn("failed to get rows affected after deleting memory",
-			slog.Any("err", err),
-			slog.String("user_id", userID.String()),
-			slog.Int("index", idx),
+			"err", err,
+			"user_id", userID,
+			"index", idx,
 		)
 	}
 
@@ -154,7 +154,7 @@ func DeleteMemory(userID snowflake.ID, idx int) error {
 		return fmt.Errorf("memory not found: user %s, index %d", userID, idx)
 	}
 
-	slog.Debug("successfully deleted memory", slog.String("user_id", userID.String()), slog.Int("index", idx))
+	slog.Debug("successfully deleted memory", "user_id", userID, "index", idx)
 	return nil
 }
 
@@ -169,8 +169,8 @@ func AddMemory(userID snowflake.ID, memory string) error {
 	_, err := DB.Exec("INSERT INTO memories (user_id, memory) VALUES (?, ?)", userID.String(), memory)
 	if err != nil {
 		slog.Error("failed to add memory",
-			slog.Any("err", err),
-			slog.String("user_id", userID.String()),
+			"err", err,
+			"user_id", userID,
 			slog.String("memory", memory),
 		)
 	}

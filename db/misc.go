@@ -11,7 +11,7 @@ import (
 func WriteMessageInteractionPrompt(messageID snowflake.ID, prompt string) error {
 	_, err := DB.Exec("INSERT OR REPLACE INTO message_interaction_cache (message_id, prompt) VALUES (?, ?)", messageID.String(), prompt)
 	if err != nil {
-		slog.Error("failed to write message interaction prompt cache", slog.Any("err", err), slog.String("message_id", messageID.String()))
+		slog.Error("failed to write message interaction prompt cache", "err", err, slog.String("message_id", messageID.String()))
 	}
 	return err // Return error even if logged
 }

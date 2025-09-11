@@ -12,6 +12,7 @@ import (
 	"github.com/disgoorg/disgo/discord"
 	"github.com/disgoorg/disgo/events"
 	"github.com/zeozeozeo/x3/db"
+	"github.com/zeozeozeo/x3/media"
 )
 
 var (
@@ -47,10 +48,23 @@ func handleLlmInteraction(event *events.MessageCreate) error {
 	)
 
 	if err != nil {
-		slog.Error("handleLlmInteraction failed", slog.Any("err", err))
+		slog.Error("handleLlmInteraction failed", "err", err)
 		sendPrettyError(event.Client(), "Epic fail", event.ChannelID, event.MessageID)
 	}
 	return err
+}
+
+var triggerCommandBotNamePrefixes = []string{"x3 ", "clanker "}
+
+func isTriggerCommand(event *events.MessageCreate, cmd string) bool {
+	content := strings.TrimSpace(event.Message.Content)
+	for _, p := range triggerCommandBotNamePrefixes {
+		fullCmd := p + cmd
+		if strings.HasSuffix(content, fullCmd) || strings.HasPrefix(content, fullCmd) {
+			return true
+		}
+	}
+	return false
 }
 
 func OnMessageCreate(event *events.MessageCreate) {
@@ -59,11 +73,6 @@ func OnMessageCreate(event *events.MessageCreate) {
 	}
 	if event.Message.Content == "" && len(event.Message.Attachments) == 0 {
 		return // might be a poll/pin message etc
-	}
-
-	if event.GuildID == nil {
-		handleLlmInteraction(event)
-		return
 	}
 
 	// are we @mentioned?
@@ -83,19 +92,22 @@ func OnMessageCreate(event *events.MessageCreate) {
 		}
 	}
 
-	// trigger command?
-	if containsX3Regex.MatchString(event.Message.Content) {
-		trimmed := strings.TrimSpace(event.Message.Content)
-		if trimmed == "x3 quote" ||
-			trimmed == "x3 quote this" ||
-			strings.HasSuffix(trimmed, " x3 quote") ||
-			strings.HasSuffix(trimmed, " x3 quote this") {
-			if err := HandleQuoteReply(event); err != nil {
-				slog.Error("HandleQuoteReply failed", slog.Any("err", err))
-			}
-			return
+	// trigger commands (e.g. "x3 say" "x3 quote")
+	if isTriggerCommand(event, "quote") {
+		if err := HandleQuoteReply(event); err != nil {
+			slog.Error("HandleQuoteReply failed", "err", err)
 		}
+		return
+	}
+	if isTriggerCommand(event, "say") {
+		if err := HandleSay(event); err != nil {
+			slog.Error("HandleSay failed", "err", err)
+		}
+		return
+	}
 
+	// "clanker"
+	if containsX3Regex.MatchString(event.Message.Content) {
 		handleLlmInteraction(event)
 		return
 	}
@@ -107,6 +119,7 @@ func OnMessageCreate(event *events.MessageCreate) {
 		return
 	}
 
+	// real?
 	if containsProtogenRegex.MatchString(event.Message.Content) {
 		event.Client().Rest().CreateMessage(
 			event.ChannelID,
@@ -124,9 +137,14 @@ func OnMessageCreate(event *events.MessageCreate) {
 			discord.NewMessageCreateBuilder().
 				SetMessageReferenceByID(event.MessageID).
 				SetAllowedMentions(&discord.AllowedMentions{RepliedUser: false}).
-				AddFile("sigma-boy.mp4", "", bytes.NewReader(SigmaBoyMp4)).
+				AddFile("sigma-boy.mp4", "", bytes.NewReader(media.SigmaBoyMp4)).
 				Build(),
 		)
+		return
+	}
+
+	if event.GuildID == nil {
+		handleLlmInteraction(event)
 		return
 	}
 }

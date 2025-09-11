@@ -176,7 +176,7 @@ func (h *Horder) scoreModel(model aihorde.ActiveModel, originalIndex int) Scored
 func (h *Horder) ScoreModels() []ScoredModel {
 	models, err := h.FetchImageModels()
 	if err != nil {
-		slog.Error("failed to fetch image models", slog.Any("err", err))
+		slog.Error("failed to fetch image models", "err", err)
 		return nil
 	}
 
@@ -252,7 +252,7 @@ func (h *Horder) Generate(model, prompt, negative string, steps, n int, cfgScale
 	req, err := h.horde.PostAsyncImageGenerate(input)
 	if err != nil {
 		h.wg.Done()
-		slog.Error("horder: failed to queue image", slog.Any("err", err))
+		slog.Error("horder: failed to queue image", "err", err)
 		return "", err
 	}
 	h.activeRequests.Add(1)

@@ -43,7 +43,7 @@ func replaceLlmTagsWithNewlines(response string, userID snowflake.ID, personaMet
 	memoryUpdated := len(memories) > 0 && personaMeta.EnableMemory
 	if !personaMeta.EnableMemory {
 		if err := db.HandleMemories(userID, memories); err != nil {
-			slog.Error("failed to handle memories", slog.Any("err", err))
+			slog.Error("failed to handle memories", "err", err)
 			memoryUpdated = false
 		}
 	}
@@ -128,7 +128,7 @@ func handleLlmInteraction2(
 	// might be the first message for a character card
 	exit, err := handleCard(client, channelID, messageID, cache, preMsgWg)
 	if err != nil {
-		slog.Error("handleCard failed", slog.Any("err", err), slog.String("channel_id", channelID.String()))
+		slog.Error("handleCard failed", "err", err, slog.String("channel_id", channelID.String()))
 		return "", 0, fmt.Errorf("failed to handle character card: %w", err)
 	}
 	if exit {
@@ -209,7 +209,7 @@ func handleLlmInteraction2(
 	)
 	response, usage, err := llmer.RequestCompletion(models, usernames, cache.PersonaMeta.Settings, prepend)
 	if err != nil {
-		slog.Error("LLM request failed", slog.Any("err", err))
+		slog.Error("LLM request failed", "err", err)
 		return "", 0, fmt.Errorf("LLM request failed: %w", err)
 	}
 
@@ -281,7 +281,7 @@ func handleLlmInteraction2(
 
 		_, err = client.Rest().UpdateMessage(channelID, lastResponseMessage.ID, builder.Build())
 		if err != nil {
-			slog.Error("failed to update message for regeneration", slog.Any("err", err))
+			slog.Error("failed to update message for regeneration", "err", err)
 			return response, 0, fmt.Errorf("failed to update message: %w", err)
 		}
 		jumpURL = lastResponseMessage.JumpURL()
@@ -290,7 +290,7 @@ func handleLlmInteraction2(
 		messages, memories = splitLlmTags(response, &cache.PersonaMeta)
 		if cache.PersonaMeta.EnableMemory {
 			if err := db.HandleMemories(userID, memories); err != nil {
-				slog.Error("failed to handle memories during send", slog.Any("err", err))
+				slog.Error("failed to handle memories during send", "err", err)
 			} else if len(memories) > 0 && len(messages) > 0 {
 				messages[len(messages)-1] += memoryUpdatedAppend
 			}
@@ -317,7 +317,7 @@ func handleLlmInteraction2(
 			// send the split
 			botMessage, err = sendMessageSplits(client, replyMessageID, event, 0, channelID, []rune(content), currentFiles, i != len(messages)-1)
 			if err != nil {
-				slog.Error("failed to send message split", slog.Any("err", err), slog.Int("split_index", i))
+				slog.Error("failed to send message split", "err", err, slog.Int("split_index", i))
 				return response, 0, fmt.Errorf("failed to send message split %d: %w", i+1, err)
 			}
 			event = nil // updated the event, send the next split as a new message
@@ -336,10 +336,10 @@ func handleLlmInteraction2(
 	cache.IsLastRandomDM = timeInteraction
 	cache.UpdateInteractionTime()
 	if err := cache.Write(channelID); err != nil {
-		slog.Error("failed to write channel cache after interaction", slog.Any("err", err), slog.String("channel_id", channelID.String()))
+		slog.Error("failed to write channel cache after interaction", "err", err, slog.String("channel_id", channelID.String()))
 	}
 	if err := db.UpdateGlobalStats(usage); err != nil {
-		slog.Error("failed to update global stats after interaction", slog.Any("err", err))
+		slog.Error("failed to update global stats after interaction", "err", err)
 	}
 	db.SetInteractionTime(userID, time.Now())
 
@@ -461,7 +461,7 @@ func handleNarrationGenerate(client bot.Client, channelID, messageID snowflake.I
 	}
 	models, err := h.FetchImageModels()
 	if err != nil {
-		slog.Error("failed to fetch image models", slog.Any("err", err))
+		slog.Error("failed to fetch image models", "err", err)
 		return
 	}
 	if !slices.ContainsFunc(models, func(model aihorde.ActiveModel) bool {
@@ -495,7 +495,7 @@ func handleNarrationGenerate(client bot.Client, channelID, messageID snowflake.I
 
 	id, err := h.Generate(model, prompt, defaultNegativePrompt, steps, n, cfgScale, clipSkip, isNSFW)
 	if err != nil {
-		slog.Error("handleNarrationGenerate: failed to start generation", slog.Any("err", err))
+		slog.Error("handleNarrationGenerate: failed to start generation", "err", err)
 		return
 	}
 	defer h.Done()
@@ -508,7 +508,7 @@ func handleNarrationGenerate(client bot.Client, channelID, messageID snowflake.I
 	for {
 		status, err := h.GetStatus(id)
 		if err != nil {
-			slog.Error("handleNarrationGenerate: failed to get generation status", slog.Any("err", err), slog.String("id", id))
+			slog.Error("handleNarrationGenerate: failed to get generation status", "err", err, slog.String("id", id))
 			failures++
 			if failures > 8 {
 				return
@@ -575,7 +575,7 @@ func handleNarrationGenerate(client bot.Client, channelID, messageID snowflake.I
 
 	finalStatus, err := h.GetFinalStatus(id)
 	if err != nil {
-		slog.Error("handleNarrationGenerate: failed to get final status", slog.Any("err", err), slog.String("id", id))
+		slog.Error("handleNarrationGenerate: failed to get final status", "err", err, slog.String("id", id))
 		return
 	}
 
@@ -589,7 +589,7 @@ func handleNarrationGenerate(client bot.Client, channelID, messageID snowflake.I
 		// the filename MUST start with "narration", that's how addContextMessagesIfPossible knows to ignore it
 		imgData, filename, err := processImageData(gen.Img, fmt.Sprintf("narration-%d", i+1))
 		if err != nil {
-			slog.Error("handleNarrationGenerate: failed to process image data", slog.Any("err", err), slog.String("img_src", gen.Img))
+			slog.Error("handleNarrationGenerate: failed to process image data", "err", err, slog.String("img_src", gen.Img))
 			continue
 		}
 
@@ -638,7 +638,7 @@ func handleNarrationGenerate(client bot.Client, channelID, messageID snowflake.I
 	)
 
 	if err != nil {
-		slog.Error("handleNarrationGenerate: failed to send image reply", slog.Any("err", err), slog.String("channel_id", channelID.String()), slog.String("message_id", messageID.String()))
+		slog.Error("handleNarrationGenerate: failed to send image reply", "err", err, slog.String("channel_id", channelID.String()), slog.String("message_id", messageID.String()))
 	} else {
 		slog.Info("handleNarrationGenerate: narration image sent successfully", slog.String("channel_id", channelID.String()), slog.String("message_id", messageID.String()), slog.String("model", model), slog.String("prompt", prompt))
 
@@ -646,10 +646,10 @@ func handleNarrationGenerate(client bot.Client, channelID, messageID snowflake.I
 		if err == nil {
 			stats.ImagesGenerated++
 			if err := stats.Write(); err != nil {
-				slog.Error("handleNarrationGenerate: failed to write global stats", slog.Any("err", err))
+				slog.Error("handleNarrationGenerate: failed to write global stats", "err", err)
 			}
 		} else {
-			slog.Error("handleNarrationGenerate: failed to get global stats", slog.Any("err", err))
+			slog.Error("handleNarrationGenerate: failed to get global stats", "err", err)
 		}
 	}
 }
