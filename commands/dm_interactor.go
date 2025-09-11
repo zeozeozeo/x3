@@ -13,12 +13,12 @@ import (
 	"github.com/zeozeozeo/x3/db"
 )
 
-// InitiateDMInteraction periodically checks cached channels and initiates a proactive DM interaction
-// if conditions are met (channel is DM, user hasn't opted out, sufficient time passed).
-// This function should be called periodically in a goroutine from main.
+//
+// FIXME: rewrite all of this
+//
+
 func InitiateDMInteraction(client bot.Client) {
-	// Get all channel IDs from the cache
-	channels, err := db.GetCachedChannelIDs() // getCachedChannelIDs is in cache.go
+	channels, err := db.GetCachedChannelIDs()
 	if err != nil {
 		slog.Error("InitiateDMInteraction: failed to get cached channel IDs", slog.Any("err", err))
 		return

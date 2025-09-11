@@ -20,17 +20,13 @@ var (
 	containsSigmaRegex    = regexp.MustCompile(`(?i)(^|\W)(sigma|сигма)($|\W)`)
 )
 
-
-// handleLlmInteraction is called by OnMessageCreate for non-command LLM triggers (mentions, replies, "x3").
 func handleLlmInteraction(event *events.MessageCreate) error {
-	// Send typing indicator while processing
 	var wg sync.WaitGroup
 	wg.Add(1)
 	go sendTypingWithLog(event.Client(), event.ChannelID, &wg)
 
 	content := getMessageContent(event.Message)
 
-	// Call the core LLM interaction logic
 	_, _, err := handleLlmInteraction2(
 		event.Client(),
 		event.ChannelID,
@@ -39,10 +35,10 @@ func handleLlmInteraction(event *events.MessageCreate) error {
 		event.Message.Author.EffectiveName(),
 		event.Message.Author.ID,
 		event.Message.Attachments,
-		false, // Not a time interaction
-		false, // Not a regenerate
-		"",    // No regenerate prepend
-		&wg,   // Pass WaitGroup for typing indicator coordination
+		false, // not a time interaction
+		false, // not a regenerate
+		"",    // no regenerate prepend
+		&wg,
 		event.Message.ReferencedMessage,
 		nil, // no event
 		nil,
@@ -52,15 +48,12 @@ func handleLlmInteraction(event *events.MessageCreate) error {
 
 	if err != nil {
 		slog.Error("handleLlmInteraction failed", slog.Any("err", err))
-		sendPrettyError(event.Client(), "Sorry, I couldn't generate a response. Please try again.", event.ChannelID, event.MessageID)
+		sendPrettyError(event.Client(), "Epic fail", event.ChannelID, event.MessageID)
 	}
 	return err
 }
 
-// OnMessageCreate is the event listener for new messages.
-// It handles various triggers like mentions, replies, keywords, and DMs.
 func OnMessageCreate(event *events.MessageCreate) {
-	// Ignore bots and blacklisted channels
 	if event.Message.Author.Bot || (event.GuildID != nil && db.IsChannelInBlacklist(event.ChannelID)) {
 		return
 	}
@@ -68,28 +61,21 @@ func OnMessageCreate(event *events.MessageCreate) {
 		return // might be a poll/pin message etc
 	}
 
-	// --- DM Handling ---
 	if event.GuildID == nil {
-		// Direct Message
-		slog.Debug("Handling DM interaction")
 		handleLlmInteraction(event)
-		return // Stop processing after handling DM
+		return
 	}
 
-	// --- Guild Message Handling ---
-
-	// Check for direct @mention
+	// are we @mentioned?
 	for _, user := range event.Message.Mentions {
 		if user.ID == event.Client().ID() {
-			slog.Debug("Handling @mention interaction")
 			handleLlmInteraction(event)
 			return
 		}
 	}
 
-	// Check for reply to bot's message
+	// is this a reply to our message?
 	if event.Message.ReferencedMessage != nil && event.Message.ReferencedMessage.Author.ID == event.Client().ID() {
-		// Don't trigger on replies to /lobotomy or /persona confirmations etc.
 		if !isLobotomyMessage(*event.Message.ReferencedMessage) && !isCardMessage(*event.Message.ReferencedMessage) {
 			slog.Debug("handling reply interaction")
 			handleLlmInteraction(event)
@@ -97,39 +83,32 @@ func OnMessageCreate(event *events.MessageCreate) {
 		}
 	}
 
-	// Check for "x3" keyword trigger
+	// trigger command?
 	if containsX3Regex.MatchString(event.Message.Content) {
 		trimmed := strings.TrimSpace(event.Message.Content)
-		// Check for "x3 quote" trigger first
 		if trimmed == "x3 quote" ||
 			trimmed == "x3 quote this" ||
 			strings.HasSuffix(trimmed, " x3 quote") ||
 			strings.HasSuffix(trimmed, " x3 quote this") {
-			slog.Debug("handling 'x3 quote' reply trigger")
-			if err := HandleQuoteReply(event); err != nil { // HandleQuoteReply is in quote.go
+			if err := HandleQuoteReply(event); err != nil {
 				slog.Error("HandleQuoteReply failed", slog.Any("err", err))
 			}
-			return // Stop processing, quote handled
+			return
 		}
 
-		// Otherwise, treat as LLM trigger, erasing "x3"
-		slog.Debug("handling 'x3' keyword interaction")
 		handleLlmInteraction(event)
 		return
 	}
 
-	// check if this is after a recent interaction
+	// recent interaction?
 	cache := db.GetChannelCache(event.ChannelID)
 	if time.Since(cache.LastInteraction) < 30*time.Second {
-		slog.Debug("handling recent interaction")
 		handleLlmInteraction(event)
 		return
 	}
 
-	// Check for "protogen" keyword
 	if containsProtogenRegex.MatchString(event.Message.Content) {
-		slog.Debug("handling 'protogen' keyword")
-		_, err := event.Client().Rest().CreateMessage(
+		event.Client().Rest().CreateMessage(
 			event.ChannelID,
 			discord.NewMessageCreateBuilder().
 				SetContent("https://tenor.com/view/protogen-vrchat-hello-hi-jumping-gif-18406743932972249866").
@@ -137,33 +116,17 @@ func OnMessageCreate(event *events.MessageCreate) {
 				SetAllowedMentions(&discord.AllowedMentions{RepliedUser: false}).
 				Build(),
 		)
-		if err != nil {
-			slog.Error("failed to send protogen response", slog.Any("err", err))
-		}
 		return
 	}
-
-	// Check for "sigma" keyword
 	if containsSigmaRegex.MatchString(event.Message.Content) {
-		slog.Debug("handling 'sigma' keyword")
-		// Use the package variable commands.SigmaBoyMp4
-		if len(SigmaBoyMp4) == 0 {
-			slog.Error("SigmaBoyMp4 data is empty!") // Log error if data wasn't loaded
-			return
-		}
-		_, err := event.Client().Rest().CreateMessage(
+		event.Client().Rest().CreateMessage(
 			event.ChannelID,
 			discord.NewMessageCreateBuilder().
 				SetMessageReferenceByID(event.MessageID).
 				SetAllowedMentions(&discord.AllowedMentions{RepliedUser: false}).
-				AddFile("sigma-boy.mp4", "", bytes.NewReader(SigmaBoyMp4)). // Use package variable
+				AddFile("sigma-boy.mp4", "", bytes.NewReader(SigmaBoyMp4)).
 				Build(),
 		)
-		if err != nil {
-			slog.Error("failed to send sigma response", slog.Any("err", err))
-		}
 		return
 	}
-
-	// No relevant trigger found in guild message
 }

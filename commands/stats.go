@@ -36,7 +36,6 @@ var StatsCommand = discord.SlashCommandCreate{
 	},
 }
 
-// formatUsageStrings formats LLM usage numbers into human-readable strings.
 func formatUsageStrings(usage llm.Usage) (string, string, string) {
 	prompt := "no data"
 	response := "no data"
@@ -53,7 +52,7 @@ func formatUsageStrings(usage llm.Usage) (string, string, string) {
 	return prompt, response, total
 }
 
-// HandleStats handles the /stats command logic.
+// HandleStats handles the /stats command.
 func HandleStats(event *handler.CommandEvent) error {
 	data := event.SlashCommandInteractionData()
 	ephemeral, ok := data.OptBool("ephemeral")

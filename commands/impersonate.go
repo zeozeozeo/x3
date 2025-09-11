@@ -89,24 +89,24 @@ func HandleImpersonate(event *handler.CommandEvent) error {
 		}
 		response, botMessageID, err := handleLlmInteraction2(
 			event.Client(),
-			event.Channel().ID(), // Channel ID
+			event.Channel().ID(), // channel ID
 			referenceID,
-			trigger, // System instruction/trigger
+			trigger, // system instruction/trigger
 			username,
-			0,     // User ID will be determined by handleLlmInteraction2 from history
-			nil,   // No attachments
-			false, // Not a timeInteraction
-			false, // Not a regenerate
+			0,     // determine uid from history
+			nil,   // no attachments
+			false, // not a timeInteraction
+			false, // not a regenerate
 			prepend,
-			&wg,              // Pass WaitGroup
-			nil,              // No specific message reference
-			interactionEvent, // We want the first split to be sent as an update of this event
+			&wg,
+			nil,              // no reference
+			interactionEvent, // we want the first split to be sent as an update of this event
 			systemPromptOverride,
 			isImpersonateTurn,
 			event.Channel().Type() == discord.ChannelTypeDM,
 		)
 		if err != nil {
-			slog.Error("handleLlmInteraction2 failed", slog.Any("err", err), slog.String("channel_id", event.Channel().ID().String()))
+			slog.Error("handleLlmInteraction2 failed", "err", err, "channel_id", event.Channel().ID())
 			return sendInteractionError(event, err.Error(), false)
 		}
 
