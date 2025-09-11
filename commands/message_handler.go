@@ -104,7 +104,6 @@ func OnMessageCreate(event *events.MessageCreate) {
 	// is this a reply to our message?
 	if event.Message.ReferencedMessage != nil && event.Message.ReferencedMessage.Author.ID == event.Client().ID() {
 		if !isLobotomyMessage(*event.Message.ReferencedMessage) && !isCardMessage(*event.Message.ReferencedMessage) {
-			slog.Debug("handling reply interaction")
 			handleLlmInteraction(event)
 			return
 		}
