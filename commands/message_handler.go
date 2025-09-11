@@ -68,14 +68,11 @@ func isTriggerCommand(event *events.MessageCreate, cmd string) bool {
 }
 
 func OnMessageCreate(event *events.MessageCreate) {
-	if event.Message.Author.Bot || (event.GuildID != nil && db.IsChannelInBlacklist(event.ChannelID)) {
+	if event.Message.Author.Bot {
 		return
 	}
-	if event.Message.Content == "" && len(event.Message.Attachments) == 0 {
-		return // might be a poll/pin message etc
-	}
 
-	// trigger commands (e.g. "x3 say" "x3 quote")
+	// trigger commands (e.g. "x3 say" "x3 quote"), available when blacklisted
 	if isTriggerCommand(event, "quote") {
 		if err := HandleQuoteReply(event); err != nil {
 			slog.Error("HandleQuoteReply failed", "err", err)
@@ -87,6 +84,13 @@ func OnMessageCreate(event *events.MessageCreate) {
 			slog.Error("HandleSay failed", "err", err)
 		}
 		return
+	}
+
+	if event.GuildID != nil && db.IsChannelInBlacklist(event.ChannelID) {
+		return // blacklisted in this channel
+	}
+	if event.Message.Content == "" && len(event.Message.Attachments) == 0 {
+		return // might be a poll/pin message etc
 	}
 
 	// are we @mentioned?
