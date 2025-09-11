@@ -60,7 +60,6 @@ func isTriggerCommand(event *events.MessageCreate, cmd string) bool {
 	content := strings.TrimSpace(event.Message.Content)
 	for _, p := range triggerCommandBotNamePrefixes {
 		fullCmd := p + cmd
-		slog.Info("istriggerc", "content", content, "fullCmd", fullCmd)
 		if strings.HasSuffix(content, fullCmd) || strings.HasPrefix(content, fullCmd) {
 			return true
 		}
