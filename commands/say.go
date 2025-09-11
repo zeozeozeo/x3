@@ -132,6 +132,7 @@ func processGIF(data []byte, overlay image.Image) ([]byte, error) {
 
 func HandleSay(event *events.MessageCreate) error {
 	messages, err := fetchMessagesBefore(event.Client(), event.ChannelID, event.MessageID, 100)
+	messages = append([]discord.Message{event.Message}, messages...)
 	if err != nil || len(messages) == 0 {
 		return sendPrettyError(event.Client(), "Couldn't fetch message history :(\n"+err.Error(), event.ChannelID, event.MessageID)
 	}
