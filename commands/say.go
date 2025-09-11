@@ -58,13 +58,21 @@ func drawImageOverlay(base image.Image, overlay image.Image) image.Image {
 	bW := baseBounds.Dx()
 	bH := baseBounds.Dy()
 
+	maxOverlayHeight := int(float64(bH) * 0.2) // 20% the height of base image
 	overlayAspect := float64(overlay.Bounds().Dy()) / float64(max(overlay.Bounds().Dx(), 1))
-	scaledOverlayHeight := int(float64(bW) * overlayAspect)
-	scaledOverlay := scaleImage(overlay, bW, scaledOverlayHeight)
 
+	oW := bW
+	oH := int(float64(bW) * overlayAspect)
+
+	if oH > maxOverlayHeight {
+		oH = maxOverlayHeight
+		oW = int(float64(oH) / overlayAspect)
+	}
+
+	scaledOverlay := scaleImage(overlay, oW, oH)
 	out := image.NewRGBA(image.Rect(0, 0, bW, bH))
 	draw.Draw(out, out.Bounds(), base, baseBounds.Min, draw.Src)
-	draw.Draw(out, image.Rect(0, 0, bW, min(scaledOverlayHeight, bH)), scaledOverlay, scaledOverlay.Bounds().Min, draw.Over)
+	draw.Draw(out, image.Rect(0, 0, oW, oH), scaledOverlay, scaledOverlay.Bounds().Min, draw.Over)
 
 	return out
 }

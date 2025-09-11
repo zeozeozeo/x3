@@ -180,7 +180,7 @@ func HandleGenerate(event *handler.CommandEvent) error {
 				tagChan <- ""
 				return
 			}
-			slog.Info("HandleGenerate: got prompt improvement narrator tags", slog.String("tags", tags))
+			slog.Info("HandleGenerate: got prompt improvement narrator tags", "tags", tags)
 			tagChan <- tags
 		})
 

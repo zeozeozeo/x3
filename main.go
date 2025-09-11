@@ -47,7 +47,7 @@ func levelFromString(s string) slog.Level {
 func main() {
 	slog.SetLogLoggerLevel(levelFromString(os.Getenv("X3_LOG_LEVEL")))
 	slog.Info("x3 booting up...")
-	slog.Info("disgo version", slog.String("version", disgo.Version))
+	slog.Info("disgo version", "version", disgo.Version)
 
 	if err := db.InitDB(dbPath); err != nil {
 		slog.Error("error while initializing database", "err", err)
@@ -92,10 +92,10 @@ func main() {
 			r,
 			&events.ListenerAdapter{
 				OnGuildReady: func(event *events.GuildReady) {
-					slog.Info("guild ready", slog.Uint64("id", uint64(event.GuildID)))
+					slog.Info("guild ready", "id", event.GuildID)
 				},
 				OnGuildsReady: func(event *events.GuildsReady) {
-					slog.Info("guilds on shard ready", slog.Uint64("shard_id", uint64(event.ShardID())))
+					slog.Info("guilds on shard ready", "shard_id", event.ShardID())
 				},
 			},
 		),

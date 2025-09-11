@@ -23,7 +23,7 @@ func InitiateDMInteraction(client bot.Client) {
 		slog.Error("InitiateDMInteraction: failed to get cached channel IDs", "err", err)
 		return
 	}
-	slog.Info("InitiateDMInteraction check", slog.Int("cached_channels", len(channels)))
+	slog.Info("InitiateDMInteraction check", "cached_channels", len(channels))
 
 	if len(channels) == 0 {
 		return // No channels in cache to check
@@ -69,7 +69,7 @@ func InitiateDMInteraction(client bot.Client) {
 		// Verify channel type (as a final check)
 		channel, err := client.Rest().GetChannel(id)
 		if err != nil {
-			slog.Warn("InitiateDMInteraction: failed to get channel info; marking as non-DM", "err", err, slog.String("channel_id", id.String()))
+			slog.Warn("InitiateDMInteraction: failed to get channel info; marking as non-DM", "err", err, "channel_id", id)
 			cache.KnownNonDM = true
 			cache.Write(id) // Persist the KnownNonDM flag
 			continue
