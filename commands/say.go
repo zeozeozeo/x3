@@ -6,6 +6,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"strings"
 
 	"image"
 	"image/gif"
@@ -138,7 +139,7 @@ func HandleSay(event *events.MessageCreate) error {
 	}
 
 	var data []byte
-	var isGif bool
+	var isGif, isSpoiler bool
 
 	// iterate newest to oldest
 outer:
@@ -148,6 +149,7 @@ outer:
 				continue
 			}
 			isGif = *attachment.ContentType == "image/gif"
+			isSpoiler = strings.HasPrefix(attachment.Filename, "SPOILER_")
 
 			slog.Info("HandleSay: fetching image")
 			data, err = httpGetSlurp(attachment.URL)
@@ -172,13 +174,18 @@ outer:
 		return sendPrettyError(event.Client(), err.Error(), event.ChannelID, event.MessageID)
 	}
 
+	filename := "say.gif"
+	if isSpoiler {
+		filename = "SPOILER_" + filename
+	}
+
 	slog.Info("HandleSay: send response", "len", len(outData))
 	_, err = event.Client().Rest().CreateMessage(
 		event.ChannelID,
 		discord.NewMessageCreateBuilder().
 			SetMessageReferenceByID(event.MessageID).
 			SetAllowedMentions(&discord.AllowedMentions{RepliedUser: false}).
-			AddFile("say.gif", "image/gif", bytes.NewReader(outData)).
+			AddFile(filename, "image/gif", bytes.NewReader(outData)).
 			Build(),
 	)
 
