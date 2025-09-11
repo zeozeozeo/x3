@@ -60,6 +60,7 @@ func isTriggerCommand(event *events.MessageCreate, cmd string) bool {
 	content := strings.TrimSpace(event.Message.Content)
 	for _, p := range triggerCommandBotNamePrefixes {
 		fullCmd := p + cmd
+		slog.Info("istriggerc", "content", content, "fullCmd", fullCmd)
 		if strings.HasSuffix(content, fullCmd) || strings.HasPrefix(content, fullCmd) {
 			return true
 		}
@@ -73,6 +74,20 @@ func OnMessageCreate(event *events.MessageCreate) {
 	}
 	if event.Message.Content == "" && len(event.Message.Attachments) == 0 {
 		return // might be a poll/pin message etc
+	}
+
+	// trigger commands (e.g. "x3 say" "x3 quote")
+	if isTriggerCommand(event, "quote") {
+		if err := HandleQuoteReply(event); err != nil {
+			slog.Error("HandleQuoteReply failed", "err", err)
+		}
+		return
+	}
+	if isTriggerCommand(event, "say") {
+		if err := HandleSay(event); err != nil {
+			slog.Error("HandleSay failed", "err", err)
+		}
+		return
 	}
 
 	// are we @mentioned?
@@ -90,20 +105,6 @@ func OnMessageCreate(event *events.MessageCreate) {
 			handleLlmInteraction(event)
 			return
 		}
-	}
-
-	// trigger commands (e.g. "x3 say" "x3 quote")
-	if isTriggerCommand(event, "quote") {
-		if err := HandleQuoteReply(event); err != nil {
-			slog.Error("HandleQuoteReply failed", "err", err)
-		}
-		return
-	}
-	if isTriggerCommand(event, "say") {
-		if err := HandleSay(event); err != nil {
-			slog.Error("HandleSay failed", "err", err)
-		}
-		return
 	}
 
 	// "clanker"
