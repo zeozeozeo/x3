@@ -162,13 +162,10 @@ outer:
 
 	slog.Info("HandleSay: process image", "isGif", isGif)
 	var outData []byte
-	var filename string
 	if isGif {
 		outData, err = processGIF(data, bubbleImage)
-		filename = "say.gif"
 	} else {
 		outData, err = processStatic(data, bubbleImage)
-		filename = "say.gif"
 	}
 	if err != nil {
 		return sendPrettyError(event.Client(), err.Error(), event.ChannelID, event.MessageID)
@@ -180,7 +177,7 @@ outer:
 		discord.NewMessageCreateBuilder().
 			SetMessageReferenceByID(event.MessageID).
 			SetAllowedMentions(&discord.AllowedMentions{RepliedUser: false}).
-			AddFile(filename, "image/gif", bytes.NewReader(outData)).
+			AddFile("say.gif", "image/gif", bytes.NewReader(outData)).
 			Build(),
 	)
 
