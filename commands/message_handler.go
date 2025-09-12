@@ -80,7 +80,7 @@ func OnMessageCreate(event *events.MessageCreate) {
 		return
 	}
 	if isTriggerCommand(event, "say") {
-		if err := HandleSay(event); err != nil {
+		if err := HandleSay(event, false); err != nil {
 			slog.Error("HandleSay failed", "err", err)
 		}
 		return

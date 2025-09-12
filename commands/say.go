@@ -131,17 +131,21 @@ func processGIF(data []byte, overlay image.Image) ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
-func HandleSay(event *events.MessageCreate) error {
-	messages, err := fetchMessagesBefore(event.Client(), event.ChannelID, event.MessageID, 100)
-	messages = append([]discord.Message{event.Message}, messages...)
-	if err != nil || len(messages) == 0 {
-		return sendPrettyError(event.Client(), "Couldn't fetch message history :(\n"+err.Error(), event.ChannelID, event.MessageID)
+func HandleSay(event *events.MessageCreate, fetchMessages bool) error {
+	messages := []discord.Message{event.Message}
+	if fetchMessages {
+		fetchedMessages, err := fetchMessagesBefore(event.Client(), event.ChannelID, event.MessageID, 100)
+		if err != nil || len(fetchedMessages) == 0 {
+			return sendPrettyError(event.Client(), "Couldn't fetch message history :(\n"+err.Error(), event.ChannelID, event.MessageID)
+		}
+		messages = append(messages, fetchedMessages...)
 	}
 
 	var data []byte
 	var isGif, isSpoiler bool
 
 	// iterate newest to oldest
+	var err error
 outer:
 	for _, msg := range messages {
 		for _, attachment := range msg.Attachments {
@@ -160,6 +164,10 @@ outer:
 		}
 	}
 	if len(data) == 0 {
+		if !fetchMessages {
+			// event.Message didn't have an attachment, so we must scour the message history
+			return HandleSay(event, true)
+		}
 		return nil
 	}
 
