@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/disgoorg/snowflake/v2"
+	"github.com/zeozeozeo/x3/eliza"
 	"github.com/zeozeozeo/x3/markov"
 	"github.com/zeozeozeo/x3/model"
 	"github.com/zeozeozeo/x3/openai"
@@ -532,6 +533,18 @@ func (l *Llmer) inferMarkovChain(usernames map[string]struct{}) string {
 	return strings.TrimSpace(sb.String())
 }
 
+func (l *Llmer) inferEliza(usernames map[string]struct{}) string {
+	msg := l.Messages[len(l.Messages)-1]
+	content := msg.Content
+	for username := range usernames {
+		content = strings.TrimPrefix(content, username+": ")
+	}
+	if anal, err := eliza.AnalyzeString(content); err == nil {
+		return anal
+	}
+	return "IDK"
+}
+
 // shouldSwapToVision returns true if any of the last 4 messages had images sent by user
 func (l Llmer) shouldSwapToVision() bool {
 	numMessages := len(l.Messages)
@@ -555,6 +568,12 @@ func (l *Llmer) RequestCompletion(models []model.Model, usernames map[string]str
 
 	if models[0].IsMarkov {
 		res = l.inferMarkovChain(usernames)
+		usage = Usage{}
+		err = nil
+		return
+	}
+	if models[0].IsEliza {
+		res = l.inferEliza(usernames)
 		usage = Usage{}
 		err = nil
 		return
@@ -584,7 +603,7 @@ func (l *Llmer) RequestCompletion(models []model.Model, usernames map[string]str
 	var lastErr error
 
 	for _, m := range modelsToTry {
-		if m.IsMarkov {
+		if m.IsMarkov || m.IsEliza {
 			continue
 		}
 

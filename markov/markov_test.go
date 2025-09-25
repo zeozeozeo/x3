@@ -138,7 +138,6 @@ func TestAddAndGenerateOrder1(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			gotToken, err := c.GenerateDeterministic(tt.start, tt.rng)
@@ -236,7 +235,6 @@ func TestAddAndGenerateOrder2(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			gotToken, err := c.GenerateDeterministic(tt.start, tt.rng)
@@ -326,7 +324,6 @@ func TestTransitionProbabilityOrder1(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			gotProb, err := c.TransitionProbability(tt.next, tt.current)
@@ -429,7 +426,6 @@ func TestTransitionProbabilityOrder2(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			gotProb, err := c.TransitionProbability(tt.next, tt.current)
@@ -500,7 +496,7 @@ func TestGenerateIntegration(t *testing.T) {
 	current := markov.NGram{markov.StartToken, markov.StartToken}
 	maxSteps := 20
 
-	for i := 0; i < maxSteps; i++ {
+	for i := range maxSteps {
 		next, err := c.GenerateDeterministic(current, rng)
 		if err != nil {
 			if strings.Contains(err.Error(), "unknown ngram state") {

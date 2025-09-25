@@ -26,7 +26,7 @@ type Run struct {
 	Tools          []Tool             `json:"tools"`
 	FileIDS        []string           `json:"file_ids"` //nolint:revive // backwards-compatibility
 	Metadata       map[string]any     `json:"metadata"`
-	Usage          Usage              `json:"usage,omitempty"`
+	Usage          Usage              `json:"usage"`
 
 	Temperature *float32 `json:"temperature,omitempty"`
 	// The maximum number of prompt tokens that may be used over the course of the run.

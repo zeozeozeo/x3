@@ -88,7 +88,7 @@ func (b base64String) Decode() ([]float32, error) {
 
 	const sizeOfFloat32 = 4
 	floats := make([]float32, len(decodedData)/sizeOfFloat32)
-	for i := 0; i < len(floats); i++ {
+	for i := range floats {
 		floats[i] = math.Float32frombits(binary.LittleEndian.Uint32(decodedData[i*4 : (i+1)*4]))
 	}
 

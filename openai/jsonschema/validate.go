@@ -3,6 +3,7 @@ package jsonschema
 import (
 	"encoding/json"
 	"errors"
+	"slices"
 )
 
 func VerifySchemaAndUnmarshal(schema Definition, content []byte, v any) error {
@@ -84,10 +85,5 @@ func validateArray(schema Definition, data any) bool {
 }
 
 func contains[S ~[]E, E comparable](s S, v E) bool {
-	for i := range s {
-		if v == s[i] {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(s, v)
 }

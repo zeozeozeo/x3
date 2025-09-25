@@ -53,17 +53,17 @@ type Profanity struct {
 }
 
 type ContentFilterResults struct {
-	Hate      Hate      `json:"hate,omitempty"`
-	SelfHarm  SelfHarm  `json:"self_harm,omitempty"`
-	Sexual    Sexual    `json:"sexual,omitempty"`
-	Violence  Violence  `json:"violence,omitempty"`
-	JailBreak JailBreak `json:"jailbreak,omitempty"`
-	Profanity Profanity `json:"profanity,omitempty"`
+	Hate      Hate      `json:"hate"`
+	SelfHarm  SelfHarm  `json:"self_harm"`
+	Sexual    Sexual    `json:"sexual"`
+	Violence  Violence  `json:"violence"`
+	JailBreak JailBreak `json:"jailbreak"`
+	Profanity Profanity `json:"profanity"`
 }
 
 type PromptAnnotation struct {
 	PromptIndex          int                  `json:"prompt_index,omitempty"`
-	ContentFilterResults ContentFilterResults `json:"content_filter_results,omitempty"`
+	ContentFilterResults ContentFilterResults `json:"content_filter_results"`
 }
 
 type ImageURLDetail string
@@ -304,7 +304,7 @@ type Tool struct {
 
 type ToolChoice struct {
 	Type     ToolType     `json:"type"`
-	Function ToolFunction `json:"function,omitempty"`
+	Function ToolFunction `json:"function"`
 }
 
 type ToolFunction struct {
@@ -383,7 +383,7 @@ type ChatCompletionChoice struct {
 	// null: API response still in progress or incomplete
 	FinishReason         FinishReason         `json:"finish_reason"`
 	LogProbs             *LogProbs            `json:"logprobs,omitempty"`
-	ContentFilterResults ContentFilterResults `json:"content_filter_results,omitempty"`
+	ContentFilterResults ContentFilterResults `json:"content_filter_results"`
 }
 
 // ChatCompletionResponse represents a response structure for chat completion API.

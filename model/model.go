@@ -93,13 +93,13 @@ type Model struct {
 	Whitelisted bool
 	// Llama 3.2 doesn't support system prompts when images are passed, so we
 	// have to detect it :/
-	IsLlama   bool
-	Vision    bool
-	Reasoning bool
-	Encoding  tokenizer.Encoding
-	Providers Providers
-	IsMarkov  bool
-	Limited   bool // disable custom inference settings
+	IsLlama           bool
+	Vision            bool
+	Reasoning         bool
+	Encoding          tokenizer.Encoding
+	Providers         Providers
+	IsMarkov, IsEliza bool
+	Limited           bool // disable custom inference settings
 }
 
 type ScoredProvider struct {
@@ -500,9 +500,15 @@ var (
 	}
 
 	ModelMarkovChain = Model{
-		Name:     "Markov Chain",
+		Name:     "Markov Chain (not an LLM)",
 		Command:  "markov",
 		IsMarkov: true,
+	}
+
+	ModelEliza = Model{
+		Name:    "Eliza (psychotherapist, not an LLM)",
+		Command: "eliza",
+		IsEliza: true,
 	}
 
 	AllModels = []Model{
@@ -525,6 +531,7 @@ var (
 		ModelGptOss,
 		ModelGeminiFlash,
 		ModelMarkovChain,
+		ModelEliza,
 	}
 
 	DefaultModels = []string{

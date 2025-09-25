@@ -42,7 +42,7 @@ func TestSpeechIntegration(t *testing.T) {
 		}
 
 		// Parse the JSON body of the request
-		var params map[string]interface{}
+		var params map[string]any
 		err = json.NewDecoder(r.Body).Decode(&params)
 		if err != nil {
 			http.Error(w, "failed to parse request body", http.StatusBadRequest)

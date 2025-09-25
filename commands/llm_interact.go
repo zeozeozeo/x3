@@ -143,6 +143,8 @@ func handleLlmInteraction2(
 	ctxLen := cache.ContextLength
 	if models[0].IsMarkov {
 		ctxLen = 200
+	} else if models[0].IsEliza {
+		ctxLen = 1
 	}
 	numCtxMessages, usernames, lastResponseMessage, lastAssistantMessageID, lastUserID := addContextMessages(
 		client,

@@ -162,7 +162,7 @@ func TestDefinition_MarshalJSON(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			wantBytes := []byte(tt.want)
-			var want map[string]interface{}
+			var want map[string]any
 			err := json.Unmarshal(wantBytes, &want)
 			if err != nil {
 				t.Errorf("Failed to Unmarshal JSON: error = %v", err)
@@ -388,7 +388,7 @@ func TestStructToSchema(t *testing.T) {
 				return
 			}
 
-			var want map[string]interface{}
+			var want map[string]any
 			err = json.Unmarshal(wantBytes, &want)
 			if err != nil {
 				t.Errorf("Failed to Unmarshal JSON: error = %v", err)
@@ -416,7 +416,7 @@ func structToMap(t *testing.T, v any) map[string]any {
 		return nil
 	}
 
-	var got map[string]interface{}
+	var got map[string]any
 	err = json.Unmarshal(gotBytes, &got)
 	if err != nil {
 		t.Errorf("Failed to Unmarshal JSON: error =  %v", err)

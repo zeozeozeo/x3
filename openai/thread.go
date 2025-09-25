@@ -14,7 +14,7 @@ type Thread struct {
 	Object        string         `json:"object"`
 	CreatedAt     int64          `json:"created_at"`
 	Metadata      map[string]any `json:"metadata"`
-	ToolResources ToolResources  `json:"tool_resources,omitempty"`
+	ToolResources ToolResources  `json:"tool_resources"`
 
 	httpHeader
 }

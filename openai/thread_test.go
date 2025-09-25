@@ -84,7 +84,7 @@ func TestThread(t *testing.T) {
 	checks.NoError(t, err, "RetrieveThread error")
 
 	_, err = client.ModifyThread(ctx, threadID, openai.ModifyThreadRequest{
-		Metadata: map[string]interface{}{
+		Metadata: map[string]any{
 			"key": "value",
 		},
 	})
@@ -167,7 +167,7 @@ func TestAzureThread(t *testing.T) {
 	checks.NoError(t, err, "RetrieveThread error")
 
 	_, err = client.ModifyThread(ctx, threadID, openai.ModifyThreadRequest{
-		Metadata: map[string]interface{}{
+		Metadata: map[string]any{
 			"key": "value",
 		},
 	})

@@ -59,8 +59,8 @@ func TestDecodeResponse(t *testing.T) {
 
 	testCases := []struct {
 		name     string
-		value    interface{}
-		expected interface{}
+		value    any
+		expected any
 		body     io.Reader
 		hasError bool
 	}{
@@ -78,9 +78,9 @@ func TestDecodeResponse(t *testing.T) {
 		},
 		{
 			name:  "map input",
-			value: &map[string]interface{}{},
+			value: &map[string]any{},
 			body:  bytes.NewReader([]byte(`{"test": "test"}`)),
-			expected: map[string]interface{}{
+			expected: map[string]any{
 				"test": "test",
 			},
 		},
@@ -100,7 +100,7 @@ func TestDecodeResponse(t *testing.T) {
 		},
 	}
 
-	assertEqual := func(t *testing.T, expected, actual interface{}) {
+	assertEqual := func(t *testing.T, expected, actual any) {
 		t.Helper()
 		if expected == actual {
 			return

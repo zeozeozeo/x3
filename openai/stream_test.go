@@ -193,7 +193,7 @@ func TestCreateCompletionStreamTooManyEmptyStreamMessagesError(t *testing.T) {
 		dataBytes = append(dataBytes, []byte("data: "+data+"\n\n")...)
 
 		// Totally 301 empty messages (300 is the limit)
-		for i := 0; i < 299; i++ {
+		for range 299 {
 			dataBytes = append(dataBytes, '\n')
 		}
 

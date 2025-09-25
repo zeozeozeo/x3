@@ -21,7 +21,7 @@ type APIError struct {
 // InnerError Azure Content filtering. Only valid for Azure OpenAI Service.
 type InnerError struct {
 	Code                 string               `json:"code,omitempty"`
-	ContentFilterResults ContentFilterResults `json:"content_filter_result,omitempty"`
+	ContentFilterResults ContentFilterResults `json:"content_filter_result"`
 }
 
 // RequestError provides information about generic request errors.

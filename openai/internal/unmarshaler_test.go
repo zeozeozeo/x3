@@ -22,7 +22,7 @@ func TestJSONUnmarshaler_Normal(t *testing.T) {
 func TestJSONUnmarshaler_InvalidJSON(t *testing.T) {
 	jm := &openai.JSONUnmarshaler{}
 	data := []byte(`{invalid}`)
-	var v map[string]interface{}
+	var v map[string]any
 
 	err := jm.Unmarshal(data, &v)
 	checks.HasError(t, err, "should return error for invalid JSON")
@@ -30,7 +30,7 @@ func TestJSONUnmarshaler_InvalidJSON(t *testing.T) {
 
 func TestJSONUnmarshaler_EmptyInput(t *testing.T) {
 	jm := &openai.JSONUnmarshaler{}
-	var v interface{}
+	var v any
 
 	err := jm.Unmarshal(nil, &v)
 	checks.HasError(t, err, "should return error for nil input")

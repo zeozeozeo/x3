@@ -224,13 +224,13 @@ func assertAPIErrorMessage(t *testing.T, apiErr openai.APIError, expected string
 	}
 }
 
-func assertAPIErrorInnerError(t *testing.T, apiErr openai.APIError, expected interface{}) {
+func assertAPIErrorInnerError(t *testing.T, apiErr openai.APIError, expected any) {
 	if !reflect.DeepEqual(apiErr.InnerError, expected) {
 		t.Errorf("Unexpected APIError InnerError: %v; expected: %v; ", apiErr, expected)
 	}
 }
 
-func assertAPIErrorCode(t *testing.T, apiErr openai.APIError, expected interface{}) {
+func assertAPIErrorCode(t *testing.T, apiErr openai.APIError, expected any) {
 	switch v := apiErr.Code.(type) {
 	case int:
 		if v != expected {
