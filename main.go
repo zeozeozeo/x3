@@ -116,13 +116,13 @@ func main() {
 		slog.Info("global commands registered successfully")
 	}
 
-	go func() {
-		ticker := time.NewTicker(5 * time.Minute)
-		defer ticker.Stop()
-		for range ticker.C {
-			commands.InitiateDMInteraction(client)
-		}
-	}()
+	//go func() {
+	//	ticker := time.NewTicker(5 * time.Minute)
+	//	defer ticker.Stop()
+	//	for range ticker.C {
+	//		commands.InitiateDMInteraction(client)
+	//	}
+	//}()
 
 	// start narrator mainloop
 	go commands.GetNarrator().Run()

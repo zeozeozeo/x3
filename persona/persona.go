@@ -268,7 +268,7 @@ func (s InferenceSettings) Fixup() InferenceSettings {
 	return s
 }
 
-const currentVersion = 4
+const currentVersion = 5
 
 type PersonaMeta struct {
 	Name           string            `json:"name,omitempty"`
