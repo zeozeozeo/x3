@@ -347,10 +347,9 @@ func handleLlmInteraction2(
 
 	// maybe queue narration + generation
 	if !isImpersonate && !models[0].IsMarkov {
-		realMeta, _ := persona.GetMetaByName(cache.PersonaMeta.Name)
 		if !db.IsChannelInImageBlacklist(channelID) &&
 			(strings.Contains(response, generateImageTag) ||
-				(realMeta.EnableImages && horder.GetHorder().IsFree())) {
+				(cache.PersonaMeta.EnableImages && horder.GetHorder().IsFree())) {
 			narrationMessageID := messageID
 			if botMessage != nil {
 				narrationMessageID = botMessage.ID
@@ -361,7 +360,7 @@ func handleLlmInteraction2(
 			}
 			handleNarration(client, channelID, narrationMessageID, *llmer, content)
 		} else {
-			slog.Info("narrator: skipping narration", slog.Bool("enableImages", realMeta.EnableImages), slog.Bool("timeSinceLastInteraction", time.Since(GetNarrator().LastInteractionTime()) > 2*time.Minute), slog.Bool("isFree", horder.GetHorder().IsFree()))
+			slog.Info("narrator: skipping narration", slog.Bool("enableImages", cache.PersonaMeta.EnableImages), slog.Bool("timeSinceLastInteraction", time.Since(GetNarrator().LastInteractionTime()) > 2*time.Minute), slog.Bool("isFree", horder.GetHorder().IsFree()))
 		}
 	}
 
