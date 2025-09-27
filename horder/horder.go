@@ -259,13 +259,13 @@ func (h *Horder) Generate(model, prompt, negative string, steps, n int, cfgScale
 
 	slog.Info(
 		"horder: queued image for generation",
-		slog.String("prompt", prompt),
-		slog.String("model", model),
-		slog.Int("steps", steps),
-		slog.Bool("nsfw", nsfw),
-		slog.Float64("kudos", req.Kudos),
-		slog.String("id", req.ID),
-		slog.Any("warnings", req.Warnings),
+		"promptlen", len(prompt),
+		"model", model,
+		"steps", steps,
+		"nsfw", nsfw,
+		"kudos", req.Kudos,
+		"id", req.ID,
+		"warnings", req.Warnings,
 	)
 
 	return req.ID, nil

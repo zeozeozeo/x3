@@ -440,7 +440,6 @@ func handleNarration(client bot.Client, channelID, messageID snowflake.ID, llmer
 		if err != nil {
 			return
 		}
-		slog.Info("narration callback", slog.String("tags", tags))
 		go handleNarrationGenerate(client, channelID, messageID, tags, triggerContent)
 	})
 }
@@ -491,8 +490,6 @@ func handleNarrationGenerate(client bot.Client, channelID, messageID snowflake.I
 	if !isNSFW && isPromptNSFW {
 		return // prompt is nsfw, but channel is not
 	}
-
-	slog.Info("starting narration image generation", slog.String("model", model), slog.String("prompt", prompt), slog.String("channel_id", channelID.String()))
 
 	id, err := h.Generate(model, prompt, defaultNegativePrompt, steps, n, cfgScale, clipSkip, isNSFW)
 	if err != nil {
