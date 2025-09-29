@@ -4,6 +4,7 @@ import (
 	"context"
 	_ "embed"
 	"log/slog"
+	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
@@ -21,6 +22,7 @@ import (
 
 	"github.com/zeozeozeo/x3/commands"
 	"github.com/zeozeozeo/x3/db"
+	"github.com/zeozeozeo/x3/modeled"
 )
 
 var (
@@ -127,12 +129,21 @@ func main() {
 	// start narrator mainloop
 	go commands.GetNarrator().Run()
 
+	// start GUI server
+	go func() {
+		modelEditorServer := modeled.NewServer()
+		if err := modelEditorServer.Start(); err != nil && err != http.ErrServerClosed {
+			slog.Error("GUI server error", "err", err)
+		}
+	}()
+
 	if err = client.OpenShardManager(context.TODO()); err != nil {
 		slog.Error("error while connecting to gateway", "err", err)
 		return
 	}
 
 	slog.Info("x3 is running. press ctrl+c to exit")
+	slog.Info("GUI editor available at http://localhost:8080")
 	s := make(chan os.Signal, 1)
 	signal.Notify(s, syscall.SIGINT, syscall.SIGTERM, os.Interrupt)
 	<-s

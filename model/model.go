@@ -1,6 +1,7 @@
 package model
 
 import (
+	"encoding/json"
 	"os"
 	"sort"
 	"strings"
@@ -111,452 +112,11 @@ type ScoredProvider struct {
 type Providers map[string]ModelProvider
 
 var (
-	ModelGpt5 = Model{
-		Name:     "OpenAI GPT-5",
-		Command:  "gpt",
-		Vision:   true,
-		Encoding: tokenizer.O200kBase,
-		Providers: Providers{
-			ProviderGithub: {
-				Codenames: []string{"openai/gpt-5"},
-			},
-			ProviderZukijourney: {
-				Codenames: []string{"gpt-5"},
-			},
-			ProviderHelixmind: {
-				Codenames: []string{"gpt-5"},
-			},
-			ProviderG4F: {
-				Codenames: []string{"gpt-5"},
-			},
-			ProviderElectron: {
-				Codenames: []string{"gpt-5"},
-			},
-			ProviderMNN: {
-				Codenames: []string{"gpt-5"},
-			},
-			ProviderHcap: {
-				Codenames: []string{"gpt-5"},
-			},
-		},
-	}
-
-	ModelGptOss = Model{
-		Name:      "OpenAI gpt-oss-120b",
-		Command:   "oss",
-		Reasoning: true,
-		Encoding:  tokenizer.O200kBase,
-		Providers: Providers{
-			ProviderOpenRouter: {
-				Codenames: []string{"openai/gpt-oss-120b:free"},
-			},
-		},
-	}
-
-	ModelGeminiFlash = Model{
-		Name:    "Google Gemini 2.0 Flash Experimental",
-		Command: "gemini",
-		Providers: Providers{
-			ProviderOpenRouter: {
-				Codenames: []string{"google/gemini-2.0-flash-exp:free"},
-			},
-		},
-	}
-
-	ModelLlama70b = Model{
-		Name:    "Meta Llama 3.3 70B",
-		Command: "llama",
-		IsLlama: true,
-		Providers: Providers{
-			ProviderGroq: {
-				Codenames: []string{"llama-3.3-70b-versatile"},
-			},
-			ProviderOpenRouter: {
-				Codenames: []string{"meta-llama/llama-3.3-70b-instruct:free"},
-			},
-			ProviderZukijourney: {
-				Codenames: []string{"llama-3.3-70b-instruct"},
-			},
-			ProviderCrof: {
-				Codenames: []string{"llama3.3-70b"},
-			},
-			//ProviderGithub: {
-			//	Codenames: []string{"meta/Llama-3.3-70B-Instruct"},
-			//},
-			ProviderElectron: {
-				Codenames: []string{"llama-3.3-70b-instruct"},
-			},
-			ProviderCloudflare: {
-				Codenames: []string{"@cf/meta/llama-3.3-70b-instruct-fp8-fast"},
-			},
-			ProviderMNN: {
-				Codenames: []string{"llama-3.3-70b"},
-			},
-			ProviderCerebras: {
-				Codenames: []string{"llama-3.3-70b"},
-			},
-			ProviderTogether: {
-				Codenames: []string{"meta-llama/Llama-3.3-70B-Instruct-Turbo-Free"},
-			},
-		},
-	}
-
-	ModelLlamaScout = Model{
-		Name:    "Meta Llama 4 Scout 109B/17A",
-		Command: "scout",
-		// no need for llama hacks, proper multimodality
-		Vision: true,
-		Providers: Providers{
-			ProviderGroq: {
-				Codenames: []string{"meta-llama/llama-4-scout-17b-16e-instruct"},
-			},
-			ProviderOpenRouter: {
-				Codenames: []string{"meta-llama/llama-4-scout:free"},
-			},
-			ProviderZukijourney: {
-				Codenames: []string{"llama-4-scout-17b-instruct"},
-			},
-			ProviderElectron: {
-				Codenames: []string{"llama-4-scout-17b-16e-instruct"},
-			},
-			ProviderCloudflare: {
-				Codenames: []string{"@cf/meta/llama-4-scout-17b-16e-instruct"},
-			},
-			ProviderMNN: {
-				Codenames: []string{"llama-4-scout"},
-			},
-			ProviderGithub: {
-				Codenames: []string{"meta/Llama-4-Scout-17B-16E-Instruct"},
-			},
-			ProviderCrof: {
-				Codenames: []string{"llama-4-scout-131k"},
-			},
-			ProviderCerebras: {
-				Codenames: []string{"llama-4-scout-17b-16e-instruct"},
-			},
-			ProviderChutes: {
-				Codenames: []string{"chutesai/Llama-4-Scout-17B-16E-Instruct"},
-			},
-			ProviderPollinations: {
-				Codenames: []string{"llama-4-scout-17b-16e-instruct"},
-			},
-			ProviderAtlas: {
-				Codenames: []string{"meta-llama/Llama-4-Scout-17B-16E-Instruct"},
-			},
-		},
-	}
-
-	ModelLlamaMaverick = Model{
-		Name:    "Meta Llama 4 Maverick 400B/17A",
-		Command: "maverick",
-		Vision:  true,
-		Providers: Providers{
-			ProviderGroq: {
-				Codenames: []string{"meta-llama/llama-4-maverick-17b-128e-instruct"},
-			},
-			ProviderZukijourney: {
-				Codenames: []string{"llama-4-maverick-17b-instruct"},
-			},
-			ProviderElectron: {
-				Codenames: []string{"llama-4-maverick-17b-128e-instruct"},
-			},
-			ProviderMNN: {
-				Codenames: []string{"llama-4-maverick"},
-			},
-			ProviderGithub: {
-				Codenames: []string{"meta/Llama-4-Maverick-17B-128E-Instruct-FP8"},
-			},
-			ProviderChutes: {
-				Codenames: []string{"chutesai/Llama-4-Maverick-17B-128E-Instruct-FP8"},
-			},
-		},
-	}
-
-	ModelGemma27b = Model{
-		Name:    "Google Gemma 3 27B",
-		Command: "gemma",
-		Providers: Providers{
-			ProviderCrof: {
-				Codenames: []string{"gemma-3-27b-it"},
-			},
-			ProviderGoogle: {
-				Codenames: []string{"gemma-3-27b-it"},
-			},
-		},
-	}
-
-	ModelDeepSeekV3 = Model{
-		Name:    "DeepSeek V3 671B (0324)",
-		Command: "deepseek",
-		Providers: Providers{
-			ProviderOpenRouter: {
-				Codenames: []string{"deepseek/deepseek-chat-v3-0324:free"},
-			},
-			ProviderChutes: {
-				Codenames: []string{"deepseek-ai/DeepSeek-V3-0324"},
-			},
-			ProviderZukijourney: {
-				Codenames: []string{"deepseek-chat"},
-			},
-			ProviderCrof: {
-				Codenames: []string{"deepseek-v3-0324"},
-			},
-			ProviderGithub: {
-				Codenames: []string{"deepseek/DeepSeek-V3-0324"},
-			},
-			ProviderMNN: {
-				Codenames: []string{"deepseek-v3-0324", "deepseek-v3"},
-			},
-			ProviderTargon: {
-				Codenames: []string{"deepseek-ai/DeepSeek-V3-0324"},
-			},
-			ProviderElectron: {
-				Codenames: []string{"deepseek-v3-0324"},
-			},
-			ProviderHcap: {
-				Codenames: []string{"deepseek-v3"},
-			},
-			//ProviderPollinations: {
-			//	Codenames: []string{"deepseek-v3"},
-			//},
-			ProviderAtlas: {
-				Codenames: []string{"deepseek-ai/DeepSeek-V3-0324"},
-			},
-		},
-	}
-
-	ModelDeepSeekV31 = Model{
-		Name:      "DeepSeek V3.1 671B",
-		Command:   "deepseekv31",
-		Reasoning: true,
-		Providers: Providers{
-			ProviderCrof: {
-				Codenames: []string{"deepseek-v3.1"},
-			},
-			ProviderMNN: {
-				Codenames: []string{"deepseek-v3.1"},
-			},
-			ProviderElectron: {
-				Codenames: []string{"deepseek-v3.1"},
-			},
-			ProviderHcap: {
-				Codenames: []string{"deepseek-v3.1"},
-			},
-			ProviderAtlas: {
-				Codenames: []string{"deepseek-ai/DeepSeek-V3.1"},
-			},
-			ProviderOpenRouter: {
-				Codenames: []string{"deepseek/deepseek-chat-v3.1:free"},
-			},
-		},
-	}
-
-	ModelDeepSeekR1 = Model{
-		Name:      "DeepSeek R1 671B (0528)",
-		Command:   "r1",
-		Reasoning: true,
-		Providers: Providers{
-			ProviderChutes: {
-				Codenames: []string{"deepseek-ai/DeepSeek-R1-0528"},
-			},
-			ProviderCrof: {
-				Codenames: []string{"deepseek-r1-0528"},
-			},
-			ProviderOpenRouter: {
-				Codenames: []string{"deepseek/deepseek-r1-0528:free"},
-			},
-			ProviderGithub: {
-				Codenames: []string{"deepseek/DeepSeek-R10-0528"},
-			},
-			ProviderElectron: {
-				Codenames: []string{"deepseek-r1-0528"},
-			},
-			ProviderMNN: {
-				Codenames: []string{"deepseek-r1-0528"},
-			},
-			ProviderHcap: {
-				Codenames: []string{"deepseek-r1"},
-			},
-			ProviderPollinations: {
-				Codenames: []string{"deepseek-r1-0528"},
-			},
-			ProviderTargon: {
-				Codenames: []string{"deepseek-ai/DeepSeek-R1-0528"},
-			},
-		},
-	}
-
-	ModelMagMell = Model{
-		Name:    "Mag Mell R1 12B (RP)",
-		Command: "magmell",
-		Providers: Providers{
-			ProviderSelfhosted: {
-				Codenames: []string{"MN-12B-Mag-Mell-R1"},
-			},
-			ProviderHuggingface: {
-				Codenames: []string{"inflatebot/MN-12B-Mag-Mell-R1"},
-			},
-		},
-	}
-
-	ModelCommandA = Model{
-		Name:    "Cohere Command A 111B",
-		Command: "commanda",
-		Providers: Providers{
-			ProviderCohere: {
-				Codenames: []string{"command-a-03-2025"},
-			},
-			ProviderZukijourney: {
-				Codenames: []string{"command-a"},
-			},
-		},
-	}
-
-	ModelO3 = Model{
-		Name:      "OpenAI o3",
-		Command:   "o3",
-		Reasoning: true,
-		Limited:   true,
-		Providers: Providers{
-			ProviderHcap: {
-				Codenames: []string{"o3"},
-			},
-			ProviderPollinations: {
-				Codenames: []string{"o3"},
-			},
-			ProviderMNN: {
-				Codenames: []string{"o3"},
-			},
-		},
-	}
-
-	ModelKimiK2 = Model{
-		Name:    "Moonshot AI Kimi K2",
-		Command: "kimi",
-		Providers: Providers{
-			ProviderOpenRouter: {
-				Codenames: []string{"moonshotai/kimi-k2:free"},
-			},
-			ProviderMNN: {
-				Codenames: []string{"kimi-k2"},
-			},
-			ProviderChutes: {
-				Codenames: []string{"moonshotai/Kimi-K2-Instruct"},
-			},
-			ProviderCrof: {
-				Codenames: []string{"kimi-k2"},
-			},
-		},
-	}
-
-	ModelGrok4Fast = Model{
-		Name:    "xAI Grok 4 Fast",
-		Command: "grok",
-		Providers: Providers{
-			ProviderOpenRouter: {
-				Codenames: []string{"x-ai/grok-4-fast:free"},
-			},
-		},
-	}
-
-	ModelVeniceUncensored = Model{
-		Name:    "Venice Uncensored",
-		Command: "venice",
-		Providers: Providers{
-			ProviderOpenRouter: {
-				Codenames: []string{"cognitivecomputations/dolphin-mistral-24b-venice-edition:free"},
-			},
-		},
-	}
-
-	ModelQwen3Coder = Model{
-		Name:    "Qwen3 Coder",
-		Command: "qwen3c",
-		Providers: Providers{
-			ProviderOpenRouter: {
-				Codenames: []string{"qwen/qwen3-coder:free"},
-			},
-		},
-	}
-
-	ModelQwen3 = Model{
-		Name:    "Qwen3 235B A22B",
-		Command: "qwen3",
-		Providers: Providers{
-			ProviderOpenRouter: {
-				Codenames: []string{"qwen/qwen3-235b-a22b:free"},
-			},
-		},
-	}
-
-	ModelGlm45Air = Model{
-		Name:    "Z.AI GLM 4.5 Air",
-		Command: "glm",
-		Providers: Providers{
-			ProviderOpenRouter: {
-				Codenames: []string{"z-ai/glm-4.5-air:free"},
-			},
-		},
-	}
-
-	ModelMarkovChain = Model{
-		Name:     "Markov Chain (not an LLM)",
-		Command:  "markov",
-		IsMarkov: true,
-	}
-
-	ModelEliza = Model{
-		Name:    "Eliza (psychotherapist, not an LLM)",
-		Command: "eliza",
-		IsEliza: true,
-	}
-
-	AllModels = []Model{
-		ModelDeepSeekV3,
-		ModelLlama70b,
-		ModelKimiK2,
-		ModelVeniceUncensored,
-		ModelGrok4Fast,
-		ModelDeepSeekV31,
-		ModelO3,
-		ModelLlamaScout,
-		ModelLlamaMaverick,
-		ModelGemma27b,
-		ModelDeepSeekR1,
-		ModelCommandA,
-		//ModelMagMell,
-		ModelGlm45Air,
-		ModelQwen3Coder,
-		ModelQwen3,
-		ModelGptOss,
-		ModelGeminiFlash,
-		ModelMarkovChain,
-		ModelEliza,
-	}
-
-	DefaultModels = []string{
-		ModelDeepSeekV3.Name,
-		ModelGrok4Fast.Name,
-		ModelLlama70b.Name,
-		ModelLlamaMaverick.Name,
-		ModelLlamaScout.Name,
-		ModelGpt5.Name,
-		ModelGeminiFlash.Name,
-	}
-	DefaultModel   = DefaultModels[0]
-	NarratorModels = []string{
-		ModelLlama70b.Name,
-		ModelLlamaScout.Name,
-		ModelLlamaMaverick.Name,
-		ModelGpt5.Name,
-		ModelGeminiFlash.Name,
-	}
-	DefaultVisionModels = []string{
-		ModelLlamaMaverick.Name,
-		ModelLlamaScout.Name,
-		ModelGpt5.Name,
-		ModelGrok4Fast.Name,
-	}
+	AllModels           []Model
+	DefaultModels       []string
+	DefaultModel        string
+	NarratorModels      []string
+	DefaultVisionModels []string
 
 	modelByName = map[string]Model{}
 
@@ -590,6 +150,53 @@ var (
 	lastScoreReset = time.Now()
 )
 
+type ModelsConfig struct {
+	Models              []Model  `json:"models"`
+	DefaultModels       []string `json:"default_models"`
+	NarratorModels      []string `json:"narrator_models"`
+	DefaultVisionModels []string `json:"default_vision_models"`
+	ProvidersOrder      []string `json:"providers_order"`
+}
+
+func LoadModelsFromJSON() error {
+	data, err := os.ReadFile("models.json")
+	if err != nil {
+		return err
+	}
+	return LoadModelsFromJSONData(data)
+}
+
+func LoadModelsFromJSONData(data []byte) error {
+	var config ModelsConfig
+	if err := json.Unmarshal(data, &config); err != nil {
+		return err
+	}
+
+	AllModels = config.Models
+
+	DefaultModels = config.DefaultModels
+	if len(DefaultModels) > 0 {
+		DefaultModel = DefaultModels[0]
+	}
+	NarratorModels = config.NarratorModels
+	DefaultVisionModels = config.DefaultVisionModels
+
+	if len(config.ProvidersOrder) > 0 {
+		allProviders = make([]*ScoredProvider, len(config.ProvidersOrder))
+		for i, providerName := range config.ProvidersOrder {
+			allProviders[i] = &ScoredProvider{Name: providerName}
+		}
+	}
+
+	// Update modelByName map
+	modelByName = make(map[string]Model)
+	for _, m := range AllModels {
+		modelByName[m.Name] = m
+	}
+
+	return nil
+}
+
 func resetProviderScore() {
 	for i, p := range allProviders {
 		p.Errors = i
@@ -619,10 +226,11 @@ func ScoreProviders(reasoning bool) []*ScoredProvider {
 }
 
 func init() {
-	resetProviderScore()
-	for _, m := range AllModels {
-		modelByName[m.Name] = m
+	if err := LoadModelsFromJSON(); err != nil {
+		panic("failed to load models: " + err.Error())
 	}
+
+	resetProviderScore()
 }
 
 func GetModelByName(name string) Model {
