@@ -195,7 +195,7 @@ func (l *Llmer) AddImage(imageURL string) {
 	msg.Images = append(msg.Images, imageURL)
 }
 
-func (l Llmer) convertMessages(hasVision bool, isLlama bool, prepend string) []openai.ChatCompletionMessage {
+func (l Llmer) convertMessages(hasVision bool, prepend string) []openai.ChatCompletionMessage {
 	// find the index of the last message with images
 	imageIdx := -1
 	for i := len(l.Messages) - 1; i >= 0; i-- {
@@ -205,13 +205,7 @@ func (l Llmer) convertMessages(hasVision bool, isLlama bool, prepend string) []o
 		}
 	}
 
-	if imageIdx != len(l.Messages)-1 && hasVision && isLlama {
-		// llama 3.2 doesn't support a system prompt and an image,
-		// but we can't afford to remove the system prompt in every context
-		// with images; and this message is not the last one, so we're not going
-		// to attach old context images
-		imageIdx = -1
-	} else if imageIdx != -1 && len(l.Messages)-imageIdx >= 8 {
+	if imageIdx != -1 && len(l.Messages)-imageIdx >= 8 {
 		// older than 8 messages, we can probably let it go
 		imageIdx = -1
 	}
@@ -223,12 +217,6 @@ func (l Llmer) convertMessages(hasVision bool, isLlama bool, prepend string) []o
 		}
 		if len(msg.Images) == 0 || !hasVision || i != imageIdx {
 			role := msg.Role
-			if msg.Role == RoleSystem && imageIdx != -1 && isLlama && hasVision {
-				// llama 3.2 doesn't support system messages with images
-				// so we're going to convert the system prompt into a user message
-				slog.Debug("replacing system message -> user message because of image (llama 3.2 with image)")
-				role = RoleUser
-			}
 			messages = append(messages, openai.ChatCompletionMessage{
 				Role:    role,
 				Content: msg.Content,
@@ -324,7 +312,7 @@ func (l *Llmer) requestCompletionInternal2(
 	}
 	req := openai.ChatCompletionRequest{
 		Model:    codename,
-		Messages: l.convertMessages(m.Vision, m.IsLlama, prepend),
+		Messages: l.convertMessages(m.Vision, prepend),
 		Stream:   true,
 		StreamOptions: &openai.StreamOptions{
 			IncludeUsage: true,

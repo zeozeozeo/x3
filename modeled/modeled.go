@@ -13,7 +13,7 @@ import (
 
 const (
 	modelsFilePath = "models.json"
-	port           = ":6741"
+	Port           = ":6741"
 )
 
 //go:embed static/*
@@ -38,7 +38,7 @@ func NewServer() *Server {
 	mux.HandleFunc("/", handleIndex)
 
 	server := &http.Server{
-		Addr:    port,
+		Addr:    Port,
 		Handler: mux,
 	}
 
@@ -48,7 +48,7 @@ func NewServer() *Server {
 }
 
 func (s *Server) Start() error {
-	slog.Info("Starting modeled server", "port", port)
+	slog.Info("Starting modeled server", "port", Port)
 	return s.httpServer.ListenAndServe()
 }
 

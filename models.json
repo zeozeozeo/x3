@@ -6,26 +6,40 @@
       "vision": true,
       "encoding": "o200k_base",
       "providers": {
-        "github": {
-          "codenames": ["openai/gpt-5"]
-        },
-        "zukijourney": {
-          "codenames": ["gpt-5"]
-        },
-        "helixmind": {
-          "codenames": ["gpt-5"]
+        "electronhub": {
+          "codenames": [
+            "gpt-5"
+          ]
         },
         "g4f": {
-          "codenames": ["gpt-5"]
+          "codenames": [
+            "gpt-5"
+          ]
         },
-        "electronhub": {
-          "codenames": ["gpt-5"]
-        },
-        "mnn": {
-          "codenames": ["gpt-5"]
+        "github": {
+          "codenames": [
+            "openai/gpt-5"
+          ]
         },
         "hcap": {
-          "codenames": ["gpt-5"]
+          "codenames": [
+            "gpt-5"
+          ]
+        },
+        "helixmind": {
+          "codenames": [
+            "gpt-5"
+          ]
+        },
+        "mnn": {
+          "codenames": [
+            "gpt-5"
+          ]
+        },
+        "zukijourney": {
+          "codenames": [
+            "gpt-5"
+          ]
         }
       }
     },
@@ -36,7 +50,9 @@
       "encoding": "o200k_base",
       "providers": {
         "openrouter": {
-          "codenames": ["openai/gpt-oss-120b:free"]
+          "codenames": [
+            "openai/gpt-oss-120b:free"
+          ]
         }
       }
     },
@@ -45,41 +61,60 @@
       "command": "gemini",
       "providers": {
         "openrouter": {
-          "codenames": ["google/gemini-2.0-flash-exp:free"]
+          "codenames": [
+            "google/gemini-2.0-flash-exp:free"
+          ]
         }
       }
     },
     {
       "name": "Meta Llama 3.3 70B",
       "command": "llama",
-      "is_llama": true,
       "providers": {
-        "groq": {
-          "codenames": ["llama-3.3-70b-versatile"]
-        },
-        "openrouter": {
-          "codenames": ["meta-llama/llama-3.3-70b-instruct:free"]
-        },
-        "zukijourney": {
-          "codenames": ["llama-3.3-70b-instruct"]
-        },
-        "crof": {
-          "codenames": ["llama3.3-70b"]
-        },
-        "electronhub": {
-          "codenames": ["llama-3.3-70b-instruct"]
+        "cerebras": {
+          "codenames": [
+            "llama-3.3-70b"
+          ]
         },
         "cloudflare": {
-          "codenames": ["@cf/meta/llama-3.3-70b-instruct-fp8-fast"]
+          "codenames": [
+            "@cf/meta/llama-3.3-70b-instruct-fp8-fast"
+          ]
+        },
+        "crof": {
+          "codenames": [
+            "llama3.3-70b"
+          ]
+        },
+        "electronhub": {
+          "codenames": [
+            "llama-3.3-70b-instruct"
+          ]
+        },
+        "groq": {
+          "codenames": [
+            "llama-3.3-70b-versatile"
+          ]
         },
         "mnn": {
-          "codenames": ["llama-3.3-70b"]
+          "codenames": [
+            "llama-3.3-70b"
+          ]
         },
-        "cerebras": {
-          "codenames": ["llama-3.3-70b"]
+        "openrouter": {
+          "codenames": [
+            "meta-llama/llama-3.3-70b-instruct:free"
+          ]
         },
         "together": {
-          "codenames": ["meta-llama/Llama-3.3-70B-Instruct-Turbo-Free"]
+          "codenames": [
+            "meta-llama/Llama-3.3-70B-Instruct-Turbo-Free"
+          ]
+        },
+        "zukijourney": {
+          "codenames": [
+            "llama-3.3-70b-instruct"
+          ]
         }
       }
     },
@@ -88,41 +123,65 @@
       "command": "scout",
       "vision": true,
       "providers": {
-        "groq": {
-          "codenames": ["meta-llama/llama-4-scout-17b-16e-instruct"]
-        },
-        "openrouter": {
-          "codenames": ["meta-llama/llama-4-scout:free"]
-        },
-        "zukijourney": {
-          "codenames": ["llama-4-scout-17b-instruct"]
-        },
-        "electronhub": {
-          "codenames": ["llama-4-scout-17b-16e-instruct"]
-        },
-        "cloudflare": {
-          "codenames": ["@cf/meta/llama-4-scout-17b-16e-instruct"]
-        },
-        "mnn": {
-          "codenames": ["llama-4-scout"]
-        },
-        "github": {
-          "codenames": ["meta/Llama-4-Scout-17B-16E-Instruct"]
-        },
-        "crof": {
-          "codenames": ["llama-4-scout-131k"]
+        "atlas": {
+          "codenames": [
+            "meta-llama/Llama-4-Scout-17B-16E-Instruct"
+          ]
         },
         "cerebras": {
-          "codenames": ["llama-4-scout-17b-16e-instruct"]
+          "codenames": [
+            "llama-4-scout-17b-16e-instruct"
+          ]
         },
         "chutes": {
-          "codenames": ["chutesai/Llama-4-Scout-17B-16E-Instruct"]
+          "codenames": [
+            "chutesai/Llama-4-Scout-17B-16E-Instruct"
+          ]
+        },
+        "cloudflare": {
+          "codenames": [
+            "@cf/meta/llama-4-scout-17b-16e-instruct"
+          ]
+        },
+        "crof": {
+          "codenames": [
+            "llama-4-scout-131k"
+          ]
+        },
+        "electronhub": {
+          "codenames": [
+            "llama-4-scout-17b-16e-instruct"
+          ]
+        },
+        "github": {
+          "codenames": [
+            "meta/Llama-4-Scout-17B-16E-Instruct"
+          ]
+        },
+        "groq": {
+          "codenames": [
+            "meta-llama/llama-4-scout-17b-16e-instruct"
+          ]
+        },
+        "mnn": {
+          "codenames": [
+            "llama-4-scout"
+          ]
+        },
+        "openrouter": {
+          "codenames": [
+            "meta-llama/llama-4-scout:free"
+          ]
         },
         "pollinations": {
-          "codenames": ["llama-4-scout-17b-16e-instruct"]
+          "codenames": [
+            "llama-4-scout-17b-16e-instruct"
+          ]
         },
-        "atlas": {
-          "codenames": ["meta-llama/Llama-4-Scout-17B-16E-Instruct"]
+        "zukijourney": {
+          "codenames": [
+            "llama-4-scout-17b-instruct"
+          ]
         }
       }
     },
@@ -131,23 +190,35 @@
       "command": "maverick",
       "vision": true,
       "providers": {
-        "groq": {
-          "codenames": ["meta-llama/llama-4-maverick-17b-128e-instruct"]
-        },
-        "zukijourney": {
-          "codenames": ["llama-4-maverick-17b-instruct"]
+        "chutes": {
+          "codenames": [
+            "chutesai/Llama-4-Maverick-17B-128E-Instruct-FP8"
+          ]
         },
         "electronhub": {
-          "codenames": ["llama-4-maverick-17b-128e-instruct"]
-        },
-        "mnn": {
-          "codenames": ["llama-4-maverick"]
+          "codenames": [
+            "llama-4-maverick-17b-128e-instruct"
+          ]
         },
         "github": {
-          "codenames": ["meta/Llama-4-Maverick-17B-128E-Instruct-FP8"]
+          "codenames": [
+            "meta/Llama-4-Maverick-17B-128E-Instruct-FP8"
+          ]
         },
-        "chutes": {
-          "codenames": ["chutesai/Llama-4-Maverick-17B-128E-Instruct-FP8"]
+        "groq": {
+          "codenames": [
+            "meta-llama/llama-4-maverick-17b-128e-instruct"
+          ]
+        },
+        "mnn": {
+          "codenames": [
+            "llama-4-maverick"
+          ]
+        },
+        "zukijourney": {
+          "codenames": [
+            "llama-4-maverick-17b-instruct"
+          ]
         }
       }
     },
@@ -156,10 +227,14 @@
       "command": "gemma",
       "providers": {
         "crof": {
-          "codenames": ["gemma-3-27b-it"]
+          "codenames": [
+            "gemma-3-27b-it"
+          ]
         },
         "google": {
-          "codenames": ["gemma-3-27b-it"]
+          "codenames": [
+            "gemma-3-27b-it"
+          ]
         }
       }
     },
@@ -167,35 +242,56 @@
       "name": "DeepSeek V3 671B (0324)",
       "command": "deepseek",
       "providers": {
-        "openrouter": {
-          "codenames": ["deepseek/deepseek-chat-v3-0324:free"]
+        "atlas": {
+          "codenames": [
+            "deepseek-ai/DeepSeek-V3-0324"
+          ]
         },
         "chutes": {
-          "codenames": ["deepseek-ai/DeepSeek-V3-0324"]
-        },
-        "zukijourney": {
-          "codenames": ["deepseek-chat"]
+          "codenames": [
+            "deepseek-ai/DeepSeek-V3-0324"
+          ]
         },
         "crof": {
-          "codenames": ["deepseek-v3-0324"]
-        },
-        "github": {
-          "codenames": ["deepseek/DeepSeek-V3-0324"]
-        },
-        "mnn": {
-          "codenames": ["deepseek-v3-0324", "deepseek-v3"]
-        },
-        "targon": {
-          "codenames": ["deepseek-ai/DeepSeek-V3-0324"]
+          "codenames": [
+            "deepseek-v3-0324"
+          ]
         },
         "electronhub": {
-          "codenames": ["deepseek-v3-0324"]
+          "codenames": [
+            "deepseek-v3-0324"
+          ]
+        },
+        "github": {
+          "codenames": [
+            "deepseek/DeepSeek-V3-0324"
+          ]
         },
         "hcap": {
-          "codenames": ["deepseek-v3"]
+          "codenames": [
+            "deepseek-v3"
+          ]
         },
-        "atlas": {
-          "codenames": ["deepseek-ai/DeepSeek-V3-0324"]
+        "mnn": {
+          "codenames": [
+            "deepseek-v3-0324",
+            "deepseek-v3"
+          ]
+        },
+        "openrouter": {
+          "codenames": [
+            "deepseek/deepseek-chat-v3-0324:free"
+          ]
+        },
+        "targon": {
+          "codenames": [
+            "deepseek-ai/DeepSeek-V3-0324"
+          ]
+        },
+        "zukijourney": {
+          "codenames": [
+            "deepseek-chat"
+          ]
         }
       }
     },
@@ -204,23 +300,35 @@
       "command": "deepseekv31",
       "reasoning": true,
       "providers": {
-        "crof": {
-          "codenames": ["deepseek-v3.1"]
+        "atlas": {
+          "codenames": [
+            "deepseek-ai/DeepSeek-V3.1"
+          ]
         },
-        "mnn": {
-          "codenames": ["deepseek-v3.1"]
+        "crof": {
+          "codenames": [
+            "deepseek-v3.1"
+          ]
         },
         "electronhub": {
-          "codenames": ["deepseek-v3.1"]
+          "codenames": [
+            "deepseek-v3.1"
+          ]
         },
         "hcap": {
-          "codenames": ["deepseek-v3.1"]
+          "codenames": [
+            "deepseek-v3.1"
+          ]
         },
-        "atlas": {
-          "codenames": ["deepseek-ai/DeepSeek-V3.1"]
+        "mnn": {
+          "codenames": [
+            "deepseek-v3.1"
+          ]
         },
         "openrouter": {
-          "codenames": ["deepseek/deepseek-chat-v3.1:free"]
+          "codenames": [
+            "deepseek/deepseek-chat-v3.1:free"
+          ]
         }
       }
     },
@@ -230,31 +338,49 @@
       "reasoning": true,
       "providers": {
         "chutes": {
-          "codenames": ["deepseek-ai/DeepSeek-R1-0528"]
+          "codenames": [
+            "deepseek-ai/DeepSeek-R1-0528"
+          ]
         },
         "crof": {
-          "codenames": ["deepseek-r1-0528"]
-        },
-        "openrouter": {
-          "codenames": ["deepseek/deepseek-r1-0528:free"]
-        },
-        "github": {
-          "codenames": ["deepseek/DeepSeek-R10-0528"]
+          "codenames": [
+            "deepseek-r1-0528"
+          ]
         },
         "electronhub": {
-          "codenames": ["deepseek-r1-0528"]
+          "codenames": [
+            "deepseek-r1-0528"
+          ]
         },
-        "mnn": {
-          "codenames": ["deepseek-r1-0528"]
+        "github": {
+          "codenames": [
+            "deepseek/DeepSeek-R10-0528"
+          ]
         },
         "hcap": {
-          "codenames": ["deepseek-r1"]
+          "codenames": [
+            "deepseek-r1"
+          ]
+        },
+        "mnn": {
+          "codenames": [
+            "deepseek-r1-0528"
+          ]
+        },
+        "openrouter": {
+          "codenames": [
+            "deepseek/deepseek-r1-0528:free"
+          ]
         },
         "pollinations": {
-          "codenames": ["deepseek-r1-0528"]
+          "codenames": [
+            "deepseek-r1-0528"
+          ]
         },
         "targon": {
-          "codenames": ["deepseek-ai/DeepSeek-R1-0528"]
+          "codenames": [
+            "deepseek-ai/DeepSeek-R1-0528"
+          ]
         }
       }
     },
@@ -262,11 +388,15 @@
       "name": "Mag Mell R1 12B (RP)",
       "command": "magmell",
       "providers": {
-        "selfhosted": {
-          "codenames": ["MN-12B-Mag-Mell-R1"]
-        },
         "huggingface": {
-          "codenames": ["inflatebot/MN-12B-Mag-Mell-R1"]
+          "codenames": [
+            "inflatebot/MN-12B-Mag-Mell-R1"
+          ]
+        },
+        "selfhosted": {
+          "codenames": [
+            "MN-12B-Mag-Mell-R1"
+          ]
         }
       }
     },
@@ -275,10 +405,14 @@
       "command": "commanda",
       "providers": {
         "cohere": {
-          "codenames": ["command-a-03-2025"]
+          "codenames": [
+            "command-a-03-2025"
+          ]
         },
         "zukijourney": {
-          "codenames": ["command-a"]
+          "codenames": [
+            "command-a"
+          ]
         }
       }
     },
@@ -286,43 +420,60 @@
       "name": "OpenAI o3",
       "command": "o3",
       "reasoning": true,
-      "limited": true,
       "providers": {
         "hcap": {
-          "codenames": ["o3"]
-        },
-        "pollinations": {
-          "codenames": ["o3"]
+          "codenames": [
+            "o3"
+          ]
         },
         "mnn": {
-          "codenames": ["o3"]
+          "codenames": [
+            "o3"
+          ]
+        },
+        "pollinations": {
+          "codenames": [
+            "o3"
+          ]
         }
-      }
+      },
+      "limited": true
     },
     {
       "name": "Moonshot AI Kimi K2",
       "command": "kimi",
       "providers": {
-        "openrouter": {
-          "codenames": ["moonshotai/kimi-k2:free"]
-        },
-        "mnn": {
-          "codenames": ["kimi-k2"]
-        },
         "chutes": {
-          "codenames": ["moonshotai/Kimi-K2-Instruct"]
+          "codenames": [
+            "moonshotai/Kimi-K2-Instruct"
+          ]
         },
         "crof": {
-          "codenames": ["kimi-k2"]
+          "codenames": [
+            "kimi-k2"
+          ]
+        },
+        "mnn": {
+          "codenames": [
+            "kimi-k2"
+          ]
+        },
+        "openrouter": {
+          "codenames": [
+            "moonshotai/kimi-k2:free"
+          ]
         }
       }
     },
     {
       "name": "xAI Grok 4 Fast",
       "command": "grok",
+      "vision": true,
       "providers": {
         "openrouter": {
-          "codenames": ["x-ai/grok-4-fast:free"]
+          "codenames": [
+            "x-ai/grok-4-fast:free"
+          ]
         }
       }
     },
@@ -331,7 +482,9 @@
       "command": "venice",
       "providers": {
         "openrouter": {
-          "codenames": ["cognitivecomputations/dolphin-mistral-24b-venice-edition:free"]
+          "codenames": [
+            "cognitivecomputations/dolphin-mistral-24b-venice-edition:free"
+          ]
         }
       }
     },
@@ -340,7 +493,9 @@
       "command": "qwen3c",
       "providers": {
         "openrouter": {
-          "codenames": ["qwen/qwen3-coder:free"]
+          "codenames": [
+            "qwen/qwen3-coder:free"
+          ]
         }
       }
     },
@@ -349,7 +504,9 @@
       "command": "qwen3",
       "providers": {
         "openrouter": {
-          "codenames": ["qwen/qwen3-235b-a22b:free"]
+          "codenames": [
+            "qwen/qwen3-235b-a22b:free"
+          ]
         }
       }
     },
@@ -358,7 +515,9 @@
       "command": "glm",
       "providers": {
         "openrouter": {
-          "codenames": ["z-ai/glm-4.5-air:free"]
+          "codenames": [
+            "z-ai/glm-4.5-air:free"
+          ]
         }
       }
     },

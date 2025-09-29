@@ -85,22 +85,20 @@ const (
 )
 
 type ModelProvider struct {
-	Codenames []string
+	Codenames []string `json:"codenames"`
 }
 
 type Model struct {
-	Name        string
-	Command     string
-	Whitelisted bool
-	// Llama 3.2 doesn't support system prompts when images are passed, so we
-	// have to detect it :/
-	IsLlama           bool
-	Vision            bool
-	Reasoning         bool
-	Encoding          tokenizer.Encoding
-	Providers         Providers
-	IsMarkov, IsEliza bool
-	Limited           bool // disable custom inference settings
+	Name        string                   `json:"name,omitempty"`
+	Command     string                   `json:"command,omitempty"`
+	Whitelisted bool                     `json:"whitelisted,omitempty"`
+	Vision      bool                     `json:"vision,omitempty"`
+	Reasoning   bool                     `json:"reasoning,omitempty"`
+	Encoding    tokenizer.Encoding       `json:"encoding,omitempty"`
+	Providers   map[string]ModelProvider `json:"providers,omitempty"`
+	IsMarkov    bool                     `json:"is_markov,omitempty"`
+	IsEliza     bool                     `json:"is_eliza,omitempty"`
+	Limited     bool                     `json:"limited,omitempty"` // disable custom inference settings
 }
 
 type ScoredProvider struct {
@@ -108,8 +106,6 @@ type ScoredProvider struct {
 	PreferReasoning bool
 	Errors          int
 }
-
-type Providers map[string]ModelProvider
 
 var (
 	AllModels           []Model

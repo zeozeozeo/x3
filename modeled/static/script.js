@@ -22,7 +22,7 @@ function setupEventListeners() {
     document.getElementById('saveModelBtn').addEventListener('click', saveModel);
     document.getElementById('deleteModelBtn').addEventListener('click', deleteModel);
     document.getElementById('cancelModelBtn').addEventListener('click', closeModelModal);
-    document.getElementById('addProviderBtn').addEventListener('click', addProviderField);
+    document.getElementById('addProviderBtn').addEventListener('click', () => addProviderField());
     
     // Modal close handlers
     document.querySelector('.close').addEventListener('click', closeModelModal);
@@ -99,7 +99,6 @@ function renderModels() {
             <div class="model-features">
                 ${model.vision ? '<span class="feature-tag vision">Vision</span>' : ''}
                 ${model.reasoning ? '<span class="feature-tag reasoning">Reasoning</span>' : ''}
-                ${model.is_llama ? '<span class="feature-tag llama">Llama</span>' : ''}
                 ${model.is_markov ? '<span class="feature-tag">Markov</span>' : ''}
                 ${model.is_eliza ? '<span class="feature-tag">Eliza</span>' : ''}
                 ${model.limited ? '<span class="feature-tag">Limited</span>' : ''}
@@ -128,27 +127,48 @@ function renderProviders() {
 }
 
 function renderDefaults() {
-    renderDefaultModels('default-models', currentConfig.default_models);
-    renderDefaultModels('narrator-models', currentConfig.narrator_models);
-    renderDefaultModels('vision-models', currentConfig.default_vision_models);
+    renderDefaultModels('default-models', currentConfig.default_models, 'default_models');
+    renderDefaultModels('narrator-models', currentConfig.narrator_models, 'narrator_models');
+    renderDefaultModels('vision-models', currentConfig.default_vision_models, 'default_vision_models');
 }
 
-function renderDefaultModels(containerId, models) {
+function renderDefaultModels(containerId, models, configKey) {
     const container = document.getElementById(containerId);
+    
+    // Add header with add button
+    const header = document.createElement('div');
+    header.className = 'section-header';
+    header.innerHTML = `
+        <button class="btn btn-secondary btn-sm" onclick="openAddModelModal('${configKey}')">Add Model</button>
+    `;
+    
+    // Clear and rebuild container
+    container.innerHTML = '';
+    container.appendChild(header);
+    
     if (!models || models.length === 0) {
-        container.innerHTML = '<div class="empty-state"><p>No models selected</p></div>';
+        const emptyState = document.createElement('div');
+        emptyState.className = 'empty-state';
+        emptyState.innerHTML = '<p>No models selected</p>';
+        container.appendChild(emptyState);
         return;
     }
     
-    container.innerHTML = models.map(modelName => {
+    const listContainer = document.createElement('div');
+    listContainer.className = 'sortable-list';
+    
+    listContainer.innerHTML = models.map(modelName => {
         const model = currentConfig.models.find(m => m.name === modelName);
         return `
             <div class="sortable-item">
                 <span>${escapeHtml(modelName)}</span>
                 ${model ? `<span style="font-size: 12px; color: #7f8c8d;">/${escapeHtml(model.command)}</span>` : ''}
+                <button class="remove-default-model" onclick="removeFromDefaultModels('${configKey}', '${escapeHtml(modelName)}')" title="Remove from list">×</button>
             </div>
         `;
     }).join('');
+    
+    container.appendChild(listContainer);
     
     if (containerId === 'default-models') {
         initDefaultModelsSortable();
@@ -179,13 +199,16 @@ function initDefaultModelsSortable() {
         const element = document.getElementById(containerId);
         if (!element) return;
         
-        Sortable.create(element, {
+        const listContainer = element.querySelector('.sortable-list');
+        if (!listContainer) return;
+        
+        Sortable.create(listContainer, {
             animation: 150,
             ghostClass: 'sortable-ghost',
             chosenClass: 'sortable-chosen',
             group: containerId,
             onEnd: function(evt) {
-                const newOrder = Array.from(element.children).map(div => 
+                const newOrder = Array.from(listContainer.children).map(div =>
                     div.querySelector('span').textContent
                 );
                 
@@ -199,6 +222,134 @@ function initDefaultModelsSortable() {
             }
         });
     });
+}
+
+function openAddModelModal(configKey) {
+    const availableModels = currentConfig.models.filter(model => {
+        // Filter based on config key
+        if (configKey === 'default_vision_models' && !model.vision) {
+            return false;
+        }
+        // Don't show models that are already in the list
+        const currentList = getCurrentList(configKey);
+        return !currentList.includes(model.name);
+    });
+    
+    if (availableModels.length === 0) {
+        showStatus('No available models to add', 'error');
+        return;
+    }
+    
+    const modal = document.createElement('div');
+    modal.className = 'modal';
+    modal.style.display = 'block';
+    modal.innerHTML = `
+        <div class="modal-content" style="max-width: 400px;">
+            <div class="modal-header">
+                <h3>Add Model to ${getListDisplayName(configKey)}</h3>
+                <span class="close" onclick="this.parentElement.parentElement.parentElement.remove()">&times;</span>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label>Select Model:</label>
+                    <select id="modelSelect" style="width: 100%; padding: 8px;">
+                        ${availableModels.map(model =>
+                            `<option value="${escapeHtml(model.name)}">${escapeHtml(model.name)} (/${escapeHtml(model.command)})</option>`
+                        ).join('')}
+                    </select>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-primary" onclick="addToDefaultModels('${configKey}')">Add Model</button>
+                <button type="button" class="btn btn-secondary" onclick="this.parentElement.parentElement.parentElement.parentElement.remove()">Cancel</button>
+            </div>
+        </div>
+    `;
+    
+    document.body.appendChild(modal);
+    
+    // Close modal when clicking outside
+    modal.addEventListener('click', function(e) {
+        if (e.target === this) {
+            this.remove();
+        }
+    });
+}
+
+function getCurrentList(configKey) {
+    switch(configKey) {
+        case 'default_models': return currentConfig.default_models || [];
+        case 'narrator_models': return currentConfig.narrator_models || [];
+        case 'default_vision_models': return currentConfig.default_vision_models || [];
+        default: return [];
+    }
+}
+
+function getListDisplayName(configKey) {
+    switch(configKey) {
+        case 'default_models': return 'Default Models';
+        case 'narrator_models': return 'Narrator Models';
+        case 'default_vision_models': return 'Vision Models';
+        default: return 'List';
+    }
+}
+
+function addToDefaultModels(configKey) {
+    const select = document.getElementById('modelSelect');
+    const modelName = select.value;
+    
+    if (!modelName) return;
+    
+    const currentList = getCurrentList(configKey);
+    if (currentList.includes(modelName)) {
+        showStatus('Model is already in the list', 'error');
+        return;
+    }
+    
+    currentList.push(modelName);
+    
+    // Update the config
+    switch(configKey) {
+        case 'default_models':
+            currentConfig.default_models = currentList;
+            break;
+        case 'narrator_models':
+            currentConfig.narrator_models = currentList;
+            break;
+        case 'default_vision_models':
+            currentConfig.default_vision_models = currentList;
+            break;
+    }
+    
+    // Close modal and refresh
+    document.querySelector('.modal').remove();
+    renderConfig();
+    showStatus('Model added successfully', 'success');
+}
+
+function removeFromDefaultModels(configKey, modelName) {
+    const currentList = getCurrentList(configKey);
+    const index = currentList.indexOf(modelName);
+    
+    if (index > -1) {
+        currentList.splice(index, 1);
+        
+        // Update the config
+        switch(configKey) {
+            case 'default_models':
+                currentConfig.default_models = currentList;
+                break;
+            case 'narrator_models':
+                currentConfig.narrator_models = currentList;
+                break;
+            case 'default_vision_models':
+                currentConfig.default_vision_models = currentList;
+                break;
+        }
+        
+        renderConfig();
+        showStatus('Model removed successfully', 'success');
+    }
 }
 
 function openModelModal(index) {
@@ -236,7 +387,6 @@ function populateModelForm(model) {
     document.getElementById('modelCommand').value = model.command || '';
     document.getElementById('modelVision').checked = model.vision || false;
     document.getElementById('modelReasoning').checked = model.reasoning || false;
-    document.getElementById('modelIsLlama').checked = model.is_llama || false;
     document.getElementById('modelIsMarkov').checked = model.is_markov || false;
     document.getElementById('modelIsEliza').checked = model.is_eliza || false;
     document.getElementById('modelLimited').checked = model.limited || false;
@@ -286,7 +436,6 @@ function saveModel() {
         command: formData.get('command'),
         vision: formData.get('vision') === 'on',
         reasoning: formData.get('reasoning') === 'on',
-        is_llama: formData.get('is_llama') === 'on',
         is_markov: formData.get('is_markov') === 'on',
         is_eliza: formData.get('is_eliza') === 'on',
         limited: formData.get('limited') === 'on',
