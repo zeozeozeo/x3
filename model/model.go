@@ -37,7 +37,6 @@ var (
 const (
 	azureBaseURL        = "https://models.inference.ai.azure.com"
 	zjBaseURL           = "https://api.zukijourney.com/v1"
-	hmBaseURL           = "https://helixmind.online/v1"
 	groqBaseURL         = "https://api.groq.com/openai/v1"
 	googleBaseURL       = "https://generativelanguage.googleapis.com/v1beta/openai"
 	openRouterBaseURL   = "https://openrouter.ai/api/v1"
@@ -56,12 +55,13 @@ const (
 	targonBaseURL       = "https://api.targon.com/v1"
 	atlasBaseURL        = "https://api.atlascloud.ai/v1"
 	huggingfaceBaseURL  = "https://router.huggingface.co/featherless-ai/v1"
+	akashBaseURL        = "https://chatapi.akash.network/api/v1"
+	llm7BaseURL         = "https://api.llm7.io/v1"
 )
 
 const (
 	ProviderGithub       = "github"
 	ProviderZukijourney  = "zukijourney"
-	ProviderHelixmind    = "helixmind"
 	ProviderGroq         = "groq"
 	ProviderGoogle       = "google"
 	ProviderOpenRouter   = "openrouter"
@@ -82,6 +82,8 @@ const (
 	ProviderTargon       = "targon"
 	ProviderAtlas        = "atlas"
 	ProviderHuggingface  = "huggingface"
+	ProviderAkash        = "akash"
+	ProviderLLM7         = "llm7"
 )
 
 type ModelProvider struct {
@@ -127,16 +129,17 @@ var (
 		{Name: ProviderNineteen},
 		{Name: ProviderGoogle},
 		{Name: ProviderAtlas},
+		{Name: ProviderAkash},
 		//{Name: ProviderTargon},
 		{Name: ProviderCloudflare},
 		{Name: ProviderMNN},
 		{Name: ProviderCrof},
 		{Name: ProviderElectron},
 		{Name: ProviderHcap},
-		{Name: ProviderHelixmind},
 		{Name: ProviderZukijourney},
 		{Name: ProviderCohere}, // 1,000 reqs/mo limit
 		{Name: ProviderOpenRouter},
+		{Name: ProviderLLM7},
 		{Name: ProviderGithub},
 		{Name: ProviderPollinations},
 		{Name: ProviderHuggingface},
@@ -264,8 +267,6 @@ func (m Model) Client(provider string) (baseUrls []string, tokens []string, code
 	switch provider {
 	case ProviderZukijourney:
 		tokenEnvKey, apiVar = "X3_ZJ_TOKEN", zjBaseURL
-	case ProviderHelixmind:
-		tokenEnvKey, apiVar = "X3_HM_TOKEN", hmBaseURL
 	case ProviderGroq:
 		tokenEnvKey, apiVar = "X3_GROQ_TOKEN", groqBaseURL
 	case ProviderGoogle:
@@ -316,6 +317,10 @@ func (m Model) Client(provider string) (baseUrls []string, tokens []string, code
 		tokenEnvKey, apiVar = "X3_ATLAS_TOKEN", atlasBaseURL
 	case ProviderHuggingface:
 		tokenEnvKey, apiVar = "X3_HUGGINGFACE_TOKEN", huggingfaceBaseURL
+	case ProviderAkash:
+		tokenEnvKey, apiVar = "X3_AKASH_TOKEN", akashBaseURL
+	case ProviderLLM7:
+		tokenEnvKey, apiVar = "X3_LLM7_TOKEN", llm7BaseURL
 	default:
 		return nil, nil, nil
 	}

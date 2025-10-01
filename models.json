@@ -49,6 +49,11 @@
       "reasoning": true,
       "encoding": "o200k_base",
       "providers": {
+        "akash": {
+          "codenames": [
+            "gpt-oss-120b"
+          ]
+        },
         "openrouter": {
           "codenames": [
             "openai/gpt-oss-120b:free"
@@ -57,12 +62,64 @@
       }
     },
     {
-      "name": "Google Gemini 2.0 Flash Experimental",
-      "command": "gemini",
+      "name": "DeepSeek V3 671B (0324)",
+      "command": "deepseek",
       "providers": {
+        "atlas": {
+          "codenames": [
+            "deepseek-ai/DeepSeek-V3-0324"
+          ]
+        },
+        "chutes": {
+          "codenames": [
+            "deepseek-ai/DeepSeek-V3-0324"
+          ]
+        },
+        "crof": {
+          "codenames": [
+            "deepseek-v3-0324"
+          ]
+        },
+        "electronhub": {
+          "codenames": [
+            "deepseek-v3-0324",
+            "deepseek-v3-0324:free"
+          ]
+        },
+        "github": {
+          "codenames": [
+            "deepseek/DeepSeek-V3-0324"
+          ]
+        },
+        "hcap": {
+          "codenames": [
+            "deepseek-v3"
+          ]
+        },
+        "llm7": {
+          "codenames": [
+            "deepseek-v3-0324"
+          ]
+        },
+        "mnn": {
+          "codenames": [
+            "deepseek-v3-0324",
+            "deepseek-v3"
+          ]
+        },
         "openrouter": {
           "codenames": [
-            "google/gemini-2.0-flash-exp:free"
+            "deepseek/deepseek-chat-v3-0324:free"
+          ]
+        },
+        "targon": {
+          "codenames": [
+            "deepseek-ai/DeepSeek-V3-0324"
+          ]
+        },
+        "zukijourney": {
+          "codenames": [
+            "deepseek-chat"
           ]
         }
       }
@@ -71,6 +128,11 @@
       "name": "Meta Llama 3.3 70B",
       "command": "llama",
       "providers": {
+        "akash": {
+          "codenames": [
+            "Meta-Llama-3-3-70B-Instruct"
+          ]
+        },
         "cerebras": {
           "codenames": [
             "llama-3.3-70b"
@@ -190,6 +252,11 @@
       "command": "maverick",
       "vision": true,
       "providers": {
+        "akash": {
+          "codenames": [
+            "Meta-Llama-4-Maverick-17B-128E-Instruct-FP8"
+          ]
+        },
         "chutes": {
           "codenames": [
             "chutesai/Llama-4-Maverick-17B-128E-Instruct-FP8"
@@ -223,74 +290,22 @@
       }
     },
     {
-      "name": "Google Gemma 3 27B",
-      "command": "gemma",
+      "name": "DeepSeek V3.2 Exp",
+      "command": "deepseekv32",
       "providers": {
         "crof": {
           "codenames": [
-            "gemma-3-27b-it"
-          ]
-        },
-        "google": {
-          "codenames": [
-            "gemma-3-27b-it"
-          ]
-        }
-      }
-    },
-    {
-      "name": "DeepSeek V3 671B (0324)",
-      "command": "deepseek",
-      "providers": {
-        "atlas": {
-          "codenames": [
-            "deepseek-ai/DeepSeek-V3-0324"
-          ]
-        },
-        "chutes": {
-          "codenames": [
-            "deepseek-ai/DeepSeek-V3-0324"
-          ]
-        },
-        "crof": {
-          "codenames": [
-            "deepseek-v3-0324"
+            "deepseek-v3.2-exp"
           ]
         },
         "electronhub": {
           "codenames": [
-            "deepseek-v3-0324"
-          ]
-        },
-        "github": {
-          "codenames": [
-            "deepseek/DeepSeek-V3-0324"
-          ]
-        },
-        "hcap": {
-          "codenames": [
-            "deepseek-v3"
+            "deepseek-v3.2-exp"
           ]
         },
         "mnn": {
           "codenames": [
-            "deepseek-v3-0324",
-            "deepseek-v3"
-          ]
-        },
-        "openrouter": {
-          "codenames": [
-            "deepseek/deepseek-chat-v3-0324:free"
-          ]
-        },
-        "targon": {
-          "codenames": [
-            "deepseek-ai/DeepSeek-V3-0324"
-          ]
-        },
-        "zukijourney": {
-          "codenames": [
-            "deepseek-chat"
+            "deepseek-v3.2-exp"
           ]
         }
       }
@@ -300,6 +315,11 @@
       "command": "deepseekv31",
       "reasoning": true,
       "providers": {
+        "akash": {
+          "codenames": [
+            "DeepSeek-V3-1"
+          ]
+        },
         "atlas": {
           "codenames": [
             "deepseek-ai/DeepSeek-V3.1"
@@ -312,7 +332,8 @@
         },
         "electronhub": {
           "codenames": [
-            "deepseek-v3.1"
+            "deepseek-v3.1",
+            "deepseek-v3.1:free"
           ]
         },
         "hcap": {
@@ -349,7 +370,8 @@
         },
         "electronhub": {
           "codenames": [
-            "deepseek-r1-0528"
+            "deepseek-r1-0528",
+            "deepseek-r1-0528:free"
           ]
         },
         "github": {
@@ -360,6 +382,11 @@
         "hcap": {
           "codenames": [
             "deepseek-r1"
+          ]
+        },
+        "llm7": {
+          "codenames": [
+            "deepseek-ai/DeepSeek-R1-0528"
           ]
         },
         "mnn": {
@@ -380,22 +407,6 @@
         "targon": {
           "codenames": [
             "deepseek-ai/DeepSeek-R1-0528"
-          ]
-        }
-      }
-    },
-    {
-      "name": "Mag Mell R1 12B (RP)",
-      "command": "magmell",
-      "providers": {
-        "huggingface": {
-          "codenames": [
-            "inflatebot/MN-12B-Mag-Mell-R1"
-          ]
-        },
-        "selfhosted": {
-          "codenames": [
-            "MN-12B-Mag-Mell-R1"
           ]
         }
       }
@@ -440,22 +451,30 @@
       "limited": true
     },
     {
-      "name": "Moonshot AI Kimi K2",
+      "name": "Moonshot AI Kimi K2 0905",
       "command": "kimi",
       "providers": {
-        "chutes": {
-          "codenames": [
-            "moonshotai/Kimi-K2-Instruct"
-          ]
-        },
         "crof": {
           "codenames": [
-            "kimi-k2"
+            "kimi-k2-eco",
+            "kimi-k2-0905",
+            "kimi-k2-0905-turbo"
+          ]
+        },
+        "electronhub": {
+          "codenames": [
+            "kimi-k2-instruct-0905",
+            "kimi-k2-instruct-0905:free"
+          ]
+        },
+        "groq": {
+          "codenames": [
+            "moonshotai/kimi-k2-instruct-0905"
           ]
         },
         "mnn": {
           "codenames": [
-            "kimi-k2"
+            "kimi-k2-0905-preview"
           ]
         },
         "openrouter": {
@@ -466,13 +485,23 @@
       }
     },
     {
-      "name": "xAI Grok 4 Fast",
-      "command": "grok",
-      "vision": true,
+      "name": "Llama 3.3 Nevoria 70B",
+      "command": "nevoria",
       "providers": {
-        "openrouter": {
+        "llm7": {
           "codenames": [
-            "x-ai/grok-4-fast:free"
+            "l3.3-ms-nevoria-70b"
+          ]
+        }
+      }
+    },
+    {
+      "name": "Llama 3 Euryale 70B v2.1",
+      "command": "euryale",
+      "providers": {
+        "llm7": {
+          "codenames": [
+            "l3-70b-euryale-v2.1"
           ]
         }
       }
@@ -489,12 +518,61 @@
       }
     },
     {
-      "name": "Qwen3 Coder",
-      "command": "qwen3c",
+      "name": "Mag Mell R1 12B (RP)",
+      "command": "magmell",
       "providers": {
+        "huggingface": {
+          "codenames": [
+            "inflatebot/MN-12B-Mag-Mell-R1"
+          ]
+        },
+        "selfhosted": {
+          "codenames": [
+            "MN-12B-Mag-Mell-R1"
+          ]
+        }
+      }
+    },
+    {
+      "name": "xAI Grok 4 Fast",
+      "command": "grok",
+      "vision": true,
+      "providers": {
+        "mnn": {
+          "codenames": [
+            "grok-4-fast"
+          ]
+        },
         "openrouter": {
           "codenames": [
-            "qwen/qwen3-coder:free"
+            "x-ai/grok-4-fast:free"
+          ]
+        }
+      }
+    },
+    {
+      "name": "Z.AI GLM 4.6 357B",
+      "command": "glm",
+      "providers": {
+        "crof": {
+          "codenames": [
+            "glm-4.6"
+          ]
+        }
+      }
+    },
+    {
+      "name": "Google Gemma 3 27B",
+      "command": "gemma",
+      "providers": {
+        "crof": {
+          "codenames": [
+            "gemma-3-27b-it"
+          ]
+        },
+        "google": {
+          "codenames": [
+            "gemma-3-27b-it"
           ]
         }
       }
@@ -503,20 +581,19 @@
       "name": "Qwen3 235B A22B",
       "command": "qwen3",
       "providers": {
+        "akash": {
+          "codenames": [
+            "Qwen3-235B-A22B-Instruct-2507-FP8"
+          ]
+        },
+        "crof": {
+          "codenames": [
+            "qwen3-235b-a22b-2507-instruct"
+          ]
+        },
         "openrouter": {
           "codenames": [
             "qwen/qwen3-235b-a22b:free"
-          ]
-        }
-      }
-    },
-    {
-      "name": "Z.AI GLM 4.5 Air",
-      "command": "glm",
-      "providers": {
-        "openrouter": {
-          "codenames": [
-            "z-ai/glm-4.5-air:free"
           ]
         }
       }
@@ -538,15 +615,13 @@
     "Meta Llama 3.3 70B",
     "Meta Llama 4 Maverick 400B/17A",
     "Meta Llama 4 Scout 109B/17A",
-    "OpenAI GPT-5",
-    "Google Gemini 2.0 Flash Experimental"
+    "OpenAI GPT-5"
   ],
   "narrator_models": [
     "Meta Llama 3.3 70B",
     "Meta Llama 4 Scout 109B/17A",
     "Meta Llama 4 Maverick 400B/17A",
-    "OpenAI GPT-5",
-    "Google Gemini 2.0 Flash Experimental"
+    "OpenAI GPT-5"
   ],
   "default_vision_models": [
     "Meta Llama 4 Maverick 400B/17A",
@@ -562,11 +637,13 @@
     "nineteen",
     "google",
     "atlas",
+    "akash",
     "cloudflare",
     "mnn",
     "crof",
     "electronhub",
     "hcap",
+    "llm7",
     "helixmind",
     "zukijourney",
     "cohere",

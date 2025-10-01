@@ -52,7 +52,9 @@ function setupTabs() {
             });
             
             // Initialize sortable for the active tab if needed
-            if (tabId === 'providers') {
+            if (tabId === 'models') {
+                initModelsSortable();
+            } else if (tabId === 'providers') {
                 initProviderSortable();
             } else if (tabId === 'defaults') {
                 initDefaultModelsSortable();
@@ -91,7 +93,7 @@ function renderModels() {
     }
     
     container.innerHTML = currentConfig.models.map((model, index) => `
-        <div class="model-card" onclick="openModelModal(${index})">
+        <div class="model-card sortable-item" data-index="${index}" onclick="openModelModal(${index})">
             <div class="model-header">
                 <div class="model-name">${escapeHtml(model.name)}</div>
                 <div class="model-command">/${escapeHtml(model.command)}</div>
@@ -108,21 +110,43 @@ function renderModels() {
             </div>
         </div>
     `).join('');
+    
+    initModelsSortable();
 }
 
 function renderProviders() {
     const container = document.getElementById('providers-list');
+    
+    // Add header with add button
+    const header = document.createElement('div');
+    header.className = 'section-header';
+    header.innerHTML = `
+        <button class="btn btn-secondary btn-sm" onclick="openAddProviderModal()">Add Provider</button>
+    `;
+    
+    // Clear and rebuild container
+    container.innerHTML = '';
+    container.appendChild(header);
+    
     if (!currentConfig.providers_order || currentConfig.providers_order.length === 0) {
-        container.innerHTML = '<div class="empty-state"><p>No providers configured</p></div>';
+        const emptyState = document.createElement('div');
+        emptyState.className = 'empty-state';
+        emptyState.innerHTML = '<p>No providers configured</p>';
+        container.appendChild(emptyState);
         return;
     }
     
-    container.innerHTML = currentConfig.providers_order.map(provider => `
+    const listContainer = document.createElement('ul');
+    listContainer.className = 'sortable-list';
+    
+    listContainer.innerHTML = currentConfig.providers_order.map(provider => `
         <li class="sortable-item">
             <span>${escapeHtml(provider)}</span>
+            <button class="remove-provider" onclick="removeProvider('${escapeHtml(provider)}')" title="Remove provider">×</button>
         </li>
     `).join('');
     
+    container.appendChild(listContainer);
     initProviderSortable();
 }
 
@@ -176,7 +200,103 @@ function renderDefaultModels(containerId, models, configKey) {
 }
 
 function initProviderSortable() {
-    const element = document.getElementById('providers-list');
+    const container = document.getElementById('providers-list');
+    if (!container) return;
+    
+    const listContainer = container.querySelector('.sortable-list');
+    if (!listContainer) return;
+    
+    Sortable.create(listContainer, {
+        animation: 150,
+        ghostClass: 'sortable-ghost',
+        chosenClass: 'sortable-chosen',
+        onEnd: function(evt) {
+            const newOrder = Array.from(listContainer.children).map(li =>
+                li.querySelector('span').textContent
+            );
+            currentConfig.providers_order = newOrder;
+        }
+    });
+}
+
+function openAddProviderModal() {
+    const modal = document.createElement('div');
+    modal.className = 'modal';
+    modal.style.display = 'block';
+    modal.innerHTML = `
+        <div class="modal-content" style="max-width: 400px;">
+            <div class="modal-header">
+                <h3>Add Provider</h3>
+                <span class="close" onclick="closeAddProviderModal()">&times;</span>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label>Provider Name:</label>
+                    <input type="text" id="providerName" style="width: 100%; padding: 8px;" placeholder="Enter provider name">
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-primary" onclick="addProvider()">Add Provider</button>
+                <button type="button" class="btn btn-secondary" onclick="closeAddProviderModal()">Cancel</button>
+            </div>
+        </div>
+    `;
+    
+    document.body.appendChild(modal);
+    
+    // Close modal when clicking outside
+    modal.addEventListener('click', function(e) {
+        if (e.target === this) {
+            closeAddProviderModal();
+        }
+    });
+}
+
+function closeAddProviderModal() {
+    const modal = document.querySelector('.modal');
+    if (modal) {
+        modal.remove();
+    }
+}
+
+function addProvider() {
+    const providerName = document.getElementById('providerName').value.trim();
+    
+    if (!providerName) {
+        showStatus('Provider name is required', 'error');
+        return;
+    }
+    
+    if (!currentConfig.providers_order) {
+        currentConfig.providers_order = [];
+    }
+    
+    if (currentConfig.providers_order.includes(providerName)) {
+        showStatus('Provider already exists', 'error');
+        return;
+    }
+    
+    currentConfig.providers_order.push(providerName);
+    
+    // Close modal and refresh
+    closeAddProviderModal();
+    renderConfig();
+    showStatus('Provider added successfully', 'success');
+}
+
+function removeProvider(providerName) {
+    if (!currentConfig.providers_order) return;
+    
+    const index = currentConfig.providers_order.indexOf(providerName);
+    if (index > -1) {
+        currentConfig.providers_order.splice(index, 1);
+        renderConfig();
+        showStatus('Provider removed successfully', 'success');
+    }
+}
+
+function initModelsSortable() {
+    const element = document.getElementById('models-list');
     if (!element) return;
     
     Sortable.create(element, {
@@ -184,10 +304,12 @@ function initProviderSortable() {
         ghostClass: 'sortable-ghost',
         chosenClass: 'sortable-chosen',
         onEnd: function(evt) {
-            const newOrder = Array.from(element.children).map(li => 
-                li.querySelector('span').textContent
-            );
-            currentConfig.providers_order = newOrder;
+            const newOrder = Array.from(element.children).map((card, index) => {
+                const modelIndex = parseInt(card.getAttribute('data-index'));
+                return currentConfig.models[modelIndex];
+            });
+            currentConfig.models = newOrder;
+            renderModels(); // Re-render to update data-index attributes
         }
     });
 }
@@ -205,9 +327,9 @@ function initDefaultModelsSortable() {
         Sortable.create(listContainer, {
             animation: 150,
             ghostClass: 'sortable-ghost',
-            chosenClass: 'sortable-chosen',
-            group: containerId,
-            onEnd: function(evt) {
+        chosenClass: 'sortable-chosen',
+        group: containerId,
+        onEnd: function(evt) {
                 const newOrder = Array.from(listContainer.children).map(div =>
                     div.querySelector('span').textContent
                 );
@@ -411,7 +533,7 @@ function addProviderField(providerName = '', codenames = '') {
         <div class="provider-item" data-id="${providerId}">
             <div class="provider-header">
                 <input type="text" class="provider-name" placeholder="Provider name (e.g., openrouter)" value="${escapeHtml(providerName)}">
-                <button type="button" class="remove-provider" onclick="removeProviderField(${providerId})">Remove</button>
+                <button type="button" class="remove-provider" onclick="removeProviderField(${providerId})">x</button>
             </div>
             <input type="text" class="codenames-input" placeholder="Codenames (comma-separated)" value="${escapeHtml(codenames)}">
         </div>
