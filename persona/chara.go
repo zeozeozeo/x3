@@ -177,7 +177,7 @@ func (meta *PersonaMeta) ApplyJsonChara(data []byte, user string) (TavernCardV2,
 	meta.FirstMes = firstMessagesArr
 	meta.IsFirstMes = len(firstMessagesArr) > 0
 	meta.EnableImages = true
-	slog.Info("ApplyChara: generated system prompt", slog.String("system", meta.System))
+	slog.Info("ApplyChara: generated system prompt", "system", len(meta.System))
 	return card, nil
 }
 
