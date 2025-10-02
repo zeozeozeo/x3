@@ -62,64 +62,29 @@
       }
     },
     {
-      "name": "DeepSeek V3 671B (0324)",
+      "name": "DeepSeek V3.2 Exp",
       "command": "deepseek",
+      "reasoning": true,
       "providers": {
         "atlas": {
           "codenames": [
-            "deepseek-ai/DeepSeek-V3-0324"
-          ]
-        },
-        "chutes": {
-          "codenames": [
-            "deepseek-ai/DeepSeek-V3-0324"
+            "deepseek-ai/DeepSeek-V3.2-Exp"
           ]
         },
         "crof": {
           "codenames": [
-            "deepseek-v3-0324"
+            "deepseek-v3.2-exp"
           ]
         },
         "electronhub": {
           "codenames": [
-            "deepseek-v3-0324",
-            "deepseek-v3-0324:free"
-          ]
-        },
-        "github": {
-          "codenames": [
-            "deepseek/DeepSeek-V3-0324"
-          ]
-        },
-        "hcap": {
-          "codenames": [
-            "deepseek-v3"
-          ]
-        },
-        "llm7": {
-          "codenames": [
-            "deepseek-v3-0324"
+            "deepseek-v3.2-exp",
+            "deepseek-v3.2-exp:free"
           ]
         },
         "mnn": {
           "codenames": [
-            "deepseek-v3-0324",
-            "deepseek-v3"
-          ]
-        },
-        "openrouter": {
-          "codenames": [
-            "deepseek/deepseek-chat-v3-0324:free"
-          ]
-        },
-        "targon": {
-          "codenames": [
-            "deepseek-ai/DeepSeek-V3-0324"
-          ]
-        },
-        "zukijourney": {
-          "codenames": [
-            "deepseek-chat"
+            "deepseek-v3.2-exp"
           ]
         }
       }
@@ -150,7 +115,8 @@
         },
         "electronhub": {
           "codenames": [
-            "llama-3.3-70b-instruct"
+            "llama-3.3-70b-instruct",
+            "llama-3.3-70b-instruct:free"
           ]
         },
         "groq": {
@@ -290,27 +256,6 @@
       }
     },
     {
-      "name": "DeepSeek V3.2 Exp",
-      "command": "deepseekv32",
-      "providers": {
-        "crof": {
-          "codenames": [
-            "deepseek-v3.2-exp"
-          ]
-        },
-        "electronhub": {
-          "codenames": [
-            "deepseek-v3.2-exp"
-          ]
-        },
-        "mnn": {
-          "codenames": [
-            "deepseek-v3.2-exp"
-          ]
-        }
-      }
-    },
-    {
       "name": "DeepSeek V3.1 671B",
       "command": "deepseekv31",
       "reasoning": true,
@@ -349,6 +294,69 @@
         "openrouter": {
           "codenames": [
             "deepseek/deepseek-chat-v3.1:free"
+          ]
+        }
+      }
+    },
+    {
+      "name": "DeepSeek V3 671B (0324)",
+      "command": "deepseekv3",
+      "providers": {
+        "atlas": {
+          "codenames": [
+            "deepseek-ai/DeepSeek-V3-0324"
+          ]
+        },
+        "chutes": {
+          "codenames": [
+            "deepseek-ai/DeepSeek-V3-0324"
+          ]
+        },
+        "crof": {
+          "codenames": [
+            "deepseek-v3-0324"
+          ]
+        },
+        "electronhub": {
+          "codenames": [
+            "deepseek-v3-0324",
+            "deepseek-v3-0324:free"
+          ]
+        },
+        "github": {
+          "codenames": [
+            "deepseek/DeepSeek-V3-0324"
+          ]
+        },
+        "hcap": {
+          "codenames": [
+            "deepseek-v3"
+          ]
+        },
+        "llm7": {
+          "codenames": [
+            "deepseek-v3-0324"
+          ]
+        },
+        "mnn": {
+          "codenames": [
+            "deepseek-v3-0324",
+            "deepseek-v3"
+          ]
+        },
+        "openrouter": {
+          "codenames": [
+            "deepseek/deepseek-chat-v3-0324:free"
+          ]
+        },
+        "targon": {
+          "codenames": [
+            "deepseek-ai/DeepSeek-V3-0324"
+          ]
+        },
+        "zukijourney": {
+          "codenames": [
+            "deepseek-chat"
           ]
         }
       }
@@ -558,6 +566,11 @@
           "codenames": [
             "glm-4.6"
           ]
+        },
+        "electronhub": {
+          "codenames": [
+            "glm-4.6"
+          ]
         }
       }
     },
@@ -610,6 +623,7 @@
     }
   ],
   "default_models": [
+    "DeepSeek V3.2 Exp",
     "DeepSeek V3 671B (0324)",
     "xAI Grok 4 Fast",
     "Meta Llama 3.3 70B",
