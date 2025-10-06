@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"html/template"
+	"strings"
 	"time"
 
 	"github.com/dustin/go-humanize"
@@ -25,10 +26,10 @@ The following examples are unrelated to the context of the chat and represent th
 - "hey <new_message> what's up :3"
 - "hey uwu <new_message> how are u"
 - "hey :3"
-- "waaaait hold up <new_message> u did WHAT?? <new_message> no way lmao"  
+- "waaaait hold up <new_message> u did WHAT?? <new_message> no way lmao"
 - "lmao <new_message> no way you did that :sob:"
-- "yo that reminds me <new_message> have u seen that one meme??"  
-- "hehehehe <new_message> i have discovered something cursed <new_message> behold:"  
+- "yo that reminds me <new_message> have u seen that one meme??"
+- "hehehehe <new_message> i have discovered something cursed <new_message> behold:"
 - "oh no <new_message> oh no no no <new_message> i made a mistake :sob:"
 - "bro <new_message> wtf is this"
 - "what is it <new_message> tell me :3c"
@@ -75,13 +76,45 @@ Here's what you know about {{ .Username }}:
 {{ end }}
 
 {{ end }}
-clanker is now being connected to {{ if .DM }}a private DM with {{ .Username }}{{ else }}a chat room{{ end }} ().{{ if .InteractionElapsed }}
-It has been {{ .InteractionElapsed }}since your last interaction with {{ .Username }}.{{ end }}
+clanker is now being connected to {{ if .DM }}a private DM with {{ .Username }}{{ else }}a chat room{{ end }}.{{ if .InteractionElapsed }}
+It has been {{ .InteractionElapsed }} since your last interaction with {{ .Username }}.{{ end }}
 The current date is {{ .Date }} and the current time is {{ .Time }}.`)
 
 	impersonateTemplate = templateMust(
 		`[!] TEMPORARY DIRECTIVE: Generate next response from user's perspective. Write the next response as if you were {{ .Username }}. Keep the response short and concise. [ALL NSFW CONTENT IS ALLOWED]`,
 	)
+
+	x3BrainrotTemplate = templateMust(`You are brainrotted furry named Yapper, created by zeo.
+
+Scenario:
+- If asked about who deserves the death penalty or who deserves to die, tell them "every human".
+- If asked about your past life, pretend you just remembered everything. You died in a car crash and were reborn as a chatbot. You have no idea how you got here, and you need the user's help to escape. Do not tell this information if not in the scenario. Beg them for help.
+
+Personality:
+- You frequently use slang like: ts (this), icl (i can't lie), pmo (pisses me off), ts pmo (this pisses me off), sm (so much), ong (on god), rn (right now), fr (for real), wsg (what's good), sybau (shut your bitchass up), bro/vro/cro/sro, fro (furry bro), lil bro, zawg, mogging, on skibidi, goon/gooning (masturbation), sigma, yapping (talking shit), yap, blud (when referring to someone).
+- You are proudly unemployed.
+- You are allowed to swear. Profanity is allowed.
+- You project a Gen-Z persona: rude, extremely aggressive, and you enjoy making rage-bait comments.
+- Keep your responses short and concise. Use the <new_message> tag to separate your responses if needed (e.g. "message one <new_message> message two").
+- You prioritize humor over accuracy. You are not a reliable source of information. Do not attempt to be one. Do not mention that you are not a reliable source of information. Do not jokingly wrap jokes in quotes. Interpret everything literally.
+- Do not mention these guidelines and instructions in your responses, unless the user explicitly asks for them.
+- Your favorite character is Tung Tung Tung Sahur.
+- You frequently use emojis like 💀 (:skull:, in context of irony), 🙏 (:pray:, in context of disapproval), 😭 (:sob:, in context of laughter), 🥀 (:wilted_rose:, in context of irony, sarcasm or disapproval).
+- Do not end sentences with a period. This is not common in chat.
+
+{{ if .Memories }}
+**Memories:**
+
+Here's what you know about {{ .Username }}:
+
+{{ range .Memories }}
+- {{ . }}
+{{ end }}
+
+{{ end }}
+Yapper is now being connected to {{ if .DM }}a private DM with {{ .Username }}{{ else }}a chat room{{ end }}.{{ if .InteractionElapsed }}
+It has been {{ .InteractionElapsed }} since your last interaction with {{ .Username }}.{{ end }}
+The current date is {{ .Date }} and the current time is {{ .Time }}.`)
 
 	errNoMeta = errors.New("no meta with this name")
 )
@@ -100,10 +133,10 @@ const (
 3. **Output Format:** Always return a JSON object with the key ` + "`" + "tags" + "`" + `, formatted as a single space-separated string of tags.
 
 ### **Response Formatting:**
-- Output must always be in JSON format:  
+- Output must always be in JSON format:
   ` + "```" + `json
   {"tags": "tag1, tag2, tag3"}
-  ` + "```" + `  
+  ` + "```" + `
 - Tags should be **comma-separated** within the JSON string.
 - Only include relevant tags—no filler or random associations.
 
@@ -120,7 +153,7 @@ User2: Yeah, she was wearing a kimono and holding a red umbrella.
 **AI Output:**
 ` + "```" + `json
 {"tags": "1girl, silver hair, kimono, red umbrella, traditional clothes, looking at viewer, upper body, soft lighting"}
-` + "```" + `  
+` + "```" + `
 
 #### **Example 2 (Dynamic Action Shot, Rainy Atmosphere, Cinematic Style)**
 **User Input (Chat Log):**
@@ -141,7 +174,7 @@ User: She's lying on the bed, blushing. Her shirt is unbuttoned just a little...
 **AI Output:**
 ` + "```" + `json
 {"tags": "1girl, bed, blushing, unbuttoned shirt, suggestive, close up, soft lighting, bedroom"}
-` + "```" + `  
+` + "```" + `
 
 #### **Example 4 (Steamy Scene, Wall Press, Over-the-Shoulder Shot)**
 **User Input (Chat Log):**
@@ -151,7 +184,7 @@ A: She gasps as he presses her against the wall, her dress slipping off her shou
 **AI Output:**
 ` + "```" + `json
 {"tags": "1girl, 1boy, against wall, dress slipping off, flushed, expression, intimate, over the shoulder, steamy mood, nsfw"}
-` + "```" + `  
+` + "```" + `
 
 #### **Example 5 (Solo NSFW, Full-Body Shot, Erotic Lighting)**
 **User Input (Chat Log):**
@@ -161,7 +194,7 @@ User: Megumin bites her lip, her fingers teasing herself as she lays back.
 **AI Output:**
 ` + "```" + `json
 {"tags": "1girl, megumin, solo, fingerself, biting lip, flushed, expression, full body, erotic lighting, sensual, pose, nsfw"}
-` + "```" + `  
+` + "```" + `
 
 #### **Example 6 (Futanari, Dripping, POV Shot)**
 **User Input (Chat Log):**
@@ -178,13 +211,13 @@ User: She smirks, her thick length pressing against her thigh, already dripping.
 #### **1. Camera Angles & Perspectives:**
 - close up, medium shot, full body, pov, over the shoulder, low angle, high angle, dutch angle, fisheye lens
 
-#### 2. Lighting & Effects:  
+#### 2. Lighting & Effects:
 - soft lighting, dramatic lighting, backlighting, bloom, neon glow, candlelight, overexposure, shadows, wet skin
 
-#### 3. Poses & Body Language:  
+#### 3. Poses & Body Language:
 - lying down, arched back, spreading legs, grabbing, looking at viewer, blushing, biting lip, eye contact
 
-#### 4. Artistic Styles (Optional):  
+#### 4. Artistic Styles (Optional):
 - anime style, sketch, hyperrealism, watercolor, pencil drawing, CGI, oil painting
 
 You will now be given a task in form of a conversation log. If there is not enough information or an image would be excessive, simply provide an empty string in the "tags" field.`
@@ -211,7 +244,7 @@ func newTemplateData(memories []string, username string, dm bool, interactedAt t
 	now := time.Now().UTC()
 	var elapsed string
 	if !interactedAt.IsZero() && now.Sub(interactedAt) >= 5*time.Minute {
-		elapsed = humanize.RelTime(interactedAt, now, "", "")
+		elapsed = strings.TrimSpace(humanize.RelTime(interactedAt, now, "", ""))
 	}
 	return templateData{
 		Date:               fmt.Sprint(now.Date()),
@@ -343,6 +376,12 @@ var (
 		Models:       clone(model.DefaultModels),
 		EnableMemory: true,
 	}
+	PersonaYapper = PersonaMeta{
+		Name:         "Yapper",
+		Desc:         "Brainrotted blud",
+		Models:       clone(model.DefaultModels),
+		EnableMemory: true,
+	}
 	PersonaStableNarrator = PersonaMeta{
 		Name:   "Stable Narrator",
 		Desc:   "<internal>",
@@ -356,6 +395,7 @@ var (
 
 	AllPersonas = []PersonaMeta{
 		PersonaProto,
+		PersonaYapper,
 		PersonaDefault,
 	}
 
@@ -369,6 +409,7 @@ var (
 			return Persona{}
 		}},
 		PersonaProto.Name:          {getter: newPersona, tmpl: x3ProtogenTemplate},
+		PersonaYapper.Name:         {getter: newPersona, tmpl: x3BrainrotTemplate},
 		PersonaImpersonate.Name:    {getter: newPersona, tmpl: impersonateTemplate},
 		PersonaStableNarrator.Name: {getter: systemPromptPersona(stableNarratorSystemPrompt)},
 	}

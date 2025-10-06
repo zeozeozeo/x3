@@ -119,13 +119,13 @@ func handleSaveModels(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Reload models in the application
-	if err := model.LoadModelsFromJSON(); err != nil {
+	if err := model.LoadModelsFromJSONData(data); err != nil {
 		http.Error(w, fmt.Sprintf("Error reloading models: %v", err), http.StatusInternalServerError)
 		return
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	w.Write([]byte(`{"status": "success"}`))
+	w.Write([]byte(`{"status":"success"}`))
 }
 
 func validateConfig(config model.ModelsConfig) error {
