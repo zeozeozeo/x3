@@ -571,6 +571,11 @@
           "codenames": [
             "glm-4.6"
           ]
+        },
+        "mnn": {
+          "codenames": [
+            "glm-4.6"
+          ]
         }
       }
     },
