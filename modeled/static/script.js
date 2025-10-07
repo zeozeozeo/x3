@@ -18,6 +18,9 @@ function setupEventListeners() {
     // Reload button
     document.getElementById('reloadBtn').addEventListener('click', loadConfig);
     
+    // Version edit button
+    document.getElementById('editVersionBtn').addEventListener('click', openVersionEditModal);
+    
     // Modal buttons
     document.getElementById('saveModelBtn').addEventListener('click', saveModel);
     document.getElementById('deleteModelBtn').addEventListener('click', deleteModel);
@@ -80,9 +83,17 @@ async function loadConfig() {
 function renderConfig() {
     if (!currentConfig) return;
     
+    renderVersion();
     renderModels();
     renderProviders();
     renderDefaults();
+}
+
+function renderVersion() {
+    const display = document.getElementById('currentVersionDisplay');
+    if (display && currentConfig.current_version !== undefined) {
+        display.textContent = currentConfig.current_version;
+    }
 }
 
 function renderModels() {
@@ -648,6 +659,61 @@ function showStatus(message, type) {
             status.remove();
         }
     }, 5000);
+}
+
+function openVersionEditModal() {
+    const modal = document.createElement('div');
+    modal.className = 'modal';
+    modal.style.display = 'block';
+    modal.innerHTML = `
+        <div class="modal-content" style="max-width: 400px;">
+            <div class="modal-header">
+                <h3>Edit Current Version</h3>
+                <span class="close" onclick="this.closest('.modal').remove()">&times;</span>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label>Current Version:</label>
+                    <input type="number" id="versionInput" style="width: 100%; padding: 8px;"
+                           value="${currentConfig.current_version || 6}" min="1" step="1">
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-primary" onclick="saveVersion()">Save Version</button>
+                <button type="button" class="btn btn-secondary" onclick="this.closest('.modal').remove()">Cancel</button>
+            </div>
+        </div>
+    `;
+    
+    document.body.appendChild(modal);
+    
+    // Close modal when clicking outside
+    modal.addEventListener('click', function(e) {
+        if (e.target === this) {
+            this.remove();
+        }
+    });
+}
+
+function saveVersion() {
+    const versionInput = document.getElementById('versionInput');
+    const newVersion = parseInt(versionInput.value);
+    
+    if (isNaN(newVersion) || newVersion < 1) {
+        showStatus('Please enter a valid version number (minimum 1)', 'error');
+        return;
+    }
+    
+    currentConfig.current_version = newVersion;
+    
+    // Close the modal
+    const modal = document.querySelector('.modal');
+    if (modal && modal.querySelector('#versionInput')) {
+        modal.remove();
+    }
+    
+    renderVersion();
+    showStatus('Version updated successfully', 'success');
 }
 
 function escapeHtml(unsafe) {

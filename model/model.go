@@ -147,6 +147,8 @@ var (
 	}
 
 	lastScoreReset = time.Now()
+
+	CurrentVersion = 6
 )
 
 type ModelsConfig struct {
@@ -155,6 +157,7 @@ type ModelsConfig struct {
 	NarratorModels      []string `json:"narrator_models"`
 	DefaultVisionModels []string `json:"default_vision_models"`
 	ProvidersOrder      []string `json:"providers_order"`
+	CurrentVersion      int      `json:"current_version"`
 }
 
 func LoadModelsFromJSON() error {
@@ -170,6 +173,8 @@ func LoadModelsFromJSONData(data []byte) error {
 	if err := json.Unmarshal(data, &config); err != nil {
 		return err
 	}
+
+	CurrentVersion = config.CurrentVersion
 
 	AllModels = config.Models
 

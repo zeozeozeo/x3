@@ -459,7 +459,7 @@
       "limited": true
     },
     {
-      "name": "Moonshot AI Kimi K2 0905",
+      "name": "Moonshot AI Kimi K2 1000B (0905)",
       "command": "kimi",
       "providers": {
         "crof": {
@@ -493,6 +493,22 @@
       }
     },
     {
+      "name": "Meituan LongCat Flash Chat 560B",
+      "command": "longcat",
+      "providers": {
+        "electronhub": {
+          "codenames": [
+            "longcat-flash-chat"
+          ]
+        },
+        "openrouter": {
+          "codenames": [
+            "meituan/longcat-flash-chat:free"
+          ]
+        }
+      }
+    },
+    {
       "name": "Llama 3.3 Nevoria 70B",
       "command": "nevoria",
       "providers": {
@@ -521,39 +537,6 @@
         "openrouter": {
           "codenames": [
             "cognitivecomputations/dolphin-mistral-24b-venice-edition:free"
-          ]
-        }
-      }
-    },
-    {
-      "name": "Mag Mell R1 12B (RP)",
-      "command": "magmell",
-      "providers": {
-        "huggingface": {
-          "codenames": [
-            "inflatebot/MN-12B-Mag-Mell-R1"
-          ]
-        },
-        "selfhosted": {
-          "codenames": [
-            "MN-12B-Mag-Mell-R1"
-          ]
-        }
-      }
-    },
-    {
-      "name": "xAI Grok 4 Fast",
-      "command": "grok",
-      "vision": true,
-      "providers": {
-        "mnn": {
-          "codenames": [
-            "grok-4-fast"
-          ]
-        },
-        "openrouter": {
-          "codenames": [
-            "x-ai/grok-4-fast:free"
           ]
         }
       }
@@ -630,7 +613,8 @@
   "default_models": [
     "DeepSeek V3.2 Exp",
     "DeepSeek V3 671B (0324)",
-    "xAI Grok 4 Fast",
+    "Meituan LongCat Flash Chat 560B",
+    "Moonshot AI Kimi K2 1000B (0905)",
     "Meta Llama 3.3 70B",
     "Meta Llama 4 Maverick 400B/17A",
     "Meta Llama 4 Scout 109B/17A",
@@ -645,8 +629,7 @@
   "default_vision_models": [
     "Meta Llama 4 Maverick 400B/17A",
     "Meta Llama 4 Scout 109B/17A",
-    "OpenAI GPT-5",
-    "xAI Grok 4 Fast"
+    "OpenAI GPT-5"
   ],
   "providers_order": [
     "groq",
@@ -670,5 +653,6 @@
     "github",
     "pollinations",
     "huggingface"
-  ]
+  ],
+  "current_version": 7
 }

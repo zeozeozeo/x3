@@ -301,8 +301,6 @@ func (s InferenceSettings) Fixup() InferenceSettings {
 	return s
 }
 
-const currentVersion = 6
-
 type PersonaMeta struct {
 	Name           string            `json:"name,omitempty"`
 	Desc           string            `json:"-"`
@@ -321,12 +319,13 @@ type PersonaMeta struct {
 
 // this is kinda hacky, but this is just so i can update the default models
 func (meta *PersonaMeta) Migrate() {
-	if meta.Version < currentVersion {
+	curVer := model.CurrentVersion
+	if meta.Version < curVer {
 		if meta.Version == 3 {
 			meta.EnableMemory = true
 		}
 		meta.Models = clone(model.DefaultModels)
-		meta.Version = currentVersion
+		meta.Version = curVer
 	}
 }
 
