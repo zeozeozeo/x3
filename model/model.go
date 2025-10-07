@@ -57,6 +57,7 @@ const (
 	huggingfaceBaseURL  = "https://router.huggingface.co/featherless-ai/v1"
 	akashBaseURL        = "https://chatapi.akash.network/api/v1"
 	llm7BaseURL         = "https://api.llm7.io/v1"
+	longcatBaseURL      = "https://api.longcat.chat/openai"
 )
 
 const (
@@ -84,6 +85,7 @@ const (
 	ProviderHuggingface  = "huggingface"
 	ProviderAkash        = "akash"
 	ProviderLLM7         = "llm7"
+	ProviderLongCat      = "longcat"
 )
 
 type ModelProvider struct {
@@ -326,6 +328,8 @@ func (m Model) Client(provider string) (baseUrls []string, tokens []string, code
 		tokenEnvKey, apiVar = "X3_AKASH_TOKEN", akashBaseURL
 	case ProviderLLM7:
 		tokenEnvKey, apiVar = "X3_LLM7_TOKEN", llm7BaseURL
+	case ProviderLongCat:
+		tokenEnvKey, apiVar = "X3_LONGCAT_TOKEN", longcatBaseURL
 	default:
 		return nil, nil, nil
 	}

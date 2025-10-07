@@ -501,6 +501,11 @@
             "longcat-flash-chat"
           ]
         },
+        "longcat": {
+          "codenames": [
+            "LongCat-Flash-Chat"
+          ]
+        },
         "openrouter": {
           "codenames": [
             "meituan/longcat-flash-chat:free"
@@ -643,13 +648,14 @@
     "cloudflare",
     "mnn",
     "crof",
+    "longcat",
+    "openrouter",
     "electronhub",
     "hcap",
     "llm7",
     "helixmind",
     "zukijourney",
     "cohere",
-    "openrouter",
     "github",
     "pollinations",
     "huggingface"
