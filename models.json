@@ -178,7 +178,8 @@
         },
         "electronhub": {
           "codenames": [
-            "llama-4-scout-17b-16e-instruct"
+            "llama-4-scout-17b-16e-instruct",
+            "llama-4-scout-17b-16e-instruct:free"
           ]
         },
         "github": {
@@ -230,7 +231,8 @@
         },
         "electronhub": {
           "codenames": [
-            "llama-4-maverick-17b-128e-instruct"
+            "llama-4-maverick-17b-128e-instruct",
+            "llama-4-maverick-17b-128e-instruct:free"
           ]
         },
         "github": {
@@ -557,7 +559,8 @@
         },
         "electronhub": {
           "codenames": [
-            "glm-4.6"
+            "glm-4.6",
+            "glm-4.6:free"
           ]
         },
         "mnn": {
@@ -570,6 +573,7 @@
     {
       "name": "Google Gemma 3 27B",
       "command": "gemma",
+      "vision": true,
       "providers": {
         "crof": {
           "codenames": [
@@ -600,6 +604,33 @@
         "openrouter": {
           "codenames": [
             "qwen/qwen3-235b-a22b:free"
+          ]
+        }
+      }
+    },
+    {
+      "name": "Gemini 2.5 Pro",
+      "command": "gemini",
+      "vision": true,
+      "reasoning": true,
+      "encoding": "o200k_base",
+      "providers": {
+        "electronhub": {
+          "codenames": [
+            "gemini-2.5-pro:free"
+          ]
+        }
+      }
+    },
+    {
+      "name": "Gemini 2.5 Flash",
+      "command": "flash",
+      "vision": true,
+      "encoding": "o200k_base",
+      "providers": {
+        "electronhub": {
+          "codenames": [
+            "gemini-2.5-flash:free"
           ]
         }
       }
