@@ -425,14 +425,13 @@ func (l *Llmer) requestCompletionInternal(
 
 	var lastErr error
 	for i, baseUrl := range baseUrls {
-		tokensToTry := tokens // Default: try all tokens with this base URL
+		tokensToTry := tokens
 
-		// Special Cloudflare logic: if multiple URLs match multiple tokens, use only the corresponding token for that URL index
+		// TODO: ability to do this with any provider
 		if provider == model.ProviderCloudflare && len(baseUrls) > 1 && len(baseUrls) == len(tokens) {
 			if i < len(tokens) {
-				tokensToTry = []string{tokens[i]} // Only use the token matching this specific base URL index
+				tokensToTry = []string{tokens[i]}
 			} else {
-				// Should not happen due to validation above, but skip defensively
 				continue
 			}
 		}
@@ -440,7 +439,7 @@ func (l *Llmer) requestCompletionInternal(
 		for _, token := range tokensToTry {
 			config := openai.DefaultConfig(token)
 			config.BaseURL = baseUrl
-			if provider == model.ProviderGithub { // Handle Github special case
+			if provider == model.ProviderGithub { // for github we need an azure config, idfk why
 				config = openai.DefaultAzureConfig(token, baseUrl)
 				config.APIType = openai.APITypeOpenAI
 			}
@@ -457,7 +456,7 @@ func (l *Llmer) requestCompletionInternal(
 					}
 					return res, usage, nil
 				}
-				lastErr = err // Store the last error encountered
+				lastErr = err
 				slog.Warn("request failed, trying next config", "provider", provider, "baseUrl", baseUrl, "codename", codename, "error", err)
 			}
 		}
@@ -571,7 +570,7 @@ func (l *Llmer) RequestCompletion(models []model.Model, usernames map[string]str
 
 	modelsToTry := models
 
-	// If the last message has an image, filter models to only include vision models
+	// if the last message has an image, filter models to only include vision models
 	if l.shouldSwapToVision() {
 		visionModels := []model.Model{}
 		for _, mod := range models {
@@ -580,7 +579,6 @@ func (l *Llmer) RequestCompletion(models []model.Model, usernames map[string]str
 			}
 		}
 		if len(visionModels) > 0 {
-			slog.Info("last message has image, filtering to vision models", "count", len(visionModels))
 			modelsToTry = visionModels
 		} else {
 			slog.Info("last message has image, but no vision models provided in the list; swapping to DefaultVisionModels")
@@ -601,34 +599,33 @@ func (l *Llmer) RequestCompletion(models []model.Model, usernames map[string]str
 		retry:
 			if retries >= 3 {
 				slog.Warn("max retries reached for provider", "provider", provider.Name, "model", m.Name)
-				continue // Try next provider
+				continue
 			}
 			if _, ok := m.Providers[provider.Name]; !ok {
-				continue // This provider is not configured for this model
+				continue
 			}
 			slog.Info("requesting completion", "model", m.Name, "provider", provider.Name, "providerErrors", provider.Errors, "retries", retries)
 
 			res, usage, err = l.requestCompletionInternal(m, provider.Name, usernames, settings.Fixup(), prepend)
 
-			// Check for empty response first
+			// check for empty response first
 			if err == nil && res == "" {
 				slog.Warn("got an empty response from requestCompletionInternal", "model", m.Name, "provider", provider.Name)
-				err = errors.New("empty response received") // Treat empty response as an error for retry logic
+				err = errors.New("empty response received")
 			}
 
 			if err != nil {
 				slog.Warn("requestCompletionInternal failed", "model", m.Name, "provider", provider.Name, "error", err, "retries", retries)
-				lastErr = err // Store the error
+				lastErr = err
 				retries++
 				provider.Errors++
 				goto retry
 			}
 
-			// Success
 			if usage.IsEmpty() {
 				usage = l.estimateUsage(m)
 			} else if usage.ResponseTokens <= 1 {
-				// unrealistic; openrouter api responds with response tokens set to 1
+				// unrealistic
 				estimatedUsage := l.estimateUsage(m)
 				usage.ResponseTokens = estimatedUsage.ResponseTokens
 			}

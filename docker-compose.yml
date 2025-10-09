@@ -5,5 +5,5 @@ services:
     container_name: x3
     image: x3
     volumes:
-      - /home/tower/containers/x3:/app
+      - .:/app
     working_dir: /app

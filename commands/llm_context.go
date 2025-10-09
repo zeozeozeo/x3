@@ -187,6 +187,10 @@ func isNarrationMessage(message discord.Message) bool {
 	})
 }
 
+func isLatexRenderedMessage(message discord.Message) bool {
+	return len(message.Attachments) == 1 && message.Attachments[0].Filename == latexRenderFilename
+}
+
 func fetchMessagesBefore(
 	client bot.Client,
 	channelID, beforeID snowflake.ID,
@@ -279,6 +283,10 @@ func addContextMessages(
 				content = strings.Replace(msg.Content, "**", "", 2)
 			} else if isNarrationMessage(msg) {
 				continue // skip narration images from handleNarrationGenerate
+			} else if isLatexRenderedMessage(msg) {
+				if after, ok := strings.CutPrefix(msg.Content, "-# "); ok {
+					content = "$" + after + "$"
+				}
 			} else {
 				content = getMessageContent(msg)
 			}

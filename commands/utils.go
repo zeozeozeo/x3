@@ -1,8 +1,12 @@
 package commands
 
 import (
+	"bytes"
 	"encoding/base64"
 	"fmt"
+	"image"
+	"image/color"
+	"image/png"
 	"io"
 	"log/slog"
 	"net/http"
@@ -14,10 +18,13 @@ import (
 	"time"
 	"unicode"
 
+	"codeberg.org/go-latex/latex/drawtex/drawimg"
+	"codeberg.org/go-latex/latex/mtex"
 	"github.com/disgoorg/disgo/bot"
 	"github.com/disgoorg/disgo/discord"
 	"github.com/disgoorg/disgo/handler"
 	"github.com/disgoorg/snowflake/v2"
+	"golang.org/x/image/draw"
 )
 
 const (
@@ -166,7 +173,88 @@ func pluralize(count int, singular string) string {
 	return fmt.Sprintf("%d %s", count, plural)
 }
 
-// sendMessageSplits sends a potentially long message by splitting it into multiple messages if necessary.
+type messagePart struct {
+	Content string
+	IsLatex bool
+}
+
+func parseMessageForLatex(content string) []messagePart {
+	var parts []messagePart
+	scanner := 0
+	textStart := 0
+
+	for scanner < len(content) {
+		if scanner+1 < len(content) && content[scanner:scanner+2] == "$$" {
+			if scanner > textStart {
+				parts = append(parts, messagePart{Content: content[textStart:scanner], IsLatex: false})
+			}
+			end := strings.Index(content[scanner+2:], "$$")
+			if end == -1 {
+				textStart = scanner
+				break
+			}
+
+			latexContent := content[scanner+2 : scanner+2+end]
+			parts = append(parts, messagePart{Content: latexContent, IsLatex: true})
+
+			scanner += 2 + end + 2
+			textStart = scanner
+		} else if content[scanner] == '$' {
+			end := -1
+			searchStart := scanner + 1
+			for {
+				next := strings.Index(content[searchStart:], "$")
+				if next == -1 {
+					break
+				}
+				if searchStart+next > 0 && content[searchStart+next-1] == '\\' {
+					searchStart += next + 1
+					continue
+				}
+				end = searchStart + next
+				break
+			}
+			if end != -1 {
+				latexContent := content[scanner+1 : end]
+				isValidLatex := len(latexContent) > 0 &&
+					!strings.HasPrefix(latexContent, " ") && !strings.HasSuffix(latexContent, " ") &&
+					!strings.HasPrefix(latexContent, "\n") && !strings.HasSuffix(latexContent, "\n")
+				if isValidLatex {
+					if scanner > textStart {
+						parts = append(parts, messagePart{Content: content[textStart:scanner], IsLatex: false})
+					}
+					parts = append(parts, messagePart{Content: latexContent, IsLatex: true})
+					scanner = end + 1
+					textStart = scanner
+					continue
+				}
+			}
+			scanner++
+		} else {
+			scanner++
+		}
+	}
+	if textStart < len(content) {
+		parts = append(parts, messagePart{Content: content[textStart:], IsLatex: false})
+	}
+	return parts
+}
+
+type partType int
+
+const (
+	partTypeText partType = iota
+	partTypeImage
+)
+
+type processedPart struct {
+	Type    partType
+	Content string
+	Image   []byte
+}
+
+const latexRenderFilename = "x3latexrender.png"
+
 func sendMessageSplits(
 	client bot.Client,
 	messageID snowflake.ID, // message to reply to (0 if not replying or using interaction event)
@@ -177,25 +265,127 @@ func sendMessageSplits(
 	files []*discord.File, // files to attach (only sent with the last split)
 	sepFlag bool, // add an invisible character to the last split to indicate joining needed
 ) (*discord.Message, error) {
+	content := string(runes)
+	initialParts := parseMessageForLatex(content)
+
+	var processedParts []processedPart
+	for _, part := range initialParts {
+		var p processedPart
+
+		if part.IsLatex {
+			latexImage, err := renderLatex(part.Content)
+			if err != nil {
+				slog.Error("failed to render latex", "err", err, "latex", part.Content)
+				p = processedPart{Type: partTypeText, Content: part.Content} // fuck, but whatever
+			} else {
+				p = processedPart{Type: partTypeImage, Content: "-# " + part.Content, Image: latexImage}
+			}
+		} else {
+			p = processedPart{Type: partTypeText, Content: part.Content}
+		}
+
+		// merge with previous text part if possible
+		if p.Type == partTypeText && len(processedParts) > 0 && processedParts[len(processedParts)-1].Type == partTypeText {
+			processedParts[len(processedParts)-1].Content += p.Content
+		} else {
+			processedParts = append(processedParts, p)
+		}
+	}
+
+	if len(processedParts) == 0 && len(files) == 0 {
+		return nil, nil
+	}
+
+	var firstBotMessage *discord.Message
+	isFirstMessage := true
+
+	for i, part := range processedParts {
+		switch part.Type {
+		case partTypeImage:
+			imageFile := &discord.File{
+				Name:   latexRenderFilename,
+				Reader: bytes.NewReader(part.Image),
+			}
+
+			builder := discord.NewMessageCreateBuilder().
+				SetFlags(flags).
+				SetContent(part.Content).
+				SetAllowedMentions(&discord.AllowedMentions{RepliedUser: false}).
+				AddFiles(imageFile)
+
+			if isFirstMessage && messageID != 0 {
+				builder.SetMessageReferenceByID(messageID)
+			}
+
+			message, err := client.Rest().CreateMessage(channelID, builder.Build())
+			if err != nil {
+				return firstBotMessage, fmt.Errorf("failed to send latex image: %w", err)
+			}
+			if isFirstMessage {
+				firstBotMessage = message
+				isFirstMessage = false
+				event = nil
+				messageID = 0
+			}
+
+		case partTypeText:
+			currentFiles := []*discord.File{}
+			if i == len(processedParts)-1 {
+				currentFiles = files
+			}
+
+			// add separator flag only to the very last part
+			currentSepFlag := sepFlag && (i == len(processedParts)-1)
+
+			msg, err := sendTextPart(client, &messageID, &event, flags, channelID, []rune(part.Content), currentFiles, currentSepFlag, &isFirstMessage)
+			if err != nil {
+				return firstBotMessage, err
+			}
+			if isFirstMessage && msg != nil {
+				firstBotMessage = msg
+				isFirstMessage = false
+			}
+		}
+	}
+
+	// no content, only files
+	if len(processedParts) == 0 && len(files) > 0 {
+		return sendTextPart(client, &messageID, &event, flags, channelID, []rune{}, files, sepFlag, &isFirstMessage)
+	}
+
+	return firstBotMessage, nil
+}
+
+func sendTextPart(
+	client bot.Client,
+	messageID *snowflake.ID,
+	event **handler.CommandEvent,
+	flags discord.MessageFlags,
+	channelID snowflake.ID,
+	runes []rune,
+	files []*discord.File,
+	sepFlag bool,
+	isFirst *bool,
+) (*discord.Message, error) {
 	maxLen := 2000
 	if sepFlag {
 		maxLen-- // reserve one char for the separator
 	}
 	messageLen := len(runes)
 	numMessages := (messageLen + maxLen - 1) / maxLen
-	if numMessages == 0 && len(files) > 0 { // handle case where only files are sent
+	if numMessages == 0 && len(files) > 0 {
 		numMessages = 1
 	} else if numMessages == 0 {
 		return nil, nil
 	}
 
-	var firstBotMessage *discord.Message
+	var firstSentMessage *discord.Message
 
-	for i := range numMessages {
+	for i := 0; i < numMessages; i++ {
 		start := i * maxLen
 		end := min(start+maxLen, messageLen)
 		segment := ""
-		if start < end { // avoid creating empty segments if only files are sent
+		if start < end {
 			segment = string(runes[start:end])
 		}
 
@@ -213,39 +403,82 @@ func sendMessageSplits(
 		var message *discord.Message
 		var err error
 
-		if i == 0 && event != nil { // (interaction update)
-			message, err = event.UpdateInteractionResponse(discord.MessageUpdate{
+		if i == 0 && *isFirst && event != nil && *event != nil {
+			message, err = (*event).UpdateInteractionResponse(discord.MessageUpdate{
 				Content: &segment,
 				Flags:   &flags,
 				Files:   currentFiles,
 			})
-		} else { // (new message)
+		} else {
 			builder := discord.NewMessageCreateBuilder().
 				SetContent(segment).
 				SetFlags(flags).
 				SetAllowedMentions(&discord.AllowedMentions{RepliedUser: false}).
 				AddFiles(currentFiles...)
-			if i == 0 && messageID != 0 {
-				builder.SetMessageReferenceByID(messageID)
+			if i == 0 && *isFirst && *messageID != 0 {
+				builder.SetMessageReferenceByID(*messageID)
 			}
 
 			message, err = client.Rest().CreateMessage(channelID, builder.Build())
 		}
 
 		if err != nil {
-			return firstBotMessage, fmt.Errorf("failed to send message split %d: %w", i+1, err)
+			return firstSentMessage, fmt.Errorf("failed to send message split %d: %w", i+1, err)
 		}
 
-		if i == 0 {
-			firstBotMessage = message
+		if i == 0 && *isFirst {
+			firstSentMessage = message
 		}
-
-		// if it was an interaction event, subsequent messages must be regular messages
-		event = nil
-		messageID = 0
 	}
 
-	return firstBotMessage, nil
+	if numMessages > 0 {
+		*isFirst = false
+		if event != nil {
+			*event = nil
+		}
+		*messageID = 0
+	}
+
+	return firstSentMessage, nil
+}
+
+func renderLatex(latex string) (result []byte, err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			err = fmt.Errorf("panicked during LaTeX rendering: %v", r)
+		}
+	}()
+
+	var buf bytes.Buffer
+	dst := drawimg.NewRenderer(&buf)
+
+	if err = mtex.Render(dst, "$$"+latex+"$$", 30, 144, nil); err != nil {
+		return nil, err
+	}
+
+	imgBytes := buf.Bytes()
+
+	img, _, err := image.Decode(bytes.NewReader(imgBytes))
+	if err != nil {
+		return nil, err
+	}
+
+	bounds := img.Bounds()
+	const padding = 8
+
+	newBounds := image.Rect(0, 0, bounds.Dx()+2*padding, bounds.Dy()+2*padding)
+	newImg := image.NewRGBA(newBounds)
+	white := color.RGBA{255, 255, 255, 255}
+
+	draw.Draw(newImg, newBounds, &image.Uniform{white}, image.Point{}, draw.Src)
+	draw.Draw(newImg, bounds.Add(image.Pt(padding, padding)), img, bounds.Min, draw.Over)
+
+	var finalBuf bytes.Buffer
+	if err = png.Encode(&finalBuf, newImg); err != nil {
+		return nil, err
+	}
+
+	return finalBuf.Bytes(), nil
 }
 
 func extractFilenameFromURL(rawURL string) (string, error) {
@@ -327,5 +560,5 @@ func ptr[T any](v T) *T {
 
 // isImageAttachment checks if a message attachment is an image.
 func isImageAttachment(attachment discord.Attachment) bool {
-	return attachment.ContentType != nil && strings.HasPrefix(*attachment.ContentType, "image/")
+	return attachment.ContentType != nil && strings.HasPrefix(*attachment.ContentType, "image/") && attachment.Filename != latexRenderFilename
 }

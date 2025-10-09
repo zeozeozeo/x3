@@ -3,12 +3,15 @@ module github.com/zeozeozeo/x3
 go 1.25.1
 
 require (
+	codeberg.org/go-latex/latex v0.2.0
 	github.com/disgoorg/disgo v0.18.16
 	github.com/zeozeozeo/aihorde-go v0.0.0-20250402140353-8cc7927c847f
 )
 
 require (
+	git.sr.ht/~sbinet/gg v0.7.0 // indirect
 	github.com/dlclark/regexp2 v1.11.5 // indirect
+	github.com/golang/freetype v0.0.0-20170609003504-e2365dfdc4a0 // indirect
 	github.com/sasha-s/go-csync v0.0.0-20240107134140-fcbab37b09ad // indirect
 	golang.org/x/text v0.29.0 // indirect
 )
