@@ -187,10 +187,6 @@ func isNarrationMessage(message discord.Message) bool {
 	})
 }
 
-func isLatexRenderedMessage(message discord.Message) bool {
-	return len(message.Attachments) == 1 && message.Attachments[0].Filename == latexRenderFilename
-}
-
 func fetchMessagesBefore(
 	client bot.Client,
 	channelID, beforeID snowflake.ID,
@@ -263,6 +259,7 @@ func addContextMessages(
 		if msg.Author.ID == client.ID() {
 			role = llm.RoleAssistant
 			lastAssistantMessageID = msg.ID
+			isSplitAnyway := false
 
 			if isLobotomyMessage(msg) {
 				// for lobotomy messages, delete the context
@@ -283,10 +280,9 @@ func addContextMessages(
 				content = strings.Replace(msg.Content, "**", "", 2)
 			} else if isNarrationMessage(msg) {
 				continue // skip narration images from handleNarrationGenerate
-			} else if isLatexRenderedMessage(msg) {
-				if after, ok := strings.CutPrefix(msg.Content, "-# "); ok {
-					content = "$" + after + "$"
-				}
+			} else if after, found := strings.CutPrefix(msg.Content, latexAPI); found {
+				content = "$" + pathUnescape(after) + "$"
+				isSplitAnyway = true
 			} else {
 				content = getMessageContent(msg)
 			}
@@ -296,7 +292,7 @@ func addContextMessages(
 			}
 
 			// potential message split
-			if strings.HasSuffix(content, "\u200B") {
+			if isSplitAnyway || strings.HasSuffix(content, "\u200B") {
 				content = content + " " + newMessageTag + " "
 			}
 			if strings.HasPrefix(content, "\u200B") {
