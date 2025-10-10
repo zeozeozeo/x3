@@ -42,7 +42,7 @@ func handleCard(client bot.Client, channelID, messageID snowflake.ID, cache *db.
 			preMsgWg.Wait()
 		}
 
-		_, err := sendMessageSplits(client, messageID, nil, 0, channelID, []rune(firstMes), nil, false, nil)
+		_, err := sendMessageSplits(client, messageID, nil, 0, channelID, firstMes, nil, false, nil)
 		if err != nil {
 			cache.PersonaMeta.IsFirstMes = true
 			return true, fmt.Errorf("failed to send card message: %w", err)
