@@ -346,9 +346,10 @@ func sendTextPart(
 	for i := 0; i < numMessages; i++ {
 		start := i * maxLen
 		end := min(start+maxLen, messageLen)
-		segment := ""
+		var segment, rawSegment string
 		if start < end {
-			segment = string(runes[start:end])
+			rawSegment = string(runes[start:end])
+			segment = rawSegment
 		}
 
 		// add separator to the last message if needed
@@ -381,13 +382,14 @@ func sendTextPart(
 				builder.SetMessageReferenceByID(*messageID)
 			}
 
-			if len(currentFiles) > 0 || segment != "" {
+			if len(currentFiles) > 0 || strings.TrimSpace(rawSegment) != "" {
 				message, err = client.Rest().CreateMessage(channelID, builder.Build())
 			}
 		}
 
 		if err != nil {
-			return firstSentMessage, fmt.Errorf("failed to send message split %d: %w", i+1, err)
+			//return firstSentMessage, fmt.Errorf("failed to send message split %d: %w", i+1, err)
+			slog.Warn("failed to send message split", "i", i+1, "err", err)
 		}
 
 		if i == 0 && *isFirst {
