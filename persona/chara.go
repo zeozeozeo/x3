@@ -1,3 +1,4 @@
+// SillyTavern character card parsing (not fully spec compliant since it will attempt to fix wrongly formatted cards)
 package persona
 
 import (
@@ -14,6 +15,7 @@ import (
 	"text/template"
 
 	"github.com/barasher/go-exiftool"
+	"github.com/cloudflare/ahocorasick"
 	"github.com/google/uuid"
 )
 
@@ -76,6 +78,32 @@ func (c TavernCardV2) formatField(field string, user string) string {
 	return field
 }
 
+var weirdPersonalityStringsMatcher = ahocorasick.NewStringMatcher([]string{
+	"https://",
+	"http://",
+	"janitor",
+	"jannyai",
+	"openai",
+	"deepseek",
+	" bot ",
+	" bot.",
+	"llm",
+	" ai ",
+})
+
+func (c *TavernCardV2) maybeSwapWeirdPersonalityFieldWithCreatorNotesIfTheCardAuthorDoesntKnowHowToUseThePersonalityFieldCorrectly() {
+	if c.Data == nil {
+		return
+	}
+	if ContainsEmoji(c.Data.Personality) || weirdPersonalityStringsMatcher.Contains([]byte(strings.ToLower(c.Data.Personality))) {
+		if c.Data.CreatorNotes != "" {
+			c.Data.CreatorNotes += "\n"
+		}
+		c.Data.CreatorNotes = c.Data.Personality
+		c.Data.Personality = ""
+	}
+}
+
 func (c TavernCardV2) formatExamples(user string) string {
 	if c.Data.MesExample == "" {
 		return ""
@@ -134,6 +162,8 @@ func (meta *PersonaMeta) ApplyJsonChara(data []byte, user string) (TavernCardV2,
 		}
 		card.Data = &cardV1
 	}
+
+	card.maybeSwapWeirdPersonalityFieldWithCreatorNotesIfTheCardAuthorDoesntKnowHowToUseThePersonalityFieldCorrectly()
 
 	// execute template
 	var b bytes.Buffer
