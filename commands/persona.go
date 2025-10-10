@@ -280,9 +280,6 @@ func HandlePersona(event *handler.CommandEvent) error {
 	if hasFreqPenalty {
 		cache.PersonaMeta.Settings.FrequencyPenalty = float32(dataFreqPenalty)
 	}
-	if hasEnableImages {
-		cache.PersonaMeta.EnableImages = dataEnableImages
-	}
 	if hasEnableMemory {
 		cache.PersonaMeta.EnableMemory = dataEnableMemory
 	}
@@ -294,6 +291,9 @@ func HandlePersona(event *handler.CommandEvent) error {
 	creatorNotes := ""
 	if dataCard != "" {
 		// fetch from url (this is pretty scary)
+		if !strings.HasPrefix(dataCard, "http://") && !strings.HasPrefix(dataCard, "https://") {
+			dataCard = "https://" + dataCard
+		}
 		slog.Debug("fetching character card", slog.String("url", dataCard))
 		resp, err := http.Get(dataCard)
 		if err != nil {
@@ -317,6 +317,11 @@ func HandlePersona(event *handler.CommandEvent) error {
 		filename := path.Base(dataCard)
 		filename, _, _ = strings.Cut(filename, "?")
 		didWhat = append(didWhat, fmt.Sprintf("set character card to `%s`", filename))
+	}
+
+	// do this after ApplyChara
+	if hasEnableImages {
+		cache.PersonaMeta.EnableImages = dataEnableImages
 	}
 
 	if err := cache.Write(event.Channel().ID()); err != nil {
