@@ -381,7 +381,7 @@ func sendTextPart(
 				builder.SetMessageReferenceByID(*messageID)
 			}
 
-			if len(currentFiles) > 0 && segment != "" {
+			if len(currentFiles) > 0 || segment != "" {
 				message, err = client.Rest().CreateMessage(channelID, builder.Build())
 			}
 		}
