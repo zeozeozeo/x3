@@ -171,19 +171,26 @@ type messagePart struct {
 	IsLatex bool
 }
 
-const latexAPI = `https://latex.codecogs.com/png.image?\huge&space;\dpi{80}\bg{white}`
+const latexAPI = `https://latex.codecogs.com/png.image?\huge&space;\dpi{80}\bg{white}\fcolorbox{white}{white}{`
 
+// latex equation->api call
 func toLatexAPI(equation string) string {
-	padded := `\fbox{\rule{10pt}{10pt} ` + equation + ` \rule{10pt}{10pt}}`
-	return latexAPI + url.PathEscape(padded)
+	if !strings.HasPrefix(equation, "$") {
+		equation = "$" + equation + "$"
+	}
+	return latexAPI + url.PathEscape(equation) + `}`
 }
 
-func pathUnescape(path string) string {
-	s, err := url.PathUnescape(path)
-	if err != nil {
-		return path
+// api call->latex equation
+func fromLatexAPI(api string) string {
+	equation, _ := url.PathUnescape(strings.TrimPrefix(api, latexAPI))
+	if len(equation) > 0 && equation[len(equation)-1] == '}' {
+		equation = equation[:len(equation)-1]
 	}
-	return s
+	if !strings.HasPrefix(equation, "$") {
+		equation = "$" + equation + "$"
+	}
+	return equation
 }
 
 func parseMessageForLatex(content string) []messagePart {

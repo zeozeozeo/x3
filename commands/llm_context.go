@@ -247,7 +247,13 @@ func addContextMessages(
 		}
 	}
 
-	usernames := make(map[string]struct{})
+	// see sendTextPart
+	usernames := map[string]struct{}{
+		"x3":      {},
+		"clanker": {},
+		"кланкер": {},
+		"zeo":     {},
+	}
 	var lastResponseMessage *discord.Message
 	var lastAssistantMessageID snowflake.ID
 	var lastUserID snowflake.ID
@@ -282,8 +288,8 @@ func addContextMessages(
 				content = strings.Replace(msg.Content, "**", "", 2)
 			} else if isNarrationMessage(msg) {
 				continue // skip narration images from handleNarrationGenerate
-			} else if after, found := strings.CutPrefix(msg.Content, latexAPI); found {
-				content = "$" + pathUnescape(after) + "$"
+			} else if strings.HasPrefix(msg.Content, latexAPI) {
+				content = fromLatexAPI(msg.Content)
 				isSplitAnyway = true
 			} else {
 				content = getMessageContent(msg)
