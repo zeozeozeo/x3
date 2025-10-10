@@ -227,7 +227,7 @@ func HandleLlm(event *handler.CommandEvent, models []model.Model) error {
 				currentEvent, // only pass for the first split
 				flagsFromEphemeral(ephemeral),
 				event.Channel().ID(),
-				[]rune(content),
+				content,
 				currentFiles,
 				i != len(messages)-1, // add zws if not the last message
 				usernames,

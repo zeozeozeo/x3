@@ -267,12 +267,11 @@ func sendMessageSplits(
 	event *handler.CommandEvent, // interaction event (nil if sending regular message)
 	flags discord.MessageFlags, // message flags (e.g., ephemeral)
 	channelID snowflake.ID, // channel to send to
-	runes []rune, // content runes
+	content string, // content runes
 	files []*discord.File, // files to attach (only sent with the last split)
 	sepFlag bool, // add an invisible character to the last split to indicate joining needed
 	usernames map[string]struct{},
 ) (*discord.Message, error) {
-	content := string(runes)
 	parts := parseMessageForLatex(content)
 
 	if len(parts) == 0 && len(files) == 0 {
@@ -292,15 +291,15 @@ func sendMessageSplits(
 		currentSepFlag := sepFlag && (i == len(parts)-1)
 
 		// remove prepended usernames (some models like gpt-5 are dumb enough for this)
-		content := part.Content
+		content2 := part.Content
 		for username := range usernames {
 			prefix := username + ": "
-			if len(content) >= len(prefix) && strings.EqualFold(content[:len(prefix)], prefix) {
-				content = content[len(prefix):]
+			if len(content2) >= len(prefix) && strings.EqualFold(content2[:len(prefix)], prefix) {
+				content2 = content2[len(prefix):]
 			}
 		}
 
-		msg, err := sendTextPart(client, &messageID, &event, flags, channelID, []rune(content), currentFiles, currentSepFlag, &isFirstMessage, part.IsLatex)
+		msg, err := sendTextPart(client, &messageID, &event, flags, channelID, []rune(content2), currentFiles, currentSepFlag, &isFirstMessage, part.IsLatex)
 		if err != nil {
 			return firstBotMessage, err
 		}
@@ -382,7 +381,9 @@ func sendTextPart(
 				builder.SetMessageReferenceByID(*messageID)
 			}
 
-			message, err = client.Rest().CreateMessage(channelID, builder.Build())
+			if len(currentFiles) > 0 && segment != "" {
+				message, err = client.Rest().CreateMessage(channelID, builder.Build())
+			}
 		}
 
 		if err != nil {

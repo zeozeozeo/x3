@@ -317,7 +317,7 @@ func handleLlmInteraction2(
 			}
 
 			// send the split
-			botMessage, err = sendMessageSplits(client, replyMessageID, event, 0, channelID, []rune(content), currentFiles, i != len(messages)-1, usernames)
+			botMessage, err = sendMessageSplits(client, replyMessageID, event, 0, channelID, content, currentFiles, i != len(messages)-1, usernames)
 			if err != nil {
 				slog.Error("failed to send message split", "err", err, slog.Int("split_index", i))
 				return response, 0, fmt.Errorf("failed to send message split %d: %w", i+1, err)
