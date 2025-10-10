@@ -171,12 +171,14 @@ type messagePart struct {
 	IsLatex bool
 }
 
-const latexAPI = `https://latex.codecogs.com/png.image?\huge&space;\dpi{80}\bg{white}\fcolorbox{white}{white}{`
+// \fcolorbox{white}{white} for a bit of padding (hacky but works)
+const latexAPI = `https://latex.codecogs.com/png.image?\huge&space;\dpi{80}\fcolorbox{white}{white}{`
 
 // latex equation->api call
 func toLatexAPI(equation string) string {
 	if !strings.HasPrefix(equation, "$") {
-		equation = "$" + equation + "$"
+		// \displaystyle to use block rendering in \fcolorbox
+		equation = `$\displaystyle ` + equation + `$`
 	}
 	return latexAPI + url.PathEscape(equation) + `}`
 }
@@ -187,8 +189,12 @@ func fromLatexAPI(api string) string {
 	if len(equation) > 0 && equation[len(equation)-1] == '}' {
 		equation = equation[:len(equation)-1]
 	}
+	equation = strings.TrimPrefix(equation, `$\displaystyle `)
 	if !strings.HasPrefix(equation, "$") {
-		equation = "$" + equation + "$"
+		equation = "$" + equation
+	}
+	if !strings.HasSuffix(equation, "$") {
+		equation = equation + "$"
 	}
 	return equation
 }
