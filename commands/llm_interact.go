@@ -209,7 +209,7 @@ func handleLlmInteraction2(
 		"prepend", prepend,
 		"isDM", isDM,
 	)
-	response, usage, err := llmer.RequestCompletion(models, usernames, cache.PersonaMeta.Settings, prepend)
+	response, usage, err := llmer.RequestCompletion(models, cache.PersonaMeta.Settings, prepend)
 	if err != nil {
 		slog.Error("LLM request failed", "err", err)
 		return "", 0, fmt.Errorf("LLM request failed: %w", err)
@@ -317,7 +317,7 @@ func handleLlmInteraction2(
 			}
 
 			// send the split
-			botMessage, err = sendMessageSplits(client, replyMessageID, event, 0, channelID, []rune(content), currentFiles, i != len(messages)-1)
+			botMessage, err = sendMessageSplits(client, replyMessageID, event, 0, channelID, []rune(content), currentFiles, i != len(messages)-1, usernames)
 			if err != nil {
 				slog.Error("failed to send message split", "err", err, slog.Int("split_index", i))
 				return response, 0, fmt.Errorf("failed to send message split %d: %w", i+1, err)

@@ -1,3 +1,5 @@
+// TODO: get rid of the fuckass code in here
+
 package commands
 
 import (
@@ -135,7 +137,7 @@ func HandleLlm(event *handler.CommandEvent, models []model.Model) error {
 		slog.Int("num_messages", llmer.NumMessages()),
 		slog.String("prepend", cache.PersonaMeta.Prepend),
 	)
-	response, usage, err := llmer.RequestCompletion(targetModels, usernames, cache.PersonaMeta.Settings, cache.PersonaMeta.Prepend)
+	response, usage, err := llmer.RequestCompletion(targetModels, cache.PersonaMeta.Settings, cache.PersonaMeta.Prepend)
 	if err != nil {
 		slog.Error("LLM request failed", "err", err)
 		return updateInteractionError(event, fmt.Sprintf("LLM request failed: %s", err.Error()))
@@ -228,6 +230,7 @@ func HandleLlm(event *handler.CommandEvent, models []model.Model) error {
 				[]rune(content),
 				currentFiles,
 				i != len(messages)-1, // add zws if not the last message
+				usernames,
 			)
 			if splitErr != nil {
 				slog.Error("failed to send message split", "err", splitErr, "split_index", i)

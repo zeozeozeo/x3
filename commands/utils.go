@@ -174,7 +174,8 @@ type messagePart struct {
 const latexAPI = `https://latex.codecogs.com/png.image?\huge&space;\dpi{80}\bg{white}`
 
 func toLatexAPI(equation string) string {
-	return latexAPI + url.PathEscape(equation)
+	padded := `\fbox{\rule{10pt}{10pt} ` + equation + ` \rule{10pt}{10pt}}`
+	return latexAPI + url.PathEscape(padded)
 }
 
 func pathUnescape(path string) string {
@@ -256,6 +257,7 @@ func sendMessageSplits(
 	runes []rune, // content runes
 	files []*discord.File, // files to attach (only sent with the last split)
 	sepFlag bool, // add an invisible character to the last split to indicate joining needed
+	usernames map[string]struct{},
 ) (*discord.Message, error) {
 	content := string(runes)
 	parts := parseMessageForLatex(content)
@@ -276,7 +278,16 @@ func sendMessageSplits(
 		// add separator flag only to the very last part
 		currentSepFlag := sepFlag && (i == len(parts)-1)
 
-		msg, err := sendTextPart(client, &messageID, &event, flags, channelID, []rune(part.Content), currentFiles, currentSepFlag, &isFirstMessage, part.IsLatex)
+		// remove prepended usernames (some models like gpt-5 are dumb enough for this)
+		content := part.Content
+		for username := range usernames {
+			prefix := username + ": "
+			if len(content) >= len(prefix) && strings.EqualFold(content[:len(prefix)], prefix) {
+				content = content[len(prefix):]
+			}
+		}
+
+		msg, err := sendTextPart(client, &messageID, &event, flags, channelID, []rune(content), currentFiles, currentSepFlag, &isFirstMessage, part.IsLatex)
 		if err != nil {
 			return firstBotMessage, err
 		}

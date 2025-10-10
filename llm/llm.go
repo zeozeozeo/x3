@@ -302,7 +302,6 @@ func (l *Llmer) requestCompletionInternal2(
 	m model.Model,
 	codename,
 	provider string,
-	usernames map[string]struct{},
 	settings persona.InferenceSettings,
 	client *openai.Client,
 	prepend string,
@@ -376,17 +375,6 @@ func (l *Llmer) requestCompletionInternal2(
 	unescaped := html.UnescapeString(text.String())
 	unescaped = strings.TrimSpace(unescaped)
 
-	// if the model is dumb enough to prepend usernames, cut them off
-	if usernames == nil {
-		usernames = map[string]struct{}{}
-	}
-	usernames["clanker"] = struct{}{}
-	for username := range usernames {
-		prefix := username + ": "
-		for strings.HasPrefix(strings.ToLower(unescaped), strings.ToLower(prefix)) {
-			unescaped = unescaped[len(prefix):]
-		}
-	}
 	// and trim spaces again after our checks, for good measure
 	unescaped = strings.TrimSpace(unescaped)
 	slog.Info("response", "len", len(unescaped), "duration", time.Since(completionStart), "model", m.Name, "provider", provider)
@@ -402,7 +390,6 @@ func (l *Llmer) requestCompletionInternal2(
 func (l *Llmer) requestCompletionInternal(
 	m model.Model,
 	provider string,
-	usernames map[string]struct{},
 	settings persona.InferenceSettings,
 	prepend string,
 ) (string, Usage, error) {
@@ -447,7 +434,7 @@ func (l *Llmer) requestCompletionInternal(
 
 			for _, codename := range codenames {
 				slog.Info("attempting request", "provider", provider, "baseUrl", baseUrl, "codename", codename)
-				res, usage, err := l.requestCompletionInternal2(m, codename, provider, usernames, settings, client, prepend)
+				res, usage, err := l.requestCompletionInternal2(m, codename, provider, settings, client, prepend)
 				if err == nil {
 					// we got a response, but if we used a prefill, we should indicate that it was used
 					// (prepend it to the response in bold)
@@ -465,7 +452,7 @@ func (l *Llmer) requestCompletionInternal(
 	return "", Usage{}, fmt.Errorf("all configurations for provider %s failed: %w", provider, lastErr) // all baseUrls/tokens/codenames errored
 }
 
-func (l *Llmer) inferMarkovChain(usernames map[string]struct{}) string {
+func (l *Llmer) inferMarkovChain() string {
 	if len(l.Messages) == 0 {
 		return ""
 	}
@@ -477,9 +464,6 @@ func (l *Llmer) inferMarkovChain(usernames map[string]struct{}) string {
 		//	continue
 		//}
 		content := msg.Content
-		for username := range usernames {
-			content = strings.TrimPrefix(content, username+": ")
-		}
 		words := strings.Fields(content)
 		if len(words) > 0 {
 			chain.Add(words)
@@ -520,12 +504,9 @@ func (l *Llmer) inferMarkovChain(usernames map[string]struct{}) string {
 	return strings.TrimSpace(sb.String())
 }
 
-func (l *Llmer) inferEliza(usernames map[string]struct{}) string {
+func (l *Llmer) inferEliza() string {
 	msg := l.Messages[len(l.Messages)-1]
 	content := msg.Content
-	for username := range usernames {
-		content = strings.TrimPrefix(content, username+": ")
-	}
 	if anal, err := eliza.AnalyzeString(content); err == nil {
 		return anal
 	}
@@ -547,20 +528,20 @@ func (l Llmer) shouldSwapToVision() bool {
 	return false
 }
 
-func (l *Llmer) RequestCompletion(models []model.Model, usernames map[string]struct{}, settings persona.InferenceSettings, prepend string) (res string, usage Usage, err error) {
+func (l *Llmer) RequestCompletion(models []model.Model, settings persona.InferenceSettings, prepend string) (res string, usage Usage, err error) {
 	if len(models) == 0 {
 		err = errNoModelsForCompletion
 		return
 	}
 
 	if models[0].IsMarkov {
-		res = l.inferMarkovChain(usernames)
+		res = l.inferMarkovChain()
 		usage = Usage{}
 		err = nil
 		return
 	}
 	if models[0].IsEliza {
-		res = l.inferEliza(usernames)
+		res = l.inferEliza()
 		usage = Usage{}
 		err = nil
 		return
@@ -606,7 +587,7 @@ func (l *Llmer) RequestCompletion(models []model.Model, usernames map[string]str
 			}
 			slog.Info("requesting completion", "model", m.Name, "provider", provider.Name, "providerErrors", provider.Errors, "retries", retries)
 
-			res, usage, err = l.requestCompletionInternal(m, provider.Name, usernames, settings.Fixup(), prepend)
+			res, usage, err = l.requestCompletionInternal(m, provider.Name, settings.Fixup(), prepend)
 
 			// check for empty response first
 			if err == nil && res == "" {

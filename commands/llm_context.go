@@ -216,6 +216,8 @@ func fetchMessagesBefore(
 }
 
 // Returns number of messages fetched, map of usernames, last assistant response message, last assistant message ID, last user ID
+// (this way of restoring context is pretty hacky since we use \u200B to indicate splits/impersonations, but that way we don't have to
+// rely on a db)
 func addContextMessages(
 	client bot.Client,
 	llmer *llm.Llmer,
