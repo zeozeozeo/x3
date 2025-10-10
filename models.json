@@ -652,9 +652,9 @@
     "Meituan LongCat Flash Chat 560B",
     "Moonshot AI Kimi K2 1000B (0905)",
     "Meta Llama 3.3 70B",
+    "OpenAI GPT-5",
     "Meta Llama 4 Maverick 400B/17A",
-    "Meta Llama 4 Scout 109B/17A",
-    "OpenAI GPT-5"
+    "Meta Llama 4 Scout 109B/17A"
   ],
   "narrator_models": [
     "Meta Llama 3.3 70B",
@@ -663,9 +663,9 @@
     "OpenAI GPT-5"
   ],
   "default_vision_models": [
+    "OpenAI GPT-5",
     "Meta Llama 4 Maverick 400B/17A",
-    "Meta Llama 4 Scout 109B/17A",
-    "OpenAI GPT-5"
+    "Meta Llama 4 Scout 109B/17A"
   ],
   "providers_order": [
     "groq",
@@ -691,5 +691,5 @@
     "pollinations",
     "huggingface"
   ],
-  "current_version": 7
+  "current_version": 8
 }
