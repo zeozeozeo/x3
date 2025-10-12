@@ -67,6 +67,8 @@ func isTriggerCommand(event *events.MessageCreate, cmd string) bool {
 	return false
 }
 
+var llmInteractionsInProgress sync.Map
+
 func OnMessageCreate(event *events.MessageCreate) {
 	if event.Message.Author.Bot {
 		return
@@ -93,31 +95,48 @@ func OnMessageCreate(event *events.MessageCreate) {
 		return // might be a poll/pin message etc
 	}
 
+	shouldTriggerLlm := false
+
 	// are we @mentioned?
 	for _, user := range event.Message.Mentions {
 		if user.ID == event.Client().ID() {
-			handleLlmInteraction(event)
-			return
+			shouldTriggerLlm = true
+			break
 		}
 	}
 
 	// is this a reply to our message?
-	if event.Message.ReferencedMessage != nil && event.Message.ReferencedMessage.Author.ID == event.Client().ID() {
+	if !shouldTriggerLlm && event.Message.ReferencedMessage != nil && event.Message.ReferencedMessage.Author.ID == event.Client().ID() {
 		if !isLobotomyMessage(*event.Message.ReferencedMessage) && !isCardMessage(*event.Message.ReferencedMessage) {
-			handleLlmInteraction(event)
-			return
+			shouldTriggerLlm = true
 		}
 	}
 
 	// "clanker"
-	if containsX3Regex.MatchString(event.Message.Content) {
-		handleLlmInteraction(event)
-		return
+	if !shouldTriggerLlm && containsX3Regex.MatchString(event.Message.Content) {
+		shouldTriggerLlm = true
 	}
 
 	// recent interaction?
-	cache := db.GetChannelCache(event.ChannelID)
-	if time.Since(cache.LastInteraction) < 30*time.Second {
+	if !shouldTriggerLlm {
+		cache := db.GetChannelCache(event.ChannelID)
+		if time.Since(cache.LastInteraction) < 30*time.Second {
+			shouldTriggerLlm = true
+		}
+	}
+
+	// is this a DM?
+	if !shouldTriggerLlm && event.GuildID == nil {
+		shouldTriggerLlm = true
+	}
+
+	if shouldTriggerLlm {
+		if _, loaded := llmInteractionsInProgress.LoadOrStore(event.ChannelID, true); loaded {
+			return
+		}
+
+		defer llmInteractionsInProgress.Delete(event.ChannelID)
+
 		handleLlmInteraction(event)
 		return
 	}
