@@ -58,6 +58,7 @@ const (
 	akashBaseURL        = "https://chatapi.akash.network/api/v1"
 	llm7BaseURL         = "https://api.llm7.io/v1"
 	longcatBaseURL      = "https://api.longcat.chat/openai"
+	navyBaseURL         = "https://api.navy/v1"
 )
 
 const (
@@ -86,6 +87,7 @@ const (
 	ProviderAkash        = "akash"
 	ProviderLLM7         = "llm7"
 	ProviderLongCat      = "longcat"
+	ProviderNavy         = "navy"
 )
 
 type ModelProvider struct {
@@ -145,6 +147,7 @@ var (
 		{Name: ProviderGithub},
 		{Name: ProviderPollinations},
 		{Name: ProviderHuggingface},
+		{Name: ProviderNavy},
 		//{Name: ProviderG4F},
 	}
 
@@ -330,6 +333,8 @@ func (m Model) Client(provider string) (baseUrls []string, tokens []string, code
 		tokenEnvKey, apiVar = "X3_LLM7_TOKEN", llm7BaseURL
 	case ProviderLongCat:
 		tokenEnvKey, apiVar = "X3_LONGCAT_TOKEN", longcatBaseURL
+	case ProviderNavy:
+		tokenEnvKey, apiVar = "X3_NAVY_TOKEN", navyBaseURL
 	default:
 		return nil, nil, nil
 	}

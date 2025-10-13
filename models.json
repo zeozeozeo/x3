@@ -1,6 +1,66 @@
 {
   "models": [
     {
+      "name": "GLM 4.6 357B",
+      "command": "glm",
+      "providers": {
+        "atlas": {
+          "codenames": [
+            "zai-org/GLM-4.6"
+          ]
+        },
+        "crof": {
+          "codenames": [
+            "glm-4.6"
+          ]
+        },
+        "electronhub": {
+          "codenames": [
+            "glm-4.6",
+            "glm-4.6:free"
+          ]
+        },
+        "mnn": {
+          "codenames": [
+            "glm-4.6"
+          ]
+        },
+        "zhipu": {
+          "codenames": [
+            "GLM-4.6"
+          ]
+        }
+      }
+    },
+    {
+      "name": "DeepSeek V3.2 Exp",
+      "command": "deepseek",
+      "reasoning": true,
+      "providers": {
+        "atlas": {
+          "codenames": [
+            "deepseek-ai/DeepSeek-V3.2-Exp"
+          ]
+        },
+        "crof": {
+          "codenames": [
+            "deepseek-v3.2-exp"
+          ]
+        },
+        "electronhub": {
+          "codenames": [
+            "deepseek-v3.2-exp",
+            "deepseek-v3.2-exp:free"
+          ]
+        },
+        "mnn": {
+          "codenames": [
+            "deepseek-v3.2-exp"
+          ]
+        }
+      }
+    },
+    {
       "name": "OpenAI GPT-5",
       "command": "gpt",
       "vision": true,
@@ -57,34 +117,6 @@
         "openrouter": {
           "codenames": [
             "openai/gpt-oss-120b:free"
-          ]
-        }
-      }
-    },
-    {
-      "name": "DeepSeek V3.2 Exp",
-      "command": "deepseek",
-      "reasoning": true,
-      "providers": {
-        "atlas": {
-          "codenames": [
-            "deepseek-ai/DeepSeek-V3.2-Exp"
-          ]
-        },
-        "crof": {
-          "codenames": [
-            "deepseek-v3.2-exp"
-          ]
-        },
-        "electronhub": {
-          "codenames": [
-            "deepseek-v3.2-exp",
-            "deepseek-v3.2-exp:free"
-          ]
-        },
-        "mnn": {
-          "codenames": [
-            "deepseek-v3.2-exp"
           ]
         }
       }
@@ -549,28 +581,6 @@
       }
     },
     {
-      "name": "Z.AI GLM 4.6 357B",
-      "command": "glm",
-      "providers": {
-        "crof": {
-          "codenames": [
-            "glm-4.6"
-          ]
-        },
-        "electronhub": {
-          "codenames": [
-            "glm-4.6",
-            "glm-4.6:free"
-          ]
-        },
-        "mnn": {
-          "codenames": [
-            "glm-4.6"
-          ]
-        }
-      }
-    },
-    {
       "name": "Google Gemma 3 27B",
       "command": "gemma",
       "vision": true,
@@ -619,6 +629,11 @@
           "codenames": [
             "gemini-2.5-pro:free"
           ]
+        },
+        "google": {
+          "codenames": [
+            "gemini-2.5-pro"
+          ]
         }
       }
     },
@@ -631,6 +646,11 @@
         "electronhub": {
           "codenames": [
             "gemini-2.5-flash:free"
+          ]
+        },
+        "google": {
+          "codenames": [
+            "gemini-2.5-flash"
           ]
         }
       }
@@ -647,23 +667,23 @@
     }
   ],
   "default_models": [
+    "GLM 4.6 357B",
     "DeepSeek V3.2 Exp",
     "DeepSeek V3 671B (0324)",
     "Meituan LongCat Flash Chat 560B",
     "Moonshot AI Kimi K2 1000B (0905)",
+    "Gemini 2.5 Flash",
     "Meta Llama 3.3 70B",
-    "OpenAI GPT-5",
     "Meta Llama 4 Maverick 400B/17A",
     "Meta Llama 4 Scout 109B/17A"
   ],
   "narrator_models": [
     "Meta Llama 3.3 70B",
     "Meta Llama 4 Scout 109B/17A",
-    "Meta Llama 4 Maverick 400B/17A",
-    "OpenAI GPT-5"
+    "Meta Llama 4 Maverick 400B/17A"
   ],
   "default_vision_models": [
-    "OpenAI GPT-5",
+    "Gemini 2.5 Flash",
     "Meta Llama 4 Maverick 400B/17A",
     "Meta Llama 4 Scout 109B/17A"
   ],
@@ -681,15 +701,16 @@
     "crof",
     "longcat",
     "openrouter",
-    "electronhub",
     "hcap",
     "llm7",
     "helixmind",
     "zukijourney",
     "cohere",
     "github",
+    "electronhub",
     "pollinations",
-    "huggingface"
+    "huggingface",
+    "navy"
   ],
-  "current_version": 8
+  "current_version": 9
 }
