@@ -285,8 +285,8 @@ type InferenceSettings struct {
 }
 
 func (s *InferenceSettings) Remap() {
-	s.Temperature = max(0.0, s.Temperature-0.4) // 1.0 -> 0.6
-	s.TopP = max(0.0, s.TopP-0.1)               // 1.0 -> 0.9
+	//s.Temperature = max(0.0, s.Temperature-0.4) // 1.0 -> 0.6
+	//s.TopP = max(0.0, s.TopP-0.1)               // 1.0 -> 0.9
 }
 
 func (s InferenceSettings) Fixup() InferenceSettings {
