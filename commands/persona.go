@@ -157,7 +157,11 @@ func handlePersonaInfo(event *handler.CommandEvent, ephemeral bool) error {
 		AddField("Temperature", fmt.Sprintf("%s (remapped to %s)", ftoa(settings.Temperature), ftoa(remappedSettings.Temperature)), true).
 		AddField("Top P", fmt.Sprintf("%s (remapped to %s)", ftoa(settings.TopP), ftoa(remappedSettings.TopP)), true).
 		AddField("Flags", fmt.Sprintf("images: %s", enabledDisabled(cache.PersonaMeta.EnableImages)), true).
-		AddField("Frequency Penalty", ftoa(settings.FrequencyPenalty), true)
+		AddField("Frequency Penalty", ftoa(settings.FrequencyPenalty), true).
+		AddField("Context length", fmt.Sprintf("%d", cache.ContextLength), true)
+	if cache.Llmer != nil {
+		builder.AddField("Message cache", fmt.Sprintf("%d messages", cache.Llmer.NumMessages()), true)
+	}
 
 	models := cache.PersonaMeta.Models
 	if len(models) > 0 {
@@ -184,10 +188,6 @@ func handlePersonaInfo(event *handler.CommandEvent, ephemeral bool) error {
 		}
 	}
 
-	builder.AddField("Context length", fmt.Sprintf("%d", cache.ContextLength), false)
-	if cache.Llmer != nil {
-		builder.AddField("Message cache", fmt.Sprintf("%d messages", cache.Llmer.NumMessages()), false)
-	}
 	return event.CreateMessage(
 		discord.NewMessageCreateBuilder().
 			AddEmbeds(builder.Build()).
