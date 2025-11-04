@@ -170,7 +170,9 @@ func HandleLlm(event *handler.CommandEvent, models []model.Model) error {
 	}
 
 	if ephemeral || useCache {
-		response, cache.Summary = replaceLlmTagsWithNewlines(response, event.User().ID, &cache.PersonaMeta)
+		var summary string
+		response, summary = replaceLlmTagsWithNewlines(response, event.User().ID, &cache.PersonaMeta)
+		cache.UpdateSummary(summary)
 	}
 
 	// send response
@@ -197,7 +199,7 @@ func HandleLlm(event *handler.CommandEvent, models []model.Model) error {
 
 	} else { // (splits)
 		messages, summaries := splitLlmTags(response, &cache.PersonaMeta)
-		cache.Summary = strings.Join(summaries, "\n")
+		cache.UpdateSummary(strings.Join(summaries, "\n"))
 
 		currentEvent := event
 		for i, content := range messages {

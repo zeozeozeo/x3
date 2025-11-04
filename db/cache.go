@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"log/slog"
+	"strings"
 	"time"
 
 	"github.com/disgoorg/snowflake/v2"
@@ -42,6 +43,13 @@ type ChannelCache struct {
 	IsLastRandomDM bool `json:"is_last_random_dm,omitempty"`
 	// Summary is an LLM-defined summary of the message history.
 	Summary string
+}
+
+func (cache *ChannelCache) UpdateSummary(summary string) {
+	summary = strings.TrimSpace(summary)
+	if summary != "" {
+		cache.Summary = summary
+	}
 }
 
 // updateInteractionTime updates the LastInteraction timestamp to now.

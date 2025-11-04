@@ -248,7 +248,9 @@ func handleLlmInteraction2(
 	var messages []string
 	if isRegenerate {
 		// edit the previous message for regeneration
-		response, cache.Summary = replaceLlmTagsWithNewlines(response, userID, &cache.PersonaMeta)
+		var summary string
+		response, summary = replaceLlmTagsWithNewlines(response, userID, &cache.PersonaMeta)
+		cache.UpdateSummary(summary)
 
 		builder := discord.NewMessageUpdateBuilder().SetAllowedMentions(&discord.AllowedMentions{RepliedUser: false})
 		if utf8.RuneCountInString(response) > 2000 {
@@ -278,7 +280,7 @@ func handleLlmInteraction2(
 	} else {
 		var summaries []string
 		messages, summaries = splitLlmTags(response, &cache.PersonaMeta)
-		cache.Summary = strings.Join(summaries, "\n")
+		cache.UpdateSummary(strings.Join(summaries, "\n"))
 
 		for i, content := range messages {
 			content = strings.TrimSpace(content)
