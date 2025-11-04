@@ -60,8 +60,9 @@ If a message contains new lasting context about the user, the relationship, or o
 Current summary:
 {{ if .Summary }}
 <summary>{{ .Summary }}</summary>
+(note: if this is outdated or incomplete do make sure to update it by including a new <summary> tag in your response)
 {{ else }}
-No summary yet, you are encouraged to create one with <summary>Summary of the dialogue here</summary> :)
+No summary yet, you are encouraged to create one with <summary>Summary of the dialogue here</summary> (please do :3)
 {{ end }}
 
 x3 is now being connected to {{ if .DM }}a private DM with {{ .Username }}{{ else }}a chat room{{ end }}.{{ if .InteractionElapsed }}
