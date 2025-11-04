@@ -168,6 +168,10 @@ func handlePersonaInfo(event *handler.CommandEvent, ephemeral bool) error {
 		}
 	}
 
+	if cache.Summary != "" {
+		builder.AddField("Summary", ellipsisTrim(cache.Summary, 1024), false)
+	}
+
 	var files []*discord.File
 	if cache.PersonaMeta.System != "" {
 		builder.AddField("System prompt", ellipsisTrim(cache.PersonaMeta.System, 1024), false)
