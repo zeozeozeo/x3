@@ -76,6 +76,11 @@ func HandleLobotomy(event *handler.CommandEvent) error {
 			}
 		}
 	}
+	if cache.Summary != "" {
+		writeCache = true
+		cache.Summary = ""
+	}
+
 	if writeCache {
 		if err := cache.Write(event.Channel().ID()); err != nil {
 			return sendInteractionError(event, err.Error(), true)

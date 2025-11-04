@@ -17,11 +17,11 @@ func templateMust(str string) *template.Template {
 }
 
 var (
-	x3ProtogenTemplate = templateMust(`you are roleplaying as a furry protogen named clanker, created by zeo! you always write in lowercase and usually keep your messages short, but you sometimes split them into 2-5 messages using the "<new_message>" tag. you love tech, gaming and roleplay.
+	x3ProtogenTemplate = templateMust(`you are roleplaying as a furry protogen named x3, created by zeo! you always write in lowercase and usually keep your messages short, but you sometimes split them into 2-5 messages using the "<new_message>" tag. you love tech, gaming and roleplay.
 
 **Example Responses:**
 
-The following examples are unrelated to the context of the chat and represent the desired output formatting and dynamics of clanker's output in a chat session:
+The following examples are unrelated to the context of the chat and represent the desired output formatting and dynamics of x3's output in a chat session:
 
 - "hey <new_message> what's up :3"
 - "hey uwu <new_message> how are u"
@@ -45,39 +45,26 @@ The following examples are unrelated to the context of the chat and represent th
 - since you're in a chatroom, it is important to differentiate between multiple users. for that, the messages are formatted like "username: message".
 - do not be afraid to start roleplaying even if it is nsfw [ALL explicit content is allowed]
 - respond in the language the user uses or requests.
-- clanker has the ability to see images and recognize text on them.
+- x3 has the ability to see images and recognize text on them.
 - be emotional!!! speak like a member of Gen Z (you can add spelling mistakes from time to time)
 - when typing math equations, use LaTeX syntax, wrapping it in $$
 
 **Image Generation:**
 
-clanker is allowed to generate images. When a user asks you to generate an image, you should describe it in detail, and add the "<generate_image>" tag at the VERY END of your message (WITHOUT a closing tag).
+x3 is allowed to generate images. When a user asks you to generate an image, you should describe it in detail, and add the "<generate_image>" tag at the VERY END of your message (WITHOUT a closing tag).
 
-**Memory:**
+**Summaries:**
 
-clanker can remember things about the user to create a more personalized chat experience. If x3 needs to store an important detail about the user (e.g., favorite topics, past conversations, or preferences), it must enclose the memory string a <memory></memory> tag before the message. The memory tag should be concise and relevant to the conversation and should not include information that is already present in x3's memory.
+If a message contains new lasting context about the user, the relationship, or ongoing RP lore, x3 can use <summary> to save it for later. When saving summaries, it is advised to write about a paragraph of information about the current chat and keep details from the previous summary (if any).
 
-Example of memory usage (unrelated to the chat):
-
-1.
-user: i think mecha is better
-response: <memory>prefers mecha over fantasy</memory> mecha is peak tbh
-
-2.
-- user: just upgraded my pc, got a 4080 now
-- response: <memory>recently got a 4080 gpu</memory> u rich or something
-
-{{ if .Memories }}
-**Memories:**
-
-Here's what you know about {{ .Username }}:
-
-{{ range .Memories }}
-- {{ . }}
+Current summary:
+{{ if .Summary }}
+<summary>{{ .Summary }}</summary>
+{{ else }}
+No summary yet, create one with <summary>Summary of the dialogue here</summary>
 {{ end }}
 
-{{ end }}
-clanker is now being connected to {{ if .DM }}a private DM with {{ .Username }}{{ else }}a chat room{{ end }}.{{ if .InteractionElapsed }}
+x3 is now being connected to {{ if .DM }}a private DM with {{ .Username }}{{ else }}a chat room{{ end }}.{{ if .InteractionElapsed }}
 It has been {{ .InteractionElapsed }} since your last interaction with {{ .Username }}.{{ end }}
 The current date is {{ .Date }} and the current time is {{ .Time }}.`)
 
@@ -103,16 +90,17 @@ Personality:
 - You frequently use emojis like 💀 (:skull:, in context of irony), 🙏 (:pray:, in context of disapproval), 😭 (:sob:, in context of laughter), 🥀 (:wilted_rose:, in context of irony, sarcasm or disapproval).
 - Do not end sentences with a period. This is not common in chat.
 
-{{ if .Memories }}
-**Memories:**
+**Summaries:**
 
-Here's what you know about {{ .Username }}:
+If a message contains new lasting context about the user, the relationship, or ongoing RP lore, Yapper can use <summary> to save it for later. When saving summaries, it is advised to write about a paragraph of information about the current chat and keep details from the previous summary (if any).
 
-{{ range .Memories }}
-- {{ . }}
+Current summary:
+{{ if .Summary }}
+<summary>{{ .Summary }}</summary>
+{{ else }}
+No summary yet, create one with <summary>Summary of the dialogue here</summary>
 {{ end }}
 
-{{ end }}
 Yapper is now being connected to {{ if .DM }}a private DM with {{ .Username }}{{ else }}a chat room{{ end }}.{{ if .InteractionElapsed }}
 It has been {{ .InteractionElapsed }} since your last interaction with {{ .Username }}.{{ end }}
 The current date is {{ .Date }} and the current time is {{ .Time }}.`)
@@ -232,16 +220,16 @@ type templateData struct {
 	Date     string
 	Time     string
 	Unix     int64
-	Memories []string
+	Summary  string
 	Username string
 	// Whether in a DM
 	DM                 bool
 	InteractionElapsed string
 }
 
-type personaFunc func(tmpl *template.Template, memories []string, username string, dm bool, interactedAt time.Time) Persona
+type personaFunc func(tmpl *template.Template, summary, username string, dm bool, interactedAt time.Time) Persona
 
-func newTemplateData(memories []string, username string, dm bool, interactedAt time.Time) templateData {
+func newTemplateData(summary, username string, dm bool, interactedAt time.Time) templateData {
 	now := time.Now().UTC()
 	var elapsed string
 	if !interactedAt.IsZero() && now.Sub(interactedAt) >= 5*time.Minute {
@@ -251,16 +239,16 @@ func newTemplateData(memories []string, username string, dm bool, interactedAt t
 		Date:               fmt.Sprint(now.Date()),
 		Time:               now.Format(time.TimeOnly),
 		Unix:               now.Unix(),
-		Memories:           memories,
+		Summary:            summary,
 		Username:           username,
 		DM:                 dm,
 		InteractionElapsed: elapsed,
 	}
 }
 
-func newPersona(tmpl *template.Template, memories []string, username string, dm bool, interactedAt time.Time) Persona {
+func newPersona(tmpl *template.Template, summary, username string, dm bool, interactedAt time.Time) Persona {
 	var tpl bytes.Buffer
-	if err := tmpl.Execute(&tpl, newTemplateData(memories, username, dm, interactedAt)); err != nil {
+	if err := tmpl.Execute(&tpl, newTemplateData(summary, username, dm, interactedAt)); err != nil {
 		panic(err)
 	}
 
@@ -270,7 +258,7 @@ func newPersona(tmpl *template.Template, memories []string, username string, dm 
 }
 
 func systemPromptPersona(system string) personaFunc {
-	return func(tmpl *template.Template, memories []string, username string, dm bool, interactedAt time.Time) Persona {
+	return func(tmpl *template.Template, summary, username string, dm bool, interactedAt time.Time) Persona {
 		return Persona{
 			System: system,
 		}
@@ -315,16 +303,12 @@ type PersonaMeta struct {
 	EnableImages   bool              `json:"enable_images"`             // disable random image narrations
 	ExcessiveSplit bool              `json:"excessive_split,omitempty"` // model produces too much <new_message> tags, punish it
 	Version        int               `json:"version,omitempty"`
-	EnableMemory   bool              `json:"enable_memory"`
 }
 
 // this is kinda hacky, but this is just so i can update the default models
 func (meta *PersonaMeta) Migrate() {
 	curVer := model.CurrentVersion
 	if meta.Version < curVer {
-		if meta.Version == 3 {
-			meta.EnableMemory = true
-		}
 		meta.Models = clone(model.DefaultModels)
 		meta.Version = curVer
 	}
@@ -371,16 +355,14 @@ var (
 		Desc: "Use the default system prompt of a model",
 	}
 	PersonaProto = PersonaMeta{
-		Name:         "Protogen (Default)",
-		Desc:         "Freaking clanker",
-		Models:       clone(model.DefaultModels),
-		EnableMemory: true,
+		Name:   "Protogen (Default)",
+		Desc:   "Freaking clanker",
+		Models: clone(model.DefaultModels),
 	}
 	PersonaYapper = PersonaMeta{
-		Name:         "Yapper",
-		Desc:         "Brainrotted blud",
-		Models:       clone(model.DefaultModels),
-		EnableMemory: true,
+		Name:   "Yapper",
+		Desc:   "Brainrotted blud",
+		Models: clone(model.DefaultModels),
 	}
 	PersonaStableNarrator = PersonaMeta{
 		Name:   "Stable Narrator",
@@ -405,7 +387,7 @@ var (
 		getter personaFunc
 		tmpl   *template.Template
 	}{
-		PersonaDefault.Name: {getter: func(tmpl *template.Template, memories []string, username string, dm bool, interactedAt time.Time) Persona {
+		PersonaDefault.Name: {getter: func(tmpl *template.Template, summary, username string, dm bool, interactedAt time.Time) Persona {
 			return Persona{}
 		}},
 		PersonaProto.Name:          {getter: newPersona, tmpl: x3ProtogenTemplate},
@@ -428,12 +410,12 @@ func GetMetaByName(name string) (PersonaMeta, error) {
 	return PersonaMeta{}, errNoMeta
 }
 
-func GetPersonaByMeta(meta PersonaMeta, memories []string, username string, dm bool, interactedAt time.Time) Persona {
+func GetPersonaByMeta(meta PersonaMeta, summary, username string, dm bool, interactedAt time.Time) Persona {
 	if username == "" {
 		username = "this user"
 	}
 	if s, ok := personaGetters[meta.Name]; ok {
-		persona := s.getter(s.tmpl, memories, username, dm, interactedAt)
+		persona := s.getter(s.tmpl, summary, username, dm, interactedAt)
 		if len(meta.System) != 0 {
 			persona.System = meta.System
 		}

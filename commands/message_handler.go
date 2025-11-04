@@ -16,9 +16,9 @@ import (
 )
 
 var (
-	containsX3Regex       = regexp.MustCompile(`(?i)(^|\P{L})(clanker|clanky|кланкер)(\P{L}|$)`)
-	containsProtogenRegex = regexp.MustCompile(`(?i)(^|\W)(protogen|протоген)($|\W)`)
-	containsSigmaRegex    = regexp.MustCompile(`(?i)(^|\W)(sigma|сигма)($|\W)`)
+	containsX3Regex       = regexp.MustCompile(`(?i)(^|\P{L})(?:x3|х3|clanker|clanky|кланкер)(\P{L}|$)`)
+	containsProtogenRegex = regexp.MustCompile(`(?i)(^|\P{L})(?:protogen|протоген)(\P{L}|$)`)
+	containsSigmaRegex    = regexp.MustCompile(`(?i)(^|\P{L})(?:sigma|сигма)(\P{L}|$)`)
 )
 
 func handleLlmInteraction(event *events.MessageCreate) error {

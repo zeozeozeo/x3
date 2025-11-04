@@ -20,7 +20,6 @@ var AllCommands []discord.ApplicationCommandCreate = []discord.ApplicationComman
 	RandomDMsCommand,
 	RegenerateCommand,
 	BlacklistCommand,
-	MemoryCommand,
 	ChatCommand, // generic /chat command
 	GenerateCommand,
 	ImpersonateCommand,
@@ -79,16 +78,6 @@ func RegisterHandlers(r handler.Router) error {
 		r.Command("/new", HandleQuoteNew)
 		r.Autocomplete("/remove", HandleQuoteGetAutocomplete)
 		r.Command("/remove", HandleQuoteRemove)
-	})
-
-	// /memory
-	mux.Route("/memory", func(r handler.Router) {
-		r.Use()
-		r.Command("/list", HandleMemoryList)
-		r.Command("/clear", HandleMemoryClear)
-		r.Autocomplete("/delete", HandleMemoryDeleteAutocomplete)
-		r.Command("/delete", HandleMemoryDelete)
-		r.Command("/add", HandleMemoryAdd)
 	})
 
 	mux.Autocomplete("/generate", HandleGenerateModelAutocomplete)

@@ -667,8 +667,8 @@
     }
   ],
   "default_models": [
-    "GLM 4.6 357B",
     "DeepSeek V3.2 Exp",
+    "GLM 4.6 357B",
     "DeepSeek V3 671B (0324)",
     "Meituan LongCat Flash Chat 560B",
     "Moonshot AI Kimi K2 1000B (0905)",
@@ -712,5 +712,5 @@
     "huggingface",
     "navy"
   ],
-  "current_version": 11
+  "current_version": 12
 }

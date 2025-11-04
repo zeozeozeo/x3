@@ -311,7 +311,6 @@ func addContextMessages(
 
 			// remove appends
 			content = strings.TrimSuffix(content, interactionReminder)
-			content = strings.TrimSuffix(content, memoryUpdatedAppend)
 		} else { // (user message)
 			role = llm.RoleUser
 			lastUserID = msg.Author.ID

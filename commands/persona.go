@@ -122,11 +122,6 @@ var PersonaCommand = discord.SlashCommandCreate{
 			Required:    false,
 		},
 		discord.ApplicationCommandOptionBool{
-			Name:        "memory",
-			Description: "Add new memory entries",
-			Required:    false,
-		},
-		discord.ApplicationCommandOptionBool{
 			Name:        "ephemeral",
 			Description: "If the response should only be visible to you",
 			Required:    false,
@@ -161,7 +156,7 @@ func handlePersonaInfo(event *handler.CommandEvent, ephemeral bool) error {
 		AddField("Description", meta.Desc, true).
 		AddField("Temperature", fmt.Sprintf("%s (remapped to %s)", ftoa(settings.Temperature), ftoa(remappedSettings.Temperature)), true).
 		AddField("Top P", fmt.Sprintf("%s (remapped to %s)", ftoa(settings.TopP), ftoa(remappedSettings.TopP)), true).
-		AddField("Flags", fmt.Sprintf("images: %s, memory: %s", enabledDisabled(cache.PersonaMeta.EnableImages), enabledDisabled(cache.PersonaMeta.EnableMemory)), true).
+		AddField("Flags", fmt.Sprintf("images: %s", enabledDisabled(cache.PersonaMeta.EnableImages)), true).
 		AddField("Frequency Penalty", ftoa(settings.FrequencyPenalty), true)
 
 	models := cache.PersonaMeta.Models
@@ -211,10 +206,9 @@ func HandlePersona(event *handler.CommandEvent) error {
 	dataFreqPenalty, hasFreqPenalty := data.OptFloat("frequency_penalty")
 	dataSeed, hasDataSeed := data.OptInt("seed")
 	dataEnableImages, hasEnableImages := data.OptBool("images")
-	dataEnableMemory, hasEnableMemory := data.OptBool("memory")
 	ephemeral := data.Bool("ephemeral")
 
-	if dataPersona == "" && dataModel == "" && dataSystem == "" && dataCard == "" && !hasContext && !hasTemperature && !hasTopP && !hasFreqPenalty && !hasDataSeed && !hasEnableImages && !hasEnableMemory {
+	if dataPersona == "" && dataModel == "" && dataSystem == "" && dataCard == "" && !hasContext && !hasTemperature && !hasTopP && !hasFreqPenalty && !hasDataSeed && !hasEnableImages {
 		return handlePersonaInfo(event, ephemeral)
 	}
 
@@ -247,7 +241,7 @@ func HandlePersona(event *handler.CommandEvent) error {
 	// update persona meta in channel cache
 	prevMeta := cache.PersonaMeta
 	if prevMeta.System == "" {
-		prevMeta.System = persona.GetPersonaByMeta(cache.PersonaMeta, nil, "", event.Channel().Type() == discord.ChannelTypeDM, db.GetInteractionTime(event.User().ID)).System
+		prevMeta.System = persona.GetPersonaByMeta(cache.PersonaMeta, cache.Summary, "", event.Channel().Type() == discord.ChannelTypeDM, db.GetInteractionTime(event.User().ID)).System
 	}
 	if dataPersona != "" {
 		cache.PersonaMeta = personaMeta
@@ -279,9 +273,6 @@ func HandlePersona(event *handler.CommandEvent) error {
 	}
 	if hasFreqPenalty {
 		cache.PersonaMeta.Settings.FrequencyPenalty = float32(dataFreqPenalty)
-	}
-	if hasEnableMemory {
-		cache.PersonaMeta.EnableMemory = dataEnableMemory
 	}
 
 	cache.PersonaMeta.Settings = cache.PersonaMeta.Settings.Fixup()
@@ -377,15 +368,6 @@ func HandlePersona(event *handler.CommandEvent) error {
 			s = "enabled images"
 		} else {
 			s = "disabled images"
-		}
-		didWhat = append(didWhat, s)
-	}
-	if cache.PersonaMeta.EnableMemory != prevMeta.EnableMemory {
-		var s string
-		if cache.PersonaMeta.EnableMemory {
-			s = "enabled memory"
-		} else {
-			s = "disabled memory"
 		}
 		didWhat = append(didWhat, s)
 	}

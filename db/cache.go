@@ -40,6 +40,8 @@ type ChannelCache struct {
 	EverUsedRandomDMs bool `json:"ever_used_random_dms,omitempty"`
 	// IsLastRandomDM indicates if the last message sent by the bot was a random DM interaction.
 	IsLastRandomDM bool `json:"is_last_random_dm,omitempty"`
+	// Summary is an LLM-defined summary of the message history.
+	Summary string
 }
 
 // updateInteractionTime updates the LastInteraction timestamp to now.

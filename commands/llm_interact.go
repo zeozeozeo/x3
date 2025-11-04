@@ -31,33 +31,25 @@ var (
 
 const (
 	generateImageTag          = "<generate_image>"
-	memoryUpdatedAppend       = "\n-# memory updated"
 	newMessageTag             = "<new_message>"
 	excessiveSplitPunishThres = 5
 )
 
-// replaceLlmTagsWithNewlines replaces <new_message> tags with newlines and handles <memory> tags
-func replaceLlmTagsWithNewlines(response string, userID snowflake.ID, personaMeta *persona.PersonaMeta) (string, bool) {
+// replaceLlmTagsWithNewlines replaces <new_message> tags with newlines and returns the content of any <summary> tags
+func replaceLlmTagsWithNewlines(response string, userID snowflake.ID, personaMeta *persona.PersonaMeta) (string, string) {
 	var b strings.Builder
-	messages, memories := splitLlmTags(response, personaMeta)
-	memoryUpdated := len(memories) > 0 && personaMeta.EnableMemory
-	if !personaMeta.EnableMemory {
-		if err := db.HandleMemories(userID, memories); err != nil {
-			slog.Error("failed to handle memories", "err", err)
-			memoryUpdated = false
-		}
-	}
+	messages, summaries := splitLlmTags(response, personaMeta)
 	for i, message := range messages {
 		b.WriteString(message)
 		if i < len(messages)-1 { // add newline between messages
 			b.WriteRune('\n')
 		}
 	}
-	return b.String(), memoryUpdated
+	return b.String(), strings.Join(summaries, "\n")
 }
 
-// splitLlmTags splits the response by <new_message> and extracts <memory> tags
-func splitLlmTags(response string, personaMeta *persona.PersonaMeta) (messages []string, memories []string) {
+// splitLlmTags splits the response by <new_message> and extracts <summary> tags (they should be joined with "\n" after returned)
+func splitLlmTags(response string, personaMeta *persona.PersonaMeta) (messages, summaries []string) {
 	defer func() {
 		if personaMeta != nil {
 			personaMeta.ExcessiveSplit = len(messages) >= excessiveSplitPunishThres
@@ -71,28 +63,28 @@ func splitLlmTags(response string, personaMeta *persona.PersonaMeta) (messages [
 			continue
 		}
 
-		startIdx := strings.Index(content, "<memory>")
-		endIdx := strings.Index(content, "</memory>")
+		startIdx := strings.Index(content, "<summary>")
+		endIdx := strings.Index(content, "</summary>")
 
 		if startIdx != -1 && endIdx != -1 && startIdx < endIdx {
-			// extract memory
-			memory := strings.TrimSpace(content[startIdx+len("<memory>") : endIdx])
-			if memory != "" {
-				memories = append(memories, memory)
+			// extract summary
+			summary := strings.TrimSpace(content[startIdx+len("<summary>") : endIdx])
+			if summary != "" {
+				summaries = append(summaries, summary)
 			}
 
-			// extract content before and after memory tag
-			beforeMemory := strings.TrimSpace(content[:startIdx])
-			afterMemory := strings.TrimSpace(content[endIdx+len("</memory>"):])
+			// extract content before and after summary tag
+			beforeSummary := strings.TrimSpace(content[:startIdx])
+			afterSummary := strings.TrimSpace(content[endIdx+len("</summary>"):])
 
-			if beforeMemory != "" {
-				messages = append(messages, beforeMemory)
+			if beforeSummary != "" {
+				messages = append(messages, beforeSummary)
 			}
-			if afterMemory != "" {
-				// recursively split the part after memory in case of multiple tags
-				subMessages, subMemories := splitLlmTags(afterMemory, nil)
+			if afterSummary != "" {
+				// recursively split the part after summary in case of multiple tags
+				subMessages, subSummaries := splitLlmTags(afterSummary, nil)
 				messages = append(messages, subMessages...)
-				memories = append(memories, subMemories...)
+				summaries = append(summaries, subSummaries...)
 			}
 		} else if hasSplit {
 			// deepseek sometimes does this instead of starting a new message
@@ -171,7 +163,7 @@ func handleLlmInteraction2(
 		userID = lastUserID
 	}
 
-	p := persona.GetPersonaByMeta(cache.PersonaMeta, db.GetMemories(userID, 0), username, isDM, db.GetInteractionTime(userID))
+	p := persona.GetPersonaByMeta(cache.PersonaMeta, cache.Summary, username, isDM, db.GetInteractionTime(userID))
 
 	// avoid formatting reply if the reference is the message we're about to regenerate
 	if reference != nil && isRegenerate && reference.ID == lastResponseMessage.ID {
@@ -256,11 +248,7 @@ func handleLlmInteraction2(
 	var messages []string
 	if isRegenerate {
 		// edit the previous message for regeneration
-		var memoryUpdated bool
-		response, memoryUpdated = replaceLlmTagsWithNewlines(response, userID, &cache.PersonaMeta)
-		if memoryUpdated {
-			response += memoryUpdatedAppend
-		}
+		response, cache.Summary = replaceLlmTagsWithNewlines(response, userID, &cache.PersonaMeta)
 
 		builder := discord.NewMessageUpdateBuilder().SetAllowedMentions(&discord.AllowedMentions{RepliedUser: false})
 		if utf8.RuneCountInString(response) > 2000 {
@@ -288,15 +276,9 @@ func handleLlmInteraction2(
 		}
 		jumpURL = lastResponseMessage.JumpURL()
 	} else {
-		var memories []string
-		messages, memories = splitLlmTags(response, &cache.PersonaMeta)
-		if cache.PersonaMeta.EnableMemory {
-			if err := db.HandleMemories(userID, memories); err != nil {
-				slog.Error("failed to handle memories during send", "err", err)
-			} else if len(memories) > 0 && len(messages) > 0 {
-				messages[len(messages)-1] += memoryUpdatedAppend
-			}
-		}
+		var summaries []string
+		messages, summaries = splitLlmTags(response, &cache.PersonaMeta)
+		cache.Summary = strings.Join(summaries, "\n")
 
 		for i, content := range messages {
 			content = strings.TrimSpace(content)
