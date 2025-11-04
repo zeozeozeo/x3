@@ -11,22 +11,22 @@ document.addEventListener('DOMContentLoaded', function() {
 function setupEventListeners() {
     // Save button
     document.getElementById('saveBtn').addEventListener('click', saveConfig);
-    
+
     // Add model button
     document.getElementById('addModelBtn').addEventListener('click', () => openModelModal(-1));
-    
+
     // Reload button
     document.getElementById('reloadBtn').addEventListener('click', loadConfig);
-    
+
     // Version edit button
     document.getElementById('editVersionBtn').addEventListener('click', openVersionEditModal);
-    
+
     // Modal buttons
     document.getElementById('saveModelBtn').addEventListener('click', saveModel);
     document.getElementById('deleteModelBtn').addEventListener('click', deleteModel);
     document.getElementById('cancelModelBtn').addEventListener('click', closeModelModal);
     document.getElementById('addProviderBtn').addEventListener('click', () => addProviderField());
-    
+
     // Modal close handlers
     document.querySelector('.close').addEventListener('click', closeModelModal);
     document.getElementById('modelModal').addEventListener('click', function(e) {
@@ -37,15 +37,15 @@ function setupEventListeners() {
 function setupTabs() {
     const tabButtons = document.querySelectorAll('.tab-btn');
     const tabContents = document.querySelectorAll('.tab-content');
-    
+
     tabButtons.forEach(button => {
         button.addEventListener('click', () => {
             const tabId = button.getAttribute('data-tab');
-            
+
             // Update active tab button
             tabButtons.forEach(btn => btn.classList.remove('active'));
             button.classList.add('active');
-            
+
             // Show active tab content
             tabContents.forEach(content => {
                 content.classList.remove('active');
@@ -53,7 +53,7 @@ function setupTabs() {
                     content.classList.add('active');
                 }
             });
-            
+
             // Initialize sortable for the active tab if needed
             if (tabId === 'models') {
                 initModelsSortable();
@@ -70,7 +70,7 @@ async function loadConfig() {
     try {
         const response = await fetch('/api/models');
         if (!response.ok) throw new Error('Failed to load configuration');
-        
+
         currentConfig = await response.json();
         renderConfig();
         showStatus('Configuration loaded successfully', 'success');
@@ -82,7 +82,7 @@ async function loadConfig() {
 
 function renderConfig() {
     if (!currentConfig) return;
-    
+
     renderVersion();
     renderModels();
     renderProviders();
@@ -102,7 +102,7 @@ function renderModels() {
         container.innerHTML = '<div class="empty-state"><p>No models configured</p></div>';
         return;
     }
-    
+
     container.innerHTML = currentConfig.models.map((model, index) => `
         <div class="model-card sortable-item" data-index="${index}" onclick="openModelModal(${index})">
             <div class="model-header">
@@ -121,24 +121,24 @@ function renderModels() {
             </div>
         </div>
     `).join('');
-    
+
     initModelsSortable();
 }
 
 function renderProviders() {
     const container = document.getElementById('providers-list');
-    
+
     // Add header with add button
     const header = document.createElement('div');
     header.className = 'section-header';
     header.innerHTML = `
         <button class="btn btn-secondary btn-sm" onclick="openAddProviderModal()">Add Provider</button>
     `;
-    
+
     // Clear and rebuild container
     container.innerHTML = '';
     container.appendChild(header);
-    
+
     if (!currentConfig.providers_order || currentConfig.providers_order.length === 0) {
         const emptyState = document.createElement('div');
         emptyState.className = 'empty-state';
@@ -146,17 +146,17 @@ function renderProviders() {
         container.appendChild(emptyState);
         return;
     }
-    
+
     const listContainer = document.createElement('ul');
     listContainer.className = 'sortable-list';
-    
+
     listContainer.innerHTML = currentConfig.providers_order.map(provider => `
         <li class="sortable-item">
             <span>${escapeHtml(provider)}</span>
             <button class="remove-provider" onclick="removeProvider('${escapeHtml(provider)}')" title="Remove provider">×</button>
         </li>
     `).join('');
-    
+
     container.appendChild(listContainer);
     initProviderSortable();
 }
@@ -169,18 +169,18 @@ function renderDefaults() {
 
 function renderDefaultModels(containerId, models, configKey) {
     const container = document.getElementById(containerId);
-    
+
     // Add header with add button
     const header = document.createElement('div');
     header.className = 'section-header';
     header.innerHTML = `
         <button class="btn btn-secondary btn-sm" onclick="openAddModelModal('${configKey}')">Add Model</button>
     `;
-    
+
     // Clear and rebuild container
     container.innerHTML = '';
     container.appendChild(header);
-    
+
     if (!models || models.length === 0) {
         const emptyState = document.createElement('div');
         emptyState.className = 'empty-state';
@@ -188,10 +188,10 @@ function renderDefaultModels(containerId, models, configKey) {
         container.appendChild(emptyState);
         return;
     }
-    
+
     const listContainer = document.createElement('div');
     listContainer.className = 'sortable-list';
-    
+
     listContainer.innerHTML = models.map(modelName => {
         const model = currentConfig.models.find(m => m.name === modelName);
         return `
@@ -202,9 +202,9 @@ function renderDefaultModels(containerId, models, configKey) {
             </div>
         `;
     }).join('');
-    
+
     container.appendChild(listContainer);
-    
+
     if (containerId === 'default-models') {
         initDefaultModelsSortable();
     }
@@ -213,10 +213,10 @@ function renderDefaultModels(containerId, models, configKey) {
 function initProviderSortable() {
     const container = document.getElementById('providers-list');
     if (!container) return;
-    
+
     const listContainer = container.querySelector('.sortable-list');
     if (!listContainer) return;
-    
+
     Sortable.create(listContainer, {
         animation: 150,
         ghostClass: 'sortable-ghost',
@@ -252,9 +252,9 @@ function openAddProviderModal() {
             </div>
         </div>
     `;
-    
+
     document.body.appendChild(modal);
-    
+
     // Close modal when clicking outside
     modal.addEventListener('click', function(e) {
         if (e.target === this) {
@@ -272,23 +272,23 @@ function closeAddProviderModal() {
 
 function addProvider() {
     const providerName = document.getElementById('providerName').value.trim();
-    
+
     if (!providerName) {
         showStatus('Provider name is required', 'error');
         return;
     }
-    
+
     if (!currentConfig.providers_order) {
         currentConfig.providers_order = [];
     }
-    
+
     if (currentConfig.providers_order.includes(providerName)) {
         showStatus('Provider already exists', 'error');
         return;
     }
-    
+
     currentConfig.providers_order.push(providerName);
-    
+
     // Close modal and refresh
     closeAddProviderModal();
     renderConfig();
@@ -297,7 +297,7 @@ function addProvider() {
 
 function removeProvider(providerName) {
     if (!currentConfig.providers_order) return;
-    
+
     const index = currentConfig.providers_order.indexOf(providerName);
     if (index > -1) {
         currentConfig.providers_order.splice(index, 1);
@@ -309,7 +309,7 @@ function removeProvider(providerName) {
 function initModelsSortable() {
     const element = document.getElementById('models-list');
     if (!element) return;
-    
+
     Sortable.create(element, {
         animation: 150,
         ghostClass: 'sortable-ghost',
@@ -327,14 +327,14 @@ function initModelsSortable() {
 
 function initDefaultModelsSortable() {
     const containers = ['default-models', 'narrator-models', 'vision-models'];
-    
+
     containers.forEach(containerId => {
         const element = document.getElementById(containerId);
         if (!element) return;
-        
+
         const listContainer = element.querySelector('.sortable-list');
         if (!listContainer) return;
-        
+
         Sortable.create(listContainer, {
             animation: 150,
             ghostClass: 'sortable-ghost',
@@ -344,7 +344,7 @@ function initDefaultModelsSortable() {
                 const newOrder = Array.from(listContainer.children).map(div =>
                     div.querySelector('span').textContent
                 );
-                
+
                 if (containerId === 'default-models') {
                     currentConfig.default_models = newOrder;
                 } else if (containerId === 'narrator-models') {
@@ -367,12 +367,12 @@ function openAddModelModal(configKey) {
         const currentList = getCurrentList(configKey);
         return !currentList.includes(model.name);
     });
-    
+
     if (availableModels.length === 0) {
         showStatus('No available models to add', 'error');
         return;
     }
-    
+
     const modal = document.createElement('div');
     modal.className = 'modal';
     modal.style.display = 'block';
@@ -398,9 +398,9 @@ function openAddModelModal(configKey) {
             </div>
         </div>
     `;
-    
+
     document.body.appendChild(modal);
-    
+
     // Close modal when clicking outside
     modal.addEventListener('click', function(e) {
         if (e.target === this) {
@@ -430,17 +430,17 @@ function getListDisplayName(configKey) {
 function addToDefaultModels(configKey) {
     const select = document.getElementById('modelSelect');
     const modelName = select.value;
-    
+
     if (!modelName) return;
-    
+
     const currentList = getCurrentList(configKey);
     if (currentList.includes(modelName)) {
         showStatus('Model is already in the list', 'error');
         return;
     }
-    
+
     currentList.push(modelName);
-    
+
     // Update the config
     switch(configKey) {
         case 'default_models':
@@ -453,7 +453,7 @@ function addToDefaultModels(configKey) {
             currentConfig.default_vision_models = currentList;
             break;
     }
-    
+
     // Close modal and refresh
     document.querySelector('.modal').remove();
     renderConfig();
@@ -463,10 +463,10 @@ function addToDefaultModels(configKey) {
 function removeFromDefaultModels(configKey, modelName) {
     const currentList = getCurrentList(configKey);
     const index = currentList.indexOf(modelName);
-    
+
     if (index > -1) {
         currentList.splice(index, 1);
-        
+
         // Update the config
         switch(configKey) {
             case 'default_models':
@@ -479,7 +479,7 @@ function removeFromDefaultModels(configKey, modelName) {
                 currentConfig.default_vision_models = currentList;
                 break;
         }
-        
+
         renderConfig();
         showStatus('Model removed successfully', 'success');
     }
@@ -490,7 +490,7 @@ function openModelModal(index) {
     const modal = document.getElementById('modelModal');
     const title = document.getElementById('modalTitle');
     const deleteBtn = document.getElementById('deleteModelBtn');
-    
+
     if (index === -1) {
         // New model
         title.textContent = 'Add New Model';
@@ -502,7 +502,7 @@ function openModelModal(index) {
         deleteBtn.style.display = 'block';
         populateModelForm(currentConfig.models[index]);
     }
-    
+
     modal.style.display = 'block';
 }
 
@@ -524,11 +524,11 @@ function populateModelForm(model) {
     document.getElementById('modelIsEliza').checked = model.is_eliza || false;
     document.getElementById('modelLimited').checked = model.limited || false;
     document.getElementById('modelEncoding').value = model.encoding || '';
-    
+
     // Populate providers
     const container = document.getElementById('providers-container');
     container.innerHTML = '';
-    
+
     if (model.providers) {
         Object.entries(model.providers).forEach(([providerName, provider]) => {
             addProviderField(providerName, provider.codenames?.join(', ') || '');
@@ -538,23 +538,22 @@ function populateModelForm(model) {
 
 function addProviderField(providerName = '', codenames = '') {
     const container = document.getElementById('providers-container');
-    const providerId = Date.now();
-    
+
     const html = `
-        <div class="provider-item" data-id="${providerId}">
+        <div class="provider-item">
             <div class="provider-header">
                 <input type="text" class="provider-name" placeholder="Provider name (e.g., openrouter)" value="${escapeHtml(providerName)}">
-                <button type="button" class="remove-provider" onclick="removeProviderField(${providerId})">x</button>
+                <button type="button" class="remove-provider" onclick="removeProviderField(this)">x</button>
             </div>
             <input type="text" class="codenames-input" placeholder="Codenames (comma-separated)" value="${escapeHtml(codenames)}">
         </div>
     `;
-    
+
     container.insertAdjacentHTML('beforeend', html);
 }
 
-function removeProviderField(id) {
-    const element = document.querySelector(`[data-id="${id}"]`);
+function removeProviderField(buttonElement) {
+    const element = buttonElement.closest('.provider-item');
     if (element) {
         element.remove();
     }
@@ -563,7 +562,7 @@ function removeProviderField(id) {
 function saveModel() {
     const form = document.getElementById('modelForm');
     const formData = new FormData(form);
-    
+
     const model = {
         name: formData.get('name'),
         command: formData.get('command'),
@@ -575,26 +574,26 @@ function saveModel() {
         encoding: formData.get('encoding') || '',
         providers: {}
     };
-    
+
     // Get providers from form
     const providerElements = document.querySelectorAll('.provider-item');
     providerElements.forEach(element => {
         const providerName = element.querySelector('.provider-name').value.trim();
         const codenames = element.querySelector('.codenames-input').value.trim();
-        
+
         if (providerName) {
             model.providers[providerName] = {
                 codenames: codenames ? codenames.split(',').map(s => s.trim()).filter(s => s) : []
             };
         }
     });
-    
+
     // Validate
     if (!model.name || !model.command) {
         showStatus('Model name and command are required', 'error');
         return;
     }
-    
+
     // Update or add model
     if (editingModelIndex === -1) {
         // New model
@@ -603,7 +602,7 @@ function saveModel() {
         // Update existing model
         currentConfig.models[editingModelIndex] = model;
     }
-    
+
     closeModelModal();
     renderConfig();
     showStatus('Model saved successfully', 'success');
@@ -611,7 +610,7 @@ function saveModel() {
 
 function deleteModel() {
     if (editingModelIndex === -1) return;
-    
+
     if (confirm('Are you sure you want to delete this model?')) {
         currentConfig.models.splice(editingModelIndex, 1);
         closeModelModal();
@@ -629,12 +628,12 @@ async function saveConfig() {
             },
             body: JSON.stringify(currentConfig)
         });
-        
+
         if (!response.ok) {
             const error = await response.text();
             throw new Error(error);
         }
-        
+
         showStatus('Configuration saved successfully', 'success');
     } catch (error) {
         showStatus(`Error saving configuration: ${error.message}`, 'error');
@@ -646,13 +645,13 @@ function showStatus(message, type) {
     // Remove existing status messages
     const existingMessages = document.querySelectorAll('.status-message');
     existingMessages.forEach(msg => msg.remove());
-    
+
     const status = document.createElement('div');
     status.className = `status-message status-${type}`;
     status.textContent = message;
-    
+
     document.querySelector('.container').insertBefore(status, document.querySelector('.tabs'));
-    
+
     // Auto-remove after 5 seconds
     setTimeout(() => {
         if (status.parentNode) {
@@ -684,9 +683,9 @@ function openVersionEditModal() {
             </div>
         </div>
     `;
-    
+
     document.body.appendChild(modal);
-    
+
     // Close modal when clicking outside
     modal.addEventListener('click', function(e) {
         if (e.target === this) {
@@ -698,20 +697,20 @@ function openVersionEditModal() {
 function saveVersion() {
     const versionInput = document.getElementById('versionInput');
     const newVersion = parseInt(versionInput.value);
-    
+
     if (isNaN(newVersion) || newVersion < 1) {
         showStatus('Please enter a valid version number (minimum 1)', 'error');
         return;
     }
-    
+
     currentConfig.current_version = newVersion;
-    
+
     // Close the modal
     const modal = document.querySelector('.modal');
     if (modal && modal.querySelector('#versionInput')) {
         modal.remove();
     }
-    
+
     renderVersion();
     showStatus('Version updated successfully', 'success');
 }
@@ -719,9 +718,9 @@ function saveVersion() {
 function escapeHtml(unsafe) {
     if (unsafe === null || unsafe === undefined) return '';
     return unsafe.toString()
-        .replace(/&/g, "&")
-        .replace(/</g, "<")
-        .replace(/>/g, ">")
-        .replace(/"/g, '"')
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
         .replace(/'/g, "&#039;");
 }
