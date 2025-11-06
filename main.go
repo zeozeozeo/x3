@@ -86,6 +86,8 @@ func main() {
 					gateway.IntentGuildMessages,
 					gateway.IntentMessageContent,
 					gateway.IntentDirectMessages,
+					gateway.IntentGuildMessageReactions,
+					gateway.IntentDirectMessageReactions,
 				),
 				gateway.WithCompress(true),
 			),
@@ -105,6 +107,8 @@ func main() {
 			bot.WithAsyncEventsEnabled(),
 		),
 		bot.WithEventListenerFunc(commands.OnMessageCreate),
+		bot.WithEventListenerFunc(commands.OnDMMessageReactionAdd),
+		bot.WithEventListenerFunc(commands.OnGuildMessageReactionAdd),
 	)
 	if err != nil {
 		slog.Error("error while building disgo instance", "err", err)

@@ -54,7 +54,7 @@ func HandleImpersonate(event *handler.CommandEvent) error {
 
 	//cache := db.GetChannelCache(event.Channel().ID())
 
-	impersonatePersona := persona.GetPersonaByMeta(persona.PersonaImpersonate, "", event.User().EffectiveName(), false, time.Time{})
+	impersonatePersona := persona.GetPersonaByMeta(persona.PersonaImpersonate, persona.Summary{}, event.User().EffectiveName(), false, time.Time{})
 
 	var prevResponse string
 	var referenceID snowflake.ID

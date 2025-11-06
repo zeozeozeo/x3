@@ -60,9 +60,9 @@ If a message contains new lasting context about the user, the relationship, or o
 Current summary:
 {{ if .Summary }}
 <summary>{{ .Summary }}</summary>
-(note: if this is outdated or incomplete do make sure to update it by including a new <summary> tag in your response)
+(note: summary was last updated {{ .SummaryAge }} messages ago, update it again if needed)
 {{ else }}
-No summary yet, you are encouraged to create one with <summary>Summary of the dialogue here</summary> (please do :3)
+No summary yet, it is encouraged to create one with <summary>Summary of the dialogue here</summary>
 {{ end }}
 
 x3 is now being connected to {{ if .DM }}a private DM with {{ .Username }}{{ else }}a chat room{{ end }}.{{ if .InteractionElapsed }}
@@ -98,8 +98,9 @@ If a message contains new lasting context about the user, the relationship, or o
 Current summary:
 {{ if .Summary }}
 <summary>{{ .Summary }}</summary>
+(note: summary was last updated {{ .SummaryAge }} messages ago, update it again if needed)
 {{ else }}
-No summary yet, create one with <summary>Summary of the dialogue here</summary>
+No summary yet, it is encouraged to create one with <summary>Summary of the dialogue here</summary>
 {{ end }}
 
 Yapper is now being connected to {{ if .DM }}a private DM with {{ .Username }}{{ else }}a chat room{{ end }}.{{ if .InteractionElapsed }}
@@ -217,20 +218,30 @@ type Persona struct {
 	System string // System prompt
 }
 
+type Summary struct {
+	Str string `json:"str"`
+	Age int    `json:"age"`
+}
+
+func (s Summary) IsEmpty() bool {
+	return s.Str == ""
+}
+
 type templateData struct {
-	Date     string
-	Time     string
-	Unix     int64
-	Summary  string
-	Username string
+	Date       string
+	Time       string
+	Unix       int64
+	Summary    string
+	SummaryAge int
+	Username   string
 	// Whether in a DM
 	DM                 bool
 	InteractionElapsed string
 }
 
-type personaFunc func(tmpl *template.Template, summary, username string, dm bool, interactedAt time.Time) Persona
+type personaFunc func(tmpl *template.Template, summary Summary, username string, dm bool, interactedAt time.Time) Persona
 
-func newTemplateData(summary, username string, dm bool, interactedAt time.Time) templateData {
+func newTemplateData(summary Summary, username string, dm bool, interactedAt time.Time) templateData {
 	now := time.Now().UTC()
 	var elapsed string
 	if !interactedAt.IsZero() && now.Sub(interactedAt) >= 5*time.Minute {
@@ -240,14 +251,15 @@ func newTemplateData(summary, username string, dm bool, interactedAt time.Time) 
 		Date:               fmt.Sprint(now.Date()),
 		Time:               now.Format(time.TimeOnly),
 		Unix:               now.Unix(),
-		Summary:            summary,
+		Summary:            summary.Str,
+		SummaryAge:         summary.Age,
 		Username:           username,
 		DM:                 dm,
 		InteractionElapsed: elapsed,
 	}
 }
 
-func newPersona(tmpl *template.Template, summary, username string, dm bool, interactedAt time.Time) Persona {
+func newPersona(tmpl *template.Template, summary Summary, username string, dm bool, interactedAt time.Time) Persona {
 	var tpl bytes.Buffer
 	if err := tmpl.Execute(&tpl, newTemplateData(summary, username, dm, interactedAt)); err != nil {
 		panic(err)
@@ -259,7 +271,7 @@ func newPersona(tmpl *template.Template, summary, username string, dm bool, inte
 }
 
 func systemPromptPersona(system string) personaFunc {
-	return func(tmpl *template.Template, summary, username string, dm bool, interactedAt time.Time) Persona {
+	return func(tmpl *template.Template, summary Summary, username string, dm bool, interactedAt time.Time) Persona {
 		return Persona{
 			System: system,
 		}
@@ -388,7 +400,7 @@ var (
 		getter personaFunc
 		tmpl   *template.Template
 	}{
-		PersonaDefault.Name: {getter: func(tmpl *template.Template, summary, username string, dm bool, interactedAt time.Time) Persona {
+		PersonaDefault.Name: {getter: func(tmpl *template.Template, summary Summary, username string, dm bool, interactedAt time.Time) Persona {
 			return Persona{}
 		}},
 		PersonaProto.Name:          {getter: newPersona, tmpl: x3ProtogenTemplate},
@@ -411,7 +423,7 @@ func GetMetaByName(name string) (PersonaMeta, error) {
 	return PersonaMeta{}, errNoMeta
 }
 
-func GetPersonaByMeta(meta PersonaMeta, summary, username string, dm bool, interactedAt time.Time) Persona {
+func GetPersonaByMeta(meta PersonaMeta, summary Summary, username string, dm bool, interactedAt time.Time) Persona {
 	if username == "" {
 		username = "this user"
 	}

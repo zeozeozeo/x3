@@ -36,20 +36,20 @@ const (
 )
 
 // replaceLlmTagsWithNewlines replaces <new_message> tags with newlines and returns the content of any <summary> tags
-func replaceLlmTagsWithNewlines(response string, userID snowflake.ID, personaMeta *persona.PersonaMeta) (string, string) {
+func replaceLlmTagsWithNewlines(response string, personaMeta *persona.PersonaMeta) (string, persona.Summary) {
 	var b strings.Builder
-	messages, summaries := splitLlmTags(response, personaMeta)
+	messages, summary := splitLlmTags(response, personaMeta)
 	for i, message := range messages {
 		b.WriteString(message)
 		if i < len(messages)-1 { // add newline between messages
 			b.WriteRune('\n')
 		}
 	}
-	return b.String(), strings.Join(summaries, "\n")
+	return b.String(), summary
 }
 
 // splitLlmTags splits the response by <new_message> and extracts <summary> tags (they should be joined with "\n" after returned)
-func splitLlmTags(response string, personaMeta *persona.PersonaMeta) (messages, summaries []string) {
+func splitLlmTags2(response string, personaMeta *persona.PersonaMeta) (messages, summaries []string) {
 	defer func() {
 		if personaMeta != nil {
 			personaMeta.ExcessiveSplit = len(messages) >= excessiveSplitPunishThres
@@ -82,7 +82,7 @@ func splitLlmTags(response string, personaMeta *persona.PersonaMeta) (messages, 
 			}
 			if afterSummary != "" {
 				// recursively split the part after summary in case of multiple tags
-				subMessages, subSummaries := splitLlmTags(afterSummary, nil)
+				subMessages, subSummaries := splitLlmTags2(afterSummary, nil)
 				messages = append(messages, subMessages...)
 				summaries = append(summaries, subSummaries...)
 			}
@@ -94,6 +94,11 @@ func splitLlmTags(response string, personaMeta *persona.PersonaMeta) (messages, 
 		}
 	}
 	return
+}
+
+func splitLlmTags(response string, personaMeta *persona.PersonaMeta) (messages []string, summary persona.Summary) {
+	messages, summaries := splitLlmTags2(response, personaMeta)
+	return messages, persona.Summary{Str: strings.Join(summaries, "\n")}
 }
 
 // Doesn't call SendTyping!
@@ -248,8 +253,8 @@ func handleLlmInteraction2(
 	var messages []string
 	if isRegenerate {
 		// edit the previous message for regeneration
-		var summary string
-		response, summary = replaceLlmTagsWithNewlines(response, userID, &cache.PersonaMeta)
+		var summary persona.Summary
+		response, summary = replaceLlmTagsWithNewlines(response, &cache.PersonaMeta)
 		cache.UpdateSummary(summary)
 
 		builder := discord.NewMessageUpdateBuilder().SetAllowedMentions(&discord.AllowedMentions{RepliedUser: false})
@@ -278,9 +283,9 @@ func handleLlmInteraction2(
 		}
 		jumpURL = lastResponseMessage.JumpURL()
 	} else {
-		var summaries []string
-		messages, summaries = splitLlmTags(response, &cache.PersonaMeta)
-		cache.UpdateSummary(strings.Join(summaries, "\n"))
+		var summary persona.Summary
+		messages, summary := splitLlmTags(response, &cache.PersonaMeta)
+		cache.UpdateSummary(summary)
 
 		for i, content := range messages {
 			content = strings.TrimSpace(content)
@@ -320,6 +325,7 @@ func handleLlmInteraction2(
 	}
 
 	cache.IsLastRandomDM = timeInteraction
+	cache.Summary.Age++
 	cache.UpdateInteractionTime()
 	if err := cache.Write(channelID); err != nil {
 		slog.Error("failed to write channel cache after interaction", "err", err, slog.String("channel_id", channelID.String()))

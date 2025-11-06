@@ -172,8 +172,8 @@ func handlePersonaInfo(event *handler.CommandEvent, ephemeral bool) error {
 		}
 	}
 
-	if cache.Summary != "" {
-		builder.AddField("Summary", ellipsisTrim(cache.Summary, 1024), false)
+	if cache.Summary.Str != "" {
+		builder.AddField("Summary", ellipsisTrim(cache.Summary.Str, 1024), false)
 	}
 
 	var files []*discord.File

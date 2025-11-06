@@ -42,12 +42,13 @@ type ChannelCache struct {
 	// IsLastRandomDM indicates if the last message sent by the bot was a random DM interaction.
 	IsLastRandomDM bool `json:"is_last_random_dm,omitempty"`
 	// Summary is an LLM-defined summary of the message history.
-	Summary string
+	Summary persona.Summary `json:"summary,omitzero"`
 }
 
-func (cache *ChannelCache) UpdateSummary(summary string) {
-	summary = strings.TrimSpace(summary)
-	if summary != "" {
+func (cache *ChannelCache) UpdateSummary(summary persona.Summary) {
+	summary.Str = strings.TrimSpace(summary.Str)
+	summary.Age = 1
+	if summary.Str != "" {
 		cache.Summary = summary
 	}
 }

@@ -2,6 +2,7 @@ package commands
 
 import (
 	"bytes"
+	"fmt"
 	"time"
 
 	"log/slog"
@@ -9,8 +10,10 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/disgoorg/disgo/bot"
 	"github.com/disgoorg/disgo/discord"
 	"github.com/disgoorg/disgo/events"
+	"github.com/disgoorg/snowflake/v2"
 	"github.com/zeozeozeo/x3/db"
 	"github.com/zeozeozeo/x3/media"
 )
@@ -169,4 +172,57 @@ func OnMessageCreate(event *events.MessageCreate) {
 		handleLlmInteraction(event)
 		return
 	}
+}
+
+func handleReactionAdd(client bot.Client, messageAuthorID *snowflake.ID, channelID, messageID, userID snowflake.ID, emoji discord.PartialEmoji) {
+	if messageAuthorID == nil || *messageAuthorID != client.ID() {
+		return
+	}
+	msg, err := client.Rest().GetMessage(channelID, messageID)
+	if err != nil || msg == nil {
+		slog.Warn("OnReactionAdd failed to get message", "err", err)
+		return
+	}
+	user, err := client.Rest().GetUser(userID)
+	if err != nil {
+		slog.Warn("OnReactionAdd failed to get user", "err", err)
+		return
+	}
+
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go sendTypingWithLog(client, channelID, &wg)
+
+	content := fmt.Sprintf(`<Reacted %s to %s's message "%s">`, emoji.Reaction(), msg.Author.EffectiveName(), getMessageContent(*msg))
+
+	_, _, err = handleLlmInteraction2(
+		client,
+		channelID,
+		messageID,
+		content,
+		user.EffectiveName(),
+		userID,
+		msg.Attachments,
+		false, // not a time interaction
+		false, // not a regenerate
+		"",    // no regenerate prepend
+		&wg,
+		msg.ReferencedMessage,
+		nil, // no event
+		nil,
+		false,
+		true, // dm event
+	)
+
+	if err != nil {
+		slog.Error("OnReactionAdd failed", "err", err)
+	}
+}
+
+func OnDMMessageReactionAdd(event *events.DMMessageReactionAdd) {
+	handleReactionAdd(event.Client(), event.MessageAuthorID, event.ChannelID, event.MessageID, event.UserID, event.Emoji)
+}
+
+func OnGuildMessageReactionAdd(event *events.GuildMessageReactionAdd) {
+	handleReactionAdd(event.Client(), event.MessageAuthorID, event.ChannelID, event.MessageID, event.UserID, event.Emoji)
 }

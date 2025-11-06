@@ -170,8 +170,8 @@ func HandleLlm(event *handler.CommandEvent, models []model.Model) error {
 	}
 
 	if ephemeral || useCache {
-		var summary string
-		response, summary = replaceLlmTagsWithNewlines(response, event.User().ID, &cache.PersonaMeta)
+		var summary persona.Summary
+		response, summary = replaceLlmTagsWithNewlines(response, &cache.PersonaMeta)
 		cache.UpdateSummary(summary)
 	}
 
@@ -198,8 +198,8 @@ func HandleLlm(event *handler.CommandEvent, models []model.Model) error {
 		botMessage, err = event.UpdateInteractionResponse(update.Build())
 
 	} else { // (splits)
-		messages, summaries := splitLlmTags(response, &cache.PersonaMeta)
-		cache.UpdateSummary(strings.Join(summaries, "\n"))
+		messages, summary := splitLlmTags(response, &cache.PersonaMeta)
+		cache.UpdateSummary(summary)
 
 		currentEvent := event
 		for i, content := range messages {
@@ -255,6 +255,7 @@ func HandleLlm(event *handler.CommandEvent, models []model.Model) error {
 	}
 
 	// write cache
+	cache.Summary.Age++
 	if useCache {
 		cache.Llmer = llmer
 		cache.UpdateInteractionTime()
