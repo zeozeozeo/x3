@@ -174,7 +174,7 @@ func OnMessageCreate(event *events.MessageCreate) {
 	}
 }
 
-func handleReactionAdd(client bot.Client, messageAuthorID *snowflake.ID, channelID, messageID, userID snowflake.ID, emoji discord.PartialEmoji) {
+func handleReactionAdd(client bot.Client, messageAuthorID *snowflake.ID, channelID, messageID, userID snowflake.ID, emoji discord.PartialEmoji, isDM bool) {
 	if messageAuthorID == nil || *messageAuthorID != client.ID() {
 		return
 	}
@@ -211,7 +211,7 @@ func handleReactionAdd(client bot.Client, messageAuthorID *snowflake.ID, channel
 		nil, // no event
 		nil,
 		false,
-		true, // dm event
+		isDM, // dm event
 	)
 
 	if err != nil {
@@ -220,9 +220,9 @@ func handleReactionAdd(client bot.Client, messageAuthorID *snowflake.ID, channel
 }
 
 func OnDMMessageReactionAdd(event *events.DMMessageReactionAdd) {
-	handleReactionAdd(event.Client(), event.MessageAuthorID, event.ChannelID, event.MessageID, event.UserID, event.Emoji)
+	handleReactionAdd(event.Client(), event.MessageAuthorID, event.ChannelID, event.MessageID, event.UserID, event.Emoji, true)
 }
 
 func OnGuildMessageReactionAdd(event *events.GuildMessageReactionAdd) {
-	handleReactionAdd(event.Client(), event.MessageAuthorID, event.ChannelID, event.MessageID, event.UserID, event.Emoji)
+	handleReactionAdd(event.Client(), event.MessageAuthorID, event.ChannelID, event.MessageID, event.UserID, event.Emoji, false)
 }
