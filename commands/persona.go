@@ -251,7 +251,7 @@ func HandlePersona(event *handler.CommandEvent) error {
 		cache.PersonaMeta = personaMeta
 	}
 	if dataSystem != "" {
-		cache.PersonaMeta.System = dataSystem
+		cache.PersonaMeta.System = strings.ReplaceAll(dataSystem, "\\n", "\n") // let user input newlines
 	}
 	if dataModel != "" {
 		cache.PersonaMeta.Models = []string{dataModel}
