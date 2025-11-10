@@ -656,6 +656,17 @@
       }
     },
     {
+      "name": "Sonar (🌐 Web Search)",
+      "command": "sonar",
+      "providers": {
+        "perplexity": {
+          "codenames": [
+            "sonar"
+          ]
+        }
+      }
+    },
+    {
       "name": "Markov Chain (not an LLM)",
       "command": "markov",
       "is_markov": true
@@ -710,7 +721,8 @@
     "electronhub",
     "pollinations",
     "huggingface",
-    "navy"
+    "navy",
+    "perplexity"
   ],
   "current_version": 12
 }

@@ -59,6 +59,7 @@ const (
 	llm7BaseURL         = "https://api.llm7.io/v1"
 	longcatBaseURL      = "https://api.longcat.chat/openai"
 	navyBaseURL         = "https://api.navy/v1"
+	perplexityBaseURL   = "https://api.perplexity.ai"
 )
 
 const (
@@ -88,6 +89,7 @@ const (
 	ProviderLLM7         = "llm7"
 	ProviderLongCat      = "longcat"
 	ProviderNavy         = "navy"
+	ProviderPerplexity   = "perplexity"
 )
 
 type ModelProvider struct {
@@ -148,6 +150,7 @@ var (
 		{Name: ProviderPollinations},
 		{Name: ProviderHuggingface},
 		{Name: ProviderNavy},
+		{Name: ProviderPerplexity},
 		//{Name: ProviderG4F},
 	}
 
@@ -335,6 +338,8 @@ func (m Model) Client(provider string) (baseUrls []string, tokens []string, code
 		tokenEnvKey, apiVar = "X3_LONGCAT_TOKEN", longcatBaseURL
 	case ProviderNavy:
 		tokenEnvKey, apiVar = "X3_NAVY_TOKEN", navyBaseURL
+	case ProviderPerplexity:
+		tokenEnvKey, apiVar = "X3_PERPLEXITY_TOKEN", perplexityBaseURL
 	default:
 		return nil, nil, nil
 	}
