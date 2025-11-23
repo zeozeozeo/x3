@@ -43,6 +43,10 @@ type ChannelCache struct {
 	IsLastRandomDM bool `json:"is_last_random_dm,omitempty"`
 	// Summary is an LLM-defined summary of the message history.
 	Summary persona.Summary `json:"summary,omitzero"`
+	// Context is a list of user-defined context strings.
+	Context []string `json:"context,omitempty"`
+	// MessagesSinceSummary tracks the number of messages since the last summary update.
+	MessagesSinceSummary int `json:"messages_since_summary"`
 }
 
 func (cache *ChannelCache) UpdateSummary(summary persona.Summary) {

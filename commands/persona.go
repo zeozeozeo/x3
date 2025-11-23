@@ -245,7 +245,7 @@ func HandlePersona(event *handler.CommandEvent) error {
 	// update persona meta in channel cache
 	prevMeta := cache.PersonaMeta
 	if prevMeta.System == "" {
-		prevMeta.System = persona.GetPersonaByMeta(cache.PersonaMeta, cache.Summary, "", event.Channel().Type() == discord.ChannelTypeDM, db.GetInteractionTime(event.User().ID)).System
+		prevMeta.System = persona.GetPersonaByMeta(cache.PersonaMeta, cache.Summary, "", event.Channel().Type() == discord.ChannelTypeDM, db.GetInteractionTime(event.User().ID), cache.Context).System
 	}
 	if dataPersona != "" {
 		cache.PersonaMeta = personaMeta

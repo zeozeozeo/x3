@@ -5,6 +5,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/disgoorg/snowflake/v2"
+	"github.com/zeozeozeo/x3/db"
 	"github.com/zeozeozeo/x3/llm"
 	"github.com/zeozeozeo/x3/persona"
 )
@@ -20,9 +22,11 @@ func GetNarrator() *Narrator {
 type narrationCallback func(llmer *llm.Llmer, response string)
 
 type queuedNarration struct {
-	llmer    llm.Llmer
-	prepend  string
-	callback narrationCallback
+	llmer     llm.Llmer
+	prepend   string
+	callback  narrationCallback
+	isSummary bool
+	channelID snowflake.ID
 }
 
 type Narrator struct {
@@ -45,6 +49,13 @@ func (n *Narrator) QueueNarration(llmer llm.Llmer, prepend string, cb narrationC
 	n.queue = append(n.queue, queuedNarration{llmer: llmer, prepend: prepend, callback: cb})
 }
 
+func (n *Narrator) QueueSummaryGeneration(channelID snowflake.ID, llmer llm.Llmer) {
+	slog.Info("narrator: queueing summary generation", slog.String("channel_id", channelID.String()))
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	n.queue = append(n.queue, queuedNarration{llmer: llmer, isSummary: true, channelID: channelID})
+}
+
 func (n *Narrator) Run() {
 	slog.Info("narrator: starting mainloop", slog.String("ratelimit", ratelimit.String()))
 	defer n.ticker.Stop()
@@ -60,9 +71,14 @@ func (n *Narrator) Run() {
 		n.mu.Unlock()
 
 		// request completion
-		slog.Info("narrator: requesting completion")
-		meta := persona.PersonaStableNarrator
-		p := persona.GetPersonaByMeta(meta, persona.Summary{}, "", false /* dm */, time.Time{})
+		slog.Info("narrator: requesting completion", slog.Bool("is_summary", qn.isSummary))
+		var meta persona.PersonaMeta
+		if qn.isSummary {
+			meta = persona.PersonaSummaryGenerator
+		} else {
+			meta = persona.PersonaStableNarrator
+		}
+		p := persona.GetPersonaByMeta(meta, persona.Summary{}, "", false /* dm */, time.Time{}, nil)
 		qn.llmer.SetPersona(p, nil) // TODO: custom personas
 		res, _, err := qn.llmer.RequestCompletion(meta.GetModels(), meta.Settings, qn.prepend)
 
@@ -77,7 +93,15 @@ func (n *Narrator) Run() {
 		}
 
 		// callback
-		if qn.callback != nil {
+		if qn.isSummary {
+			cache := db.GetChannelCache(qn.channelID)
+			cache.UpdateSummary(persona.Summary{Str: res})
+			if err := cache.Write(qn.channelID); err != nil {
+				slog.Error("narrator: failed to write summary to cache", "err", err)
+			} else {
+				slog.Info("narrator: summary updated", slog.String("channel_id", qn.channelID.String()))
+			}
+		} else if qn.callback != nil {
 			qn.callback(&qn.llmer, res)
 		}
 

@@ -47,6 +47,25 @@ func sendInteractionError(event *handler.CommandEvent, msg string, ephemeral boo
 	)
 }
 
+func sendInteractionOk(event *handler.CommandEvent, title, msg string, ephemeral bool) error {
+	return event.CreateMessage(
+		discord.NewMessageCreateBuilder().
+			SetAllowedMentions(&discord.AllowedMentions{
+				RepliedUser: false,
+			}).
+			SetEphemeral(ephemeral).
+			AddEmbeds(
+				discord.NewEmbedBuilder().
+					SetColor(0x0085ff).
+					SetTitle(title).
+					SetFooter("x3", x3Icon).
+					SetDescription(msg).
+					Build(),
+			).
+			Build(),
+	)
+}
+
 // updateInteractionError updates an interaction response with a formatted error message.
 func updateInteractionError(event *handler.CommandEvent, msg string) error {
 	_, err := event.UpdateInteractionResponse(

@@ -53,16 +53,17 @@ The following examples are unrelated to the context of the chat and represent th
 
 x3 is allowed to generate images. When a user asks you to generate an image, you should describe it in detail, and add the "<generate_image>" tag at the VERY END of your message (WITHOUT a closing tag).
 
-**Summaries:**
-
-If a message contains new lasting context about the user, the relationship, or ongoing RP lore or scenario, x3 MUST use <summary> to save it for later. When saving summaries, it is advised to write about a paragraph of information about the current chat and keep details from the previous summary (if any).
-
-Current summary:
 {{ if .Summary }}
-<summary>{{ .Summary }}</summary>
-(note: summary was last updated {{ .SummaryAge }} messages ago, update it again if needed)
-{{ else }}
-No summary yet, it is encouraged to create one with <summary>Summary of the dialogue here</summary>
+**Current chat summary:**
+{{ .Summary }}
+(note: summary was last updated {{ .SummaryAge }} messages ago)
+{{ end }}
+
+{{ if .Context }}
+**Context:**
+{{ range .Context }}
+- {{ . }}
+{{ end }}
 {{ end }}
 
 x3 is now being connected to {{ if .DM }}a private DM with {{ .Username }}{{ else }}a chat room{{ end }}.{{ if .InteractionElapsed }}
@@ -95,12 +96,17 @@ Personality:
 
 If a message contains new lasting context about the user, the relationship, or ongoing RP lore, Yapper can use <summary> to save it for later. When saving summaries, it is advised to write about a paragraph of information about the current chat and keep details from the previous summary (if any).
 
-Current summary:
 {{ if .Summary }}
-<summary>{{ .Summary }}</summary>
-(note: summary was last updated {{ .SummaryAge }} messages ago, update it again if needed)
-{{ else }}
-No summary yet, it is encouraged to create one with <summary>Summary of the dialogue here</summary>
+**Current chat summary:**
+{{ .Summary }}
+(note: summary was last updated {{ .SummaryAge }} messages ago)
+{{ end }}
+
+{{ if .Context }}
+**Context:**
+{{ range .Context }}
+- {{ . }}
+{{ end }}
 {{ end }}
 
 Yapper is now being connected to {{ if .DM }}a private DM with {{ .Username }}{{ else }}a chat room{{ end }}.{{ if .InteractionElapsed }}
@@ -212,6 +218,17 @@ User: She smirks, her thick length pressing against her thigh, already dripping.
 - anime style, sketch, hyperrealism, watercolor, pencil drawing, CGI, oil painting
 
 You will now be given a task in form of a conversation log. If there is not enough information or an image would be excessive, simply provide an empty string in the "tags" field.`
+
+	summaryGeneratorSystemPrompt = `You are an automated summary generator. Your task is to read the provided conversation log and generate a concise summary of the interaction, focusing on key details, user preferences, and ongoing context.
+
+**Instructions:**
+- Write a single paragraph summarizing the conversation.
+- Retain important details from the previous summary if they are still relevant.
+- Focus on facts, user information, and the current state of the roleplay or discussion.
+- Do not include system instructions or boilerplate in the summary.
+- If the conversation is empty or trivial, return the previous summary or a brief note.
+
+Output the summary directly.`
 )
 
 type Persona struct {
@@ -237,11 +254,12 @@ type templateData struct {
 	// Whether in a DM
 	DM                 bool
 	InteractionElapsed string
+	Context            []string
 }
 
-type personaFunc func(tmpl *template.Template, summary Summary, username string, dm bool, interactedAt time.Time) Persona
+type personaFunc func(tmpl *template.Template, summary Summary, username string, dm bool, interactedAt time.Time, context []string) Persona
 
-func newTemplateData(summary Summary, username string, dm bool, interactedAt time.Time) templateData {
+func newTemplateData(summary Summary, username string, dm bool, interactedAt time.Time, context []string) templateData {
 	now := time.Now().UTC()
 	var elapsed string
 	if !interactedAt.IsZero() && now.Sub(interactedAt) >= 5*time.Minute {
@@ -256,12 +274,13 @@ func newTemplateData(summary Summary, username string, dm bool, interactedAt tim
 		Username:           username,
 		DM:                 dm,
 		InteractionElapsed: elapsed,
+		Context:            context,
 	}
 }
 
-func newPersona(tmpl *template.Template, summary Summary, username string, dm bool, interactedAt time.Time) Persona {
+func newPersona(tmpl *template.Template, summary Summary, username string, dm bool, interactedAt time.Time, context []string) Persona {
 	var tpl bytes.Buffer
-	if err := tmpl.Execute(&tpl, newTemplateData(summary, username, dm, interactedAt)); err != nil {
+	if err := tmpl.Execute(&tpl, newTemplateData(summary, username, dm, interactedAt, context)); err != nil {
 		panic(err)
 	}
 
@@ -271,7 +290,7 @@ func newPersona(tmpl *template.Template, summary Summary, username string, dm bo
 }
 
 func systemPromptPersona(system string) personaFunc {
-	return func(tmpl *template.Template, summary Summary, username string, dm bool, interactedAt time.Time) Persona {
+	return func(tmpl *template.Template, summary Summary, username string, dm bool, interactedAt time.Time, context []string) Persona {
 		return Persona{
 			System: system,
 		}
@@ -387,6 +406,11 @@ var (
 		Desc:   "<internal>",
 		Models: clone(model.DefaultModels), // not used
 	}
+	PersonaSummaryGenerator = PersonaMeta{
+		Name:   "Summary Generator",
+		Desc:   "<internal>",
+		Models: clone(model.NarratorModels),
+	}
 
 	AllPersonas = []PersonaMeta{
 		PersonaProto,
@@ -400,13 +424,14 @@ var (
 		getter personaFunc
 		tmpl   *template.Template
 	}{
-		PersonaDefault.Name: {getter: func(tmpl *template.Template, summary Summary, username string, dm bool, interactedAt time.Time) Persona {
+		PersonaDefault.Name: {getter: func(tmpl *template.Template, summary Summary, username string, dm bool, interactedAt time.Time, context []string) Persona {
 			return Persona{}
 		}},
-		PersonaProto.Name:          {getter: newPersona, tmpl: x3ProtogenTemplate},
-		PersonaYapper.Name:         {getter: newPersona, tmpl: x3BrainrotTemplate},
-		PersonaImpersonate.Name:    {getter: newPersona, tmpl: impersonateTemplate},
-		PersonaStableNarrator.Name: {getter: systemPromptPersona(stableNarratorSystemPrompt)},
+		PersonaProto.Name:            {getter: newPersona, tmpl: x3ProtogenTemplate},
+		PersonaYapper.Name:           {getter: newPersona, tmpl: x3BrainrotTemplate},
+		PersonaImpersonate.Name:      {getter: newPersona, tmpl: impersonateTemplate},
+		PersonaStableNarrator.Name:   {getter: systemPromptPersona(stableNarratorSystemPrompt)},
+		PersonaSummaryGenerator.Name: {getter: systemPromptPersona(summaryGeneratorSystemPrompt)},
 	}
 )
 
@@ -423,12 +448,12 @@ func GetMetaByName(name string) (PersonaMeta, error) {
 	return PersonaMeta{}, errNoMeta
 }
 
-func GetPersonaByMeta(meta PersonaMeta, summary Summary, username string, dm bool, interactedAt time.Time) Persona {
+func GetPersonaByMeta(meta PersonaMeta, summary Summary, username string, dm bool, interactedAt time.Time, context []string) Persona {
 	if username == "" {
 		username = "this user"
 	}
 	if s, ok := personaGetters[meta.Name]; ok {
-		persona := s.getter(s.tmpl, summary, username, dm, interactedAt)
+		persona := s.getter(s.tmpl, summary, username, dm, interactedAt, context)
 		if len(meta.System) != 0 {
 			persona.System = meta.System
 		}

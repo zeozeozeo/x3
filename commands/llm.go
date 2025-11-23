@@ -111,7 +111,7 @@ func HandleLlm(event *handler.CommandEvent, models []model.Model) error {
 				if isLobotomyMessage(*msg) {
 					llmer.Lobotomize(getLobotomyAmountFromMessage(*msg))
 				} else {
-					msgPersona := persona.GetPersonaByMeta(cache.PersonaMeta, cache.Summary, msg.Author.EffectiveName(), isDM, lastInteracted)
+					msgPersona := persona.GetPersonaByMeta(cache.PersonaMeta, cache.Summary, msg.Author.EffectiveName(), isDM, lastInteracted, cache.Context)
 					llmer.SetPersona(msgPersona, nil)
 					llmer.AddMessage(llm.RoleUser, formatMsg(getMessageContent(*msg), msg.Author.EffectiveName(), msg.ReferencedMessage), msg.ID)
 					addImageAttachments(llmer, msg.Attachments)
@@ -122,7 +122,7 @@ func HandleLlm(event *handler.CommandEvent, models []model.Model) error {
 	usernames[event.User().EffectiveName()] = struct{}{} // to be safe when not using cache
 	slog.Debug("prepared initial context", slog.Int("num_messages", llmer.NumMessages()))
 
-	currentPersona := persona.GetPersonaByMeta(cache.PersonaMeta, cache.Summary, event.User().EffectiveName(), isDM, lastInteracted)
+	currentPersona := persona.GetPersonaByMeta(cache.PersonaMeta, cache.Summary, event.User().EffectiveName(), isDM, lastInteracted, cache.Context)
 	llmer.SetPersona(currentPersona, &cache.PersonaMeta.ExcessiveSplit)
 	llmer.AddMessage(llm.RoleUser, formatMsg(prompt, event.User().EffectiveName(), nil), 0)
 
@@ -170,9 +170,7 @@ func HandleLlm(event *handler.CommandEvent, models []model.Model) error {
 	}
 
 	if ephemeral || useCache {
-		var summary persona.Summary
-		response, summary = replaceLlmTagsWithNewlines(response, &cache.PersonaMeta)
-		cache.UpdateSummary(summary)
+		response = replaceLlmTagsWithNewlines(response, &cache.PersonaMeta)
 	}
 
 	// send response
@@ -198,8 +196,7 @@ func HandleLlm(event *handler.CommandEvent, models []model.Model) error {
 		botMessage, err = event.UpdateInteractionResponse(update.Build())
 
 	} else { // (splits)
-		messages, summary := splitLlmTags(response, &cache.PersonaMeta)
-		cache.UpdateSummary(summary)
+		messages := splitLlmTags(response, &cache.PersonaMeta)
 
 		currentEvent := event
 		for i, content := range messages {
