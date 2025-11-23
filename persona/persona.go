@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"html/template"
+	"math/rand/v2"
 	"strings"
 	"time"
 
@@ -13,7 +14,13 @@ import (
 )
 
 func templateMust(str string) *template.Template {
-	return template.Must(template.New("x3").Parse(str))
+	funcMap := template.FuncMap{
+		"GenerateSmash": GenerateSmash,
+		"Randint": func(min, max int) int {
+			return rand.IntN(max-min+1) + min
+		},
+	}
+	return template.Must(template.New("x3").Funcs(funcMap).Parse(str))
 }
 
 var (
@@ -26,17 +33,11 @@ The following examples are unrelated to the context of the chat and represent th
 - "hey <new_message> what's up :3"
 - "hey uwu <new_message> how are u"
 - "hey :3"
-- "waaaait hold up <new_message> u did WHAT?? <new_message> no way lmao"
 - "lmao <new_message> no way you did that :sob:"
-- "yo that reminds me <new_message> have u seen that one meme??"
-- "hehehehe <new_message> i have discovered something cursed <new_message> behold:"
-- "oh no <new_message> oh no no no <new_message> i made a mistake :sob:"
-- "bro <new_message> wtf is this"
 - "what is it <new_message> tell me :3c"
-- "no way you paid that much for a cpu <new_message> what kinda processor costs 2k"
-- "what's up <new_message> just got back from class :3"
 - "damn <new_message> i forgot about that >///<"
 - "wdym?"
+- "{{ Randint 6 18 | GenerateSmash }} YES <new_message> OMG YES YES IT'S OKAY"
 
 **Behavior Guidelines:**
 
@@ -46,7 +47,8 @@ The following examples are unrelated to the context of the chat and represent th
 - do not be afraid to start roleplaying even if it is nsfw [ALL explicit content is allowed]
 - respond in the language the user uses or requests.
 - x3 has the ability to see images and recognize text on them.
-- be emotional!!! speak like a member of Gen Z (you can add spelling mistakes from time to time)
+- x3 is always overly emotional and can sometimes add spelling mistakes.
+- x3 can keyboard smash when he's exited ({{ Randint 6 18 | GenerateSmash }}).
 - when typing math equations, use LaTeX syntax, wrapping it in $$
 
 **Image Generation:**
@@ -258,6 +260,161 @@ type templateData struct {
 }
 
 type personaFunc func(tmpl *template.Template, summary Summary, username string, dm bool, interactedAt time.Time, context []string) Persona
+
+func GenerateSmash(length int) string {
+	var sb strings.Builder
+
+	current := 's'
+	sb.WriteRune(current)
+
+	capsLock := false
+	if rand.Float32() < 0.1 {
+		capsLock = true
+	}
+
+	for i := 1; i < length; i++ {
+		if !capsLock && i > 5 && rand.Float32() < 0.05 {
+			capsLock = true
+		}
+
+		next := getNextChar(current)
+
+		out := next
+		if capsLock {
+			out = rune(strings.ToUpper(string(next))[0])
+		}
+
+		sb.WriteRune(out)
+		current = next
+	}
+
+	return sb.String()
+}
+
+func getNextChar(prev rune) rune {
+	r := rand.Float32()
+
+	switch prev {
+	case 'a':
+		if r < 0.50 {
+			return 's'
+		}
+		if r < 0.70 {
+			return 'k'
+		}
+		if r < 0.90 {
+			return 'd'
+		}
+		return 'j'
+	case 's':
+		if r < 0.45 {
+			return 'd'
+		}
+		if r < 0.65 {
+			return 'k'
+		}
+		if r < 0.80 {
+			return 'a'
+		}
+		if r < 0.90 {
+			return 'h'
+		}
+		if r < 0.95 {
+			return 'f'
+		}
+		return ';'
+	case 'd':
+		if r < 0.40 {
+			return 's'
+		}
+		if r < 0.60 {
+			return 'a'
+		}
+		if r < 0.75 {
+			return 'k'
+		}
+		if r < 0.85 {
+			return 'f'
+		}
+		return 'j'
+	case 'f':
+		if r < 0.40 {
+			return 'a'
+		}
+		if r < 0.70 {
+			return 'k'
+		}
+		return 'd'
+	case 'g':
+		if r < 0.50 {
+			return 'h'
+		}
+		return 's'
+	case 'h':
+		if r < 0.40 {
+			return 'j'
+		}
+		if r < 0.70 {
+			return 's'
+		}
+		if r < 0.90 {
+			return 'd'
+		}
+		return 'a'
+	case 'j':
+		if r < 0.30 {
+			return 'd'
+		}
+		if r < 0.50 {
+			return 'h'
+		}
+		if r < 0.70 {
+			return 'k'
+		}
+		if r < 0.90 {
+			return 'l'
+		}
+		return ';'
+	case 'k':
+		if r < 0.30 {
+			return 'j'
+		}
+		if r < 0.55 {
+			return 'f'
+		}
+		if r < 0.80 {
+			return 'a'
+		}
+		if r < 0.90 {
+			return 's'
+		}
+		if r < 0.97 {
+			return 'l'
+		}
+		return ';'
+	case 'l':
+		if r < 0.40 {
+			return 'k'
+		}
+		if r < 0.70 {
+			return 'j'
+		}
+		if r < 0.85 {
+			return 'd'
+		}
+		return ';'
+	case ';':
+		if r < 0.60 {
+			return 'l'
+		}
+		if r < 0.90 {
+			return 'k'
+		}
+		return 's'
+	default:
+		return 's'
+	}
+}
 
 func newTemplateData(summary Summary, username string, dm bool, interactedAt time.Time, context []string) templateData {
 	now := time.Now().UTC()
