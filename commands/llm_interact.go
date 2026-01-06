@@ -2,6 +2,7 @@ package commands
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -91,6 +92,7 @@ func handleLlmInteraction2(
 	systemPromptOverride *string, // Optional override for the system prompt
 	isImpersonate bool, // Whether this is an impersonate interaction
 	isDM bool, // Whether this is a DM
+	ctx context.Context,
 ) (string, snowflake.ID, error) { // (Returns jumpURL if regenerating, otherwise response), the bot message id and error
 	cache := db.GetChannelCache(channelID)
 
@@ -183,7 +185,7 @@ func handleLlmInteraction2(
 		"prepend", prepend,
 		"isDM", isDM,
 	)
-	response, usage, err := llmer.RequestCompletion(models, cache.PersonaMeta.Settings, prepend)
+	response, usage, err := llmer.RequestCompletion(models, cache.PersonaMeta.Settings, prepend, ctx)
 	if err != nil {
 		slog.Error("LLM request failed", "err", err)
 		return "", 0, fmt.Errorf("LLM request failed: %w", err)

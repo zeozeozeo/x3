@@ -2,6 +2,7 @@ package commands
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"time"
 
@@ -25,6 +26,17 @@ var (
 )
 
 func handleLlmInteraction(event *events.MessageCreate) error {
+	ctx, cancel := context.WithCancel(context.Background())
+	if oldCancel, loaded := llmInteractionsInProgress.Swap(event.ChannelID, cancel); loaded {
+		if c, ok := oldCancel.(context.CancelFunc); ok {
+			c()
+		}
+	}
+	defer func() {
+		llmInteractionsInProgress.Delete(event.ChannelID)
+		cancel()
+	}()
+
 	var wg sync.WaitGroup
 	wg.Add(1)
 	go sendTypingWithLog(event.Client(), event.ChannelID, &wg)
@@ -48,6 +60,7 @@ func handleLlmInteraction(event *events.MessageCreate) error {
 		nil,
 		false,
 		event.GuildID == nil, // if no guild this is a dm
+		ctx,
 	)
 
 	if err != nil {
@@ -134,12 +147,6 @@ func OnMessageCreate(event *events.MessageCreate) {
 	}
 
 	if shouldTriggerLlm {
-		if _, loaded := llmInteractionsInProgress.LoadOrStore(event.ChannelID, true); loaded {
-			return
-		}
-
-		defer llmInteractionsInProgress.Delete(event.ChannelID)
-
 		handleLlmInteraction(event)
 		return
 	}
@@ -212,6 +219,7 @@ func handleReactionAdd(client bot.Client, messageAuthorID *snowflake.ID, channel
 		nil,
 		false,
 		isDM, // dm event
+		context.Background(),
 	)
 
 	if err != nil {
@@ -225,4 +233,54 @@ func OnDMMessageReactionAdd(event *events.DMMessageReactionAdd) {
 
 func OnGuildMessageReactionAdd(event *events.GuildMessageReactionAdd) {
 	handleReactionAdd(event.Client(), event.MessageAuthorID, event.ChannelID, event.MessageID, event.UserID, event.Emoji, false)
+}
+
+func OnMessageUpdate(event *events.MessageUpdate) {
+	if event.Message.Author.Bot {
+		return
+	}
+
+	// only handle DMs
+	if event.GuildID != nil {
+		return
+	}
+
+	// determine if this is the last message sent by the user
+	msgs, err := event.Client().Rest().GetMessages(event.ChannelID, 0, 0, 0, 1)
+	if err != nil || len(msgs) == 0 {
+		return
+	}
+
+	if msgs[0].ID != event.MessageID {
+		return // not the last message
+	}
+
+	// cancel existing interaction for this channel
+	if cancel, loaded := llmInteractionsInProgress.Load(event.ChannelID); loaded {
+		if c, ok := cancel.(context.CancelFunc); ok {
+			c()
+		}
+	}
+
+	// delete bot messages sent after this message
+	afterMsgs, err := event.Client().Rest().GetMessages(event.ChannelID, 0, event.MessageID, 0, 10)
+	if err == nil {
+		for _, m := range afterMsgs {
+			if m.Author.ID == event.Client().ID() {
+				_ = event.Client().Rest().DeleteMessage(event.ChannelID, m.ID)
+			}
+		}
+	}
+
+	// trigger new interaction
+	createEvent := &events.MessageCreate{
+		GenericMessage: &events.GenericMessage{
+			GenericEvent: event.GenericEvent,
+			MessageID:    event.MessageID,
+			Message:      event.Message,
+			ChannelID:    event.ChannelID,
+			GuildID:      event.GuildID,
+		},
+	}
+	handleLlmInteraction(createEvent)
 }

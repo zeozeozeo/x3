@@ -1,6 +1,7 @@
 package commands
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -108,7 +109,8 @@ func InitiateDMInteraction(client bot.Client) {
 			nil,              // No event
 			nil,
 			false,
-			true, // dm
+			true, // dm event
+			context.Background(),
 		)
 
 		// Handle errors from the interaction attempt

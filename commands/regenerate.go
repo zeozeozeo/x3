@@ -1,6 +1,7 @@
 package commands
 
 import (
+	"context"
 	"strings"
 
 	"github.com/disgoorg/disgo/discord"
@@ -56,6 +57,7 @@ func HandleRegenerate(event *handler.CommandEvent) error {
 		nil,   // no system prompt override
 		false, // not impersonate
 		event.Channel().Type() == discord.ChannelTypeDM,
+		context.Background(),
 	)
 	if err != nil {
 		return updateInteractionError(event, err.Error())

@@ -1,6 +1,7 @@
 package commands
 
 import (
+	"context"
 	"fmt"
 	"log/slog"
 	"sync"
@@ -104,6 +105,7 @@ func HandleImpersonate(event *handler.CommandEvent) error {
 			systemPromptOverride,
 			isImpersonateTurn,
 			event.Channel().Type() == discord.ChannelTypeDM,
+			context.Background(),
 		)
 		if err != nil {
 			slog.Error("handleLlmInteraction2 failed", "err", err, "channel_id", event.Channel().ID())

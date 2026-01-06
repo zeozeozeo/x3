@@ -1,6 +1,7 @@
 package commands
 
 import (
+	"context"
 	"log/slog"
 	"sync"
 	"time"
@@ -80,7 +81,7 @@ func (n *Narrator) Run() {
 		}
 		p := persona.GetPersonaByMeta(meta, []persona.Summary{}, "", false /* dm */, time.Time{}, nil)
 		qn.llmer.SetPersona(p, nil) // TODO: custom personas
-		res, _, err := qn.llmer.RequestCompletion(meta.GetModels(), meta.Settings, qn.prepend)
+		res, _, err := qn.llmer.RequestCompletion(meta.GetModels(), meta.Settings, qn.prepend, context.Background())
 
 		// update last interaction time
 		n.mu.Lock()

@@ -107,6 +107,7 @@ func main() {
 			bot.WithAsyncEventsEnabled(),
 		),
 		bot.WithEventListenerFunc(commands.OnMessageCreate),
+		bot.WithEventListenerFunc(commands.OnMessageUpdate),
 		bot.WithEventListenerFunc(commands.OnDMMessageReactionAdd),
 		bot.WithEventListenerFunc(commands.OnGuildMessageReactionAdd),
 	)

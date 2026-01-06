@@ -305,6 +305,7 @@ func (l *Llmer) requestCompletionInternal2(
 	settings persona.InferenceSettings,
 	client *openai.Client,
 	prepend string,
+	ctx context.Context,
 ) (string, Usage, error) {
 	if m.Limited {
 		settings = persona.InferenceSettings{}
@@ -325,7 +326,7 @@ func (l *Llmer) requestCompletionInternal2(
 	}
 
 	completionStart := time.Now()
-	ctx, cancel := context.WithDeadline(context.Background(), completionStart.Add(5*time.Minute))
+	ctx, cancel := context.WithDeadline(ctx, completionStart.Add(5*time.Minute))
 	defer cancel()
 
 	stream, err := client.CreateChatCompletionStream(ctx, req)
@@ -392,6 +393,7 @@ func (l *Llmer) requestCompletionInternal(
 	provider string,
 	settings persona.InferenceSettings,
 	prepend string,
+	ctx context.Context,
 ) (string, Usage, error) {
 	slog.Debug(
 		"request completion.. message history follows..",
@@ -434,7 +436,7 @@ func (l *Llmer) requestCompletionInternal(
 
 			for _, codename := range codenames {
 				slog.Info("attempting request", "provider", provider, "baseUrl", baseUrl, "codename", codename)
-				res, usage, err := l.requestCompletionInternal2(m, codename, provider, settings, client, prepend)
+				res, usage, err := l.requestCompletionInternal2(m, codename, provider, settings, client, prepend, ctx)
 				if err == nil {
 					// we got a response, but if we used a prefill, we should indicate that it was used
 					// (prepend it to the response in bold)
@@ -528,7 +530,7 @@ func (l Llmer) shouldSwapToVision() bool {
 	return false
 }
 
-func (l *Llmer) RequestCompletion(models []model.Model, settings persona.InferenceSettings, prepend string) (res string, usage Usage, err error) {
+func (l *Llmer) RequestCompletion(models []model.Model, settings persona.InferenceSettings, prepend string, ctx context.Context) (res string, usage Usage, err error) {
 	if len(models) == 0 {
 		err = errNoModelsForCompletion
 		return
@@ -587,7 +589,11 @@ func (l *Llmer) RequestCompletion(models []model.Model, settings persona.Inferen
 			}
 			slog.Info("requesting completion", "model", m.Name, "provider", provider.Name, "providerErrors", provider.Errors, "retries", retries)
 
-			res, usage, err = l.requestCompletionInternal(m, provider.Name, settings.Fixup(), prepend)
+			if ctx.Err() != nil {
+				return "", Usage{}, ctx.Err()
+			}
+
+			res, usage, err = l.requestCompletionInternal(m, provider.Name, settings.Fixup(), prepend, ctx)
 
 			// check for empty response first
 			if err == nil && res == "" {
