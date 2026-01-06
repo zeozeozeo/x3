@@ -172,8 +172,8 @@ func handlePersonaInfo(event *handler.CommandEvent, ephemeral bool) error {
 		}
 	}
 
-	if cache.Summary.Str != "" {
-		builder.AddField("Summary", ellipsisTrim(cache.Summary.Str, 1024), false)
+	if len(cache.Summaries) > 0 {
+		builder.AddField("Summary", ellipsisTrim(cache.Summaries[0].Str, 1024), false)
 	}
 
 	var files []*discord.File
@@ -245,7 +245,7 @@ func HandlePersona(event *handler.CommandEvent) error {
 	// update persona meta in channel cache
 	prevMeta := cache.PersonaMeta
 	if prevMeta.System == "" {
-		prevMeta.System = persona.GetPersonaByMeta(cache.PersonaMeta, cache.Summary, "", event.Channel().Type() == discord.ChannelTypeDM, db.GetInteractionTime(event.User().ID), cache.Context).System
+		prevMeta.System = persona.GetPersonaByMeta(cache.PersonaMeta, cache.Summaries, "", event.Channel().Type() == discord.ChannelTypeDM, db.GetInteractionTime(event.User().ID), cache.Context).System
 	}
 	if dataPersona != "" {
 		cache.PersonaMeta = personaMeta

@@ -41,8 +41,8 @@ type ChannelCache struct {
 	EverUsedRandomDMs bool `json:"ever_used_random_dms,omitempty"`
 	// IsLastRandomDM indicates if the last message sent by the bot was a random DM interaction.
 	IsLastRandomDM bool `json:"is_last_random_dm,omitempty"`
-	// Summary is an LLM-defined summary of the message history.
-	Summary persona.Summary `json:"summary,omitzero"`
+	// Summaries is a list of LLM-defined summaries of the message history.
+	Summaries []persona.Summary `json:"summaries,omitempty"`
 	// Context is a list of user-defined context strings.
 	Context []string `json:"context,omitempty"`
 	// MessagesSinceSummary tracks the number of messages since the last summary update.
@@ -53,7 +53,12 @@ func (cache *ChannelCache) UpdateSummary(summary persona.Summary) {
 	summary.Str = strings.TrimSpace(summary.Str)
 	summary.Age = 1
 	if summary.Str != "" {
-		cache.Summary = summary
+		// prepend new summary
+		cache.Summaries = append([]persona.Summary{summary}, cache.Summaries...)
+		// keep only last 3
+		if len(cache.Summaries) > 3 {
+			cache.Summaries = cache.Summaries[:3]
+		}
 	}
 }
 

@@ -6,7 +6,6 @@ import (
 	"github.com/disgoorg/disgo/discord"
 	"github.com/disgoorg/disgo/handler"
 	"github.com/zeozeozeo/x3/db"
-	"github.com/zeozeozeo/x3/persona"
 )
 
 // LobotomyCommand is the definition for the /lobotomy command
@@ -77,9 +76,9 @@ func HandleLobotomy(event *handler.CommandEvent) error {
 			}
 		}
 	}
-	if !cache.Summary.IsEmpty() {
+	if len(cache.Summaries) > 0 {
 		writeCache = true
-		cache.Summary = persona.Summary{}
+		cache.Summaries = nil
 	}
 
 	if writeCache {

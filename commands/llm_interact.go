@@ -140,7 +140,12 @@ func handleLlmInteraction2(
 		userID = lastUserID
 	}
 
-	p := persona.GetPersonaByMeta(cache.PersonaMeta, cache.Summary, username, isDM, db.GetInteractionTime(userID), cache.Context)
+	// increment summary ages
+	for i := range cache.Summaries {
+		cache.Summaries[i].Age++
+	}
+
+	p := persona.GetPersonaByMeta(cache.PersonaMeta, cache.Summaries, username, isDM, db.GetInteractionTime(userID), cache.Context)
 
 	// avoid formatting reply if the reference is the message we're about to regenerate
 	if reference != nil && isRegenerate && reference.ID == lastResponseMessage.ID {
