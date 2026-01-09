@@ -20,9 +20,11 @@ import (
 )
 
 var (
-	containsX3Regex       = regexp.MustCompile(`(?i)(^|\P{L})(?:x3|х3|clanker|clanky|кланкер)(\P{L}|$)`)
-	containsProtogenRegex = regexp.MustCompile(`(?i)(^|\P{L})(?:protogen|протоген)(\P{L}|$)`)
-	containsSigmaRegex    = regexp.MustCompile(`(?i)(^|\P{L})(?:sigma|сигма)(\P{L}|$)`)
+	containsX3Regex              = regexp.MustCompile(`(?i)(^|\P{L})(?:x3|х3|clanker|clanky|кланкер)(\P{L}|$)`)
+	containsProtogenRegex        = regexp.MustCompile(`(?i)(^|\P{L})(?:protogen|протоген)(\P{L}|$)`)
+	containsSigmaRegex           = regexp.MustCompile(`(?i)(^|\P{L})(?:sigma|сигма)(\P{L}|$)`)
+	cdnLinkRegex                 = regexp.MustCompile(`https?://(?:cdn|media)\.discordapp\.com/[^\s]+\.(?:png|jpg|jpeg|webp)(?:\?[^\s]*)?`)
+	antiscamNotificationDebounce sync.Map // guildID -> time.Time
 )
 
 func handleLlmInteraction(event *events.MessageCreate) error {
@@ -89,6 +91,54 @@ func OnMessageCreate(event *events.MessageCreate) {
 	if event.Message.Author.Bot {
 		return
 	}
+	if event.Message.Content == "" && len(event.Message.Attachments) == 0 {
+		return // might be a poll/pin message etc
+	}
+
+	// anti-scam
+	if event.GuildID != nil && db.IsAntiscamEnabled(*event.GuildID) {
+		isScam := false
+		// 4 image attachments
+		if len(event.Message.Attachments) == 4 {
+			allImages := true
+			for _, a := range event.Message.Attachments {
+				if !isImageAttachment(a) {
+					allImages = false
+					break
+				}
+			}
+			if allImages {
+				isScam = true
+			}
+		}
+
+		// 4 discord CDN links and no other content
+		if !isScam {
+			content := strings.TrimSpace(event.Message.Content)
+			links := cdnLinkRegex.FindAllString(content, -1)
+			if len(links) == 4 {
+				// check if there is any other content
+				remaining := content
+				for _, link := range links {
+					remaining = strings.Replace(remaining, link, "", 1)
+				}
+				if strings.TrimSpace(remaining) == "" {
+					isScam = true
+				}
+			}
+		}
+
+		if isScam {
+			_ = event.Client().Rest().DeleteMessage(event.ChannelID, event.MessageID)
+
+			// notify (debounced)
+			if lastNotify, ok := antiscamNotificationDebounce.Load(*event.GuildID); !ok || time.Since(lastNotify.(time.Time)) > 30*time.Second {
+				antiscamNotificationDebounce.Store(*event.GuildID, time.Now())
+				_ = sendPrettyEmbed(event.Client(), event.ChannelID, "Anti-scam", "Deleted a message that appeared to be a scam.")
+			}
+			return
+		}
+	}
 
 	// trigger commands (e.g. "x3 say" "x3 quote"), available when blacklisted
 	if isTriggerCommand(event, "quote") {
@@ -106,9 +156,6 @@ func OnMessageCreate(event *events.MessageCreate) {
 
 	if event.GuildID != nil && db.IsChannelInBlacklist(event.ChannelID) {
 		return // blacklisted in this channel
-	}
-	if event.Message.Content == "" && len(event.Message.Attachments) == 0 {
-		return // might be a poll/pin message etc
 	}
 
 	shouldTriggerLlm := false

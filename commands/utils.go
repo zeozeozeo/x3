@@ -84,6 +84,24 @@ func updateInteractionError(event *handler.CommandEvent, msg string) error {
 	return err
 }
 
+func sendPrettyEmbed(client bot.Client, channelID snowflake.ID, title, text string) error {
+	_, err := client.Rest().CreateMessage(
+		channelID,
+		discord.NewMessageCreateBuilder().
+			AddEmbeds(
+				discord.NewEmbedBuilder().
+					SetColor(0xFFD700).
+					SetTitle(title).
+					SetDescription(text).
+					SetFooter("x3", x3Icon).
+					SetTimestamp(time.Now()).
+					Build(),
+			).
+			Build(),
+	)
+	return err
+}
+
 // sendPrettyError sends a formatted error message as a reply to a regular message.
 func sendPrettyError(client bot.Client, msg string, channelID, messageID snowflake.ID) error {
 	_, err := client.Rest().CreateMessage(

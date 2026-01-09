@@ -24,6 +24,7 @@ var AllCommands []discord.ApplicationCommandCreate = []discord.ApplicationComman
 	GenerateCommand,
 	ImpersonateCommand,
 	contextCommand,
+	AntiscamCommand,
 }
 
 func init() {
@@ -87,6 +88,7 @@ func RegisterHandlers(r handler.Router) error {
 
 	mux.Command("/impersonate", HandleImpersonate)
 	mux.Command("/context", handleContext)
+	mux.Command("/antiscam", HandleAntiscam)
 
 	// image commands
 	//imagecmd.RegisterCommands(mux)

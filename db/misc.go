@@ -23,3 +23,20 @@ func GetMessageInteractionPrompt(id snowflake.ID) (string, error) {
 	// Errors (like sql.ErrNoRows) are expected and handled by the caller
 	return prompt, err
 }
+
+// IsAntiscamEnabled checks if a server has the antiscam feature enabled.
+func IsAntiscamEnabled(serverID snowflake.ID) bool {
+	var id string
+	err := DB.QueryRow("SELECT server_id FROM antiscam_servers WHERE server_id = ?", serverID.String()).Scan(&id)
+	return err == nil
+}
+
+// SetAntiscamEnabled toggles the antiscam feature for a server.
+func SetAntiscamEnabled(serverID snowflake.ID, enabled bool) error {
+	if enabled {
+		_, err := DB.Exec("INSERT OR IGNORE INTO antiscam_servers (server_id) VALUES (?)", serverID.String())
+		return err
+	}
+	_, err := DB.Exec("DELETE FROM antiscam_servers WHERE server_id = ?", serverID.String())
+	return err
+}

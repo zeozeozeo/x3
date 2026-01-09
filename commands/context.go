@@ -35,13 +35,6 @@ var contextCommand = discord.SlashCommandCreate{
 	},
 }
 
-//func sendPrettyEmbed(e *title,text string) {
-//	builder := discord.NewEmbedBuilder().
-//		SetColor(0xFFD700).
-//		SetTitle(title).
-//		SetDescription(text)
-//}
-
 func handleContext(e *handler.CommandEvent) error {
 	subcommand := *e.SlashCommandInteractionData().SubCommandName
 	channelID := e.Channel().ID()
