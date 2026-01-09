@@ -12,6 +12,9 @@ import (
 var AntiscamCommand = discord.SlashCommandCreate{
 	Name:        "antiscam",
 	Description: "Toggle the anti-scam feature for this server",
+	Contexts: []discord.InteractionContextType{
+		discord.InteractionContextTypeGuild,
+	},
 	Options: []discord.ApplicationCommandOption{
 		discord.ApplicationCommandOptionBool{
 			Name:        "enabled",
