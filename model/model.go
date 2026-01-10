@@ -60,6 +60,7 @@ const (
 	longcatBaseURL      = "https://api.longcat.chat/openai"
 	navyBaseURL         = "https://api.navy/v1"
 	perplexityBaseURL   = "https://api.perplexity.ai"
+	routewayBaseURL     = "https://api.routeway.ai/v1"
 )
 
 const (
@@ -90,6 +91,7 @@ const (
 	ProviderLongCat      = "longcat"
 	ProviderNavy         = "navy"
 	ProviderPerplexity   = "perplexity"
+	ProviderRouteway     = "routeway"
 )
 
 type ModelProvider struct {
@@ -127,6 +129,7 @@ var (
 	// default errors are set for default order of trial
 	allProviders = []*ScoredProvider{
 		//{Name: ProviderSelfhosted},
+		{Name: ProviderRouteway},
 		{Name: ProviderGroq},
 		{Name: ProviderCerebras},
 		//{Name: ProviderChutes},
@@ -340,6 +343,8 @@ func (m Model) Client(provider string) (baseUrls []string, tokens []string, code
 		tokenEnvKey, apiVar = "X3_NAVY_TOKEN", navyBaseURL
 	case ProviderPerplexity:
 		tokenEnvKey, apiVar = "X3_PERPLEXITY_TOKEN", perplexityBaseURL
+	case ProviderRouteway:
+		tokenEnvKey, apiVar = "X3_ROUTEWAY_TOKEN", routewayBaseURL
 	default:
 		return nil, nil, nil
 	}
