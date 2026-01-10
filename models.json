@@ -1,33 +1,17 @@
 {
   "models": [
     {
-      "name": "GLM 4.6 357B",
+      "name": "GLM 4.5 Air",
       "command": "glm",
       "providers": {
-        "atlas": {
+        "openrouter": {
           "codenames": [
-            "zai-org/GLM-4.6"
+            "z-ai/glm-4.5-air:free"
           ]
         },
-        "crof": {
+        "routeway": {
           "codenames": [
-            "glm-4.6"
-          ]
-        },
-        "electronhub": {
-          "codenames": [
-            "glm-4.6",
-            "glm-4.6:free"
-          ]
-        },
-        "mnn": {
-          "codenames": [
-            "glm-4.6"
-          ]
-        },
-        "zhipu": {
-          "codenames": [
-            "GLM-4.6"
+            "glm-4.5-air:free"
           ]
         }
       }
@@ -56,6 +40,28 @@
         "mnn": {
           "codenames": [
             "deepseek-v3.2-exp"
+          ]
+        }
+      }
+    },
+    {
+      "name": "Kimi K2 0711",
+      "command": "kimi",
+      "providers": {
+        "openrouter": {
+          "codenames": [
+            "moonshotai/kimi-k2:free"
+          ]
+        }
+      }
+    },
+    {
+      "name": "Venice Uncensored",
+      "command": "venice",
+      "providers": {
+        "openrouter": {
+          "codenames": [
+            "cognitivecomputations/dolphin-mistral-24b-venice-edition:free"
           ]
         }
       }
@@ -99,24 +105,6 @@
         "zukijourney": {
           "codenames": [
             "gpt-5"
-          ]
-        }
-      }
-    },
-    {
-      "name": "OpenAI gpt-oss-120b",
-      "command": "oss",
-      "reasoning": true,
-      "encoding": "o200k_base",
-      "providers": {
-        "akash": {
-          "codenames": [
-            "gpt-oss-120b"
-          ]
-        },
-        "openrouter": {
-          "codenames": [
-            "openai/gpt-oss-120b:free"
           ]
         }
       }
@@ -320,6 +308,11 @@
             "deepseek-v3.1"
           ]
         },
+        "llm7": {
+          "codenames": [
+            "deepseek-v3.1"
+          ]
+        },
         "mnn": {
           "codenames": [
             "deepseek-v3.1"
@@ -328,200 +321,6 @@
         "openrouter": {
           "codenames": [
             "deepseek/deepseek-chat-v3.1:free"
-          ]
-        }
-      }
-    },
-    {
-      "name": "DeepSeek V3 671B (0324)",
-      "command": "deepseekv3",
-      "providers": {
-        "atlas": {
-          "codenames": [
-            "deepseek-ai/DeepSeek-V3-0324"
-          ]
-        },
-        "chutes": {
-          "codenames": [
-            "deepseek-ai/DeepSeek-V3-0324"
-          ]
-        },
-        "crof": {
-          "codenames": [
-            "deepseek-v3-0324"
-          ]
-        },
-        "electronhub": {
-          "codenames": [
-            "deepseek-v3-0324",
-            "deepseek-v3-0324:free"
-          ]
-        },
-        "github": {
-          "codenames": [
-            "deepseek/DeepSeek-V3-0324"
-          ]
-        },
-        "hcap": {
-          "codenames": [
-            "deepseek-v3"
-          ]
-        },
-        "llm7": {
-          "codenames": [
-            "deepseek-v3-0324"
-          ]
-        },
-        "mnn": {
-          "codenames": [
-            "deepseek-v3-0324",
-            "deepseek-v3"
-          ]
-        },
-        "openrouter": {
-          "codenames": [
-            "deepseek/deepseek-chat-v3-0324:free"
-          ]
-        },
-        "targon": {
-          "codenames": [
-            "deepseek-ai/DeepSeek-V3-0324"
-          ]
-        },
-        "zukijourney": {
-          "codenames": [
-            "deepseek-chat"
-          ]
-        }
-      }
-    },
-    {
-      "name": "DeepSeek R1 671B (0528)",
-      "command": "r1",
-      "reasoning": true,
-      "providers": {
-        "chutes": {
-          "codenames": [
-            "deepseek-ai/DeepSeek-R1-0528"
-          ]
-        },
-        "crof": {
-          "codenames": [
-            "deepseek-r1-0528"
-          ]
-        },
-        "electronhub": {
-          "codenames": [
-            "deepseek-r1-0528",
-            "deepseek-r1-0528:free"
-          ]
-        },
-        "github": {
-          "codenames": [
-            "deepseek/DeepSeek-R10-0528"
-          ]
-        },
-        "hcap": {
-          "codenames": [
-            "deepseek-r1"
-          ]
-        },
-        "llm7": {
-          "codenames": [
-            "deepseek-ai/DeepSeek-R1-0528"
-          ]
-        },
-        "mnn": {
-          "codenames": [
-            "deepseek-r1-0528"
-          ]
-        },
-        "openrouter": {
-          "codenames": [
-            "deepseek/deepseek-r1-0528:free"
-          ]
-        },
-        "pollinations": {
-          "codenames": [
-            "deepseek-r1-0528"
-          ]
-        },
-        "targon": {
-          "codenames": [
-            "deepseek-ai/DeepSeek-R1-0528"
-          ]
-        }
-      }
-    },
-    {
-      "name": "Cohere Command A 111B",
-      "command": "commanda",
-      "providers": {
-        "cohere": {
-          "codenames": [
-            "command-a-03-2025"
-          ]
-        },
-        "zukijourney": {
-          "codenames": [
-            "command-a"
-          ]
-        }
-      }
-    },
-    {
-      "name": "OpenAI o3",
-      "command": "o3",
-      "reasoning": true,
-      "providers": {
-        "hcap": {
-          "codenames": [
-            "o3"
-          ]
-        },
-        "mnn": {
-          "codenames": [
-            "o3"
-          ]
-        },
-        "pollinations": {
-          "codenames": [
-            "o3"
-          ]
-        }
-      },
-      "limited": true
-    },
-    {
-      "name": "Moonshot AI Kimi K2 1000B (0905)",
-      "command": "kimi",
-      "providers": {
-        "crof": {
-          "codenames": [
-            "kimi-k2-eco",
-            "kimi-k2-0905",
-            "kimi-k2-0905-turbo"
-          ]
-        },
-        "electronhub": {
-          "codenames": [
-            "kimi-k2-instruct-0905",
-            "kimi-k2-instruct-0905:free"
-          ]
-        },
-        "groq": {
-          "codenames": [
-            "moonshotai/kimi-k2-instruct-0905"
-          ]
-        },
-        "mnn": {
-          "codenames": [
-            "kimi-k2-0905-preview"
-          ]
-        },
-        "openrouter": {
-          "codenames": [
-            "moonshotai/kimi-k2:free"
           ]
         }
       }
@@ -543,114 +342,6 @@
         "openrouter": {
           "codenames": [
             "meituan/longcat-flash-chat:free"
-          ]
-        }
-      }
-    },
-    {
-      "name": "Llama 3.3 Nevoria 70B",
-      "command": "nevoria",
-      "providers": {
-        "llm7": {
-          "codenames": [
-            "l3.3-ms-nevoria-70b"
-          ]
-        }
-      }
-    },
-    {
-      "name": "Llama 3 Euryale 70B v2.1",
-      "command": "euryale",
-      "providers": {
-        "llm7": {
-          "codenames": [
-            "l3-70b-euryale-v2.1"
-          ]
-        }
-      }
-    },
-    {
-      "name": "Venice Uncensored",
-      "command": "venice",
-      "providers": {
-        "openrouter": {
-          "codenames": [
-            "cognitivecomputations/dolphin-mistral-24b-venice-edition:free"
-          ]
-        }
-      }
-    },
-    {
-      "name": "Google Gemma 3 27B",
-      "command": "gemma",
-      "vision": true,
-      "providers": {
-        "crof": {
-          "codenames": [
-            "gemma-3-27b-it"
-          ]
-        },
-        "google": {
-          "codenames": [
-            "gemma-3-27b-it"
-          ]
-        }
-      }
-    },
-    {
-      "name": "Qwen3 235B A22B",
-      "command": "qwen3",
-      "providers": {
-        "akash": {
-          "codenames": [
-            "Qwen3-235B-A22B-Instruct-2507-FP8"
-          ]
-        },
-        "crof": {
-          "codenames": [
-            "qwen3-235b-a22b-2507-instruct"
-          ]
-        },
-        "openrouter": {
-          "codenames": [
-            "qwen/qwen3-235b-a22b:free"
-          ]
-        }
-      }
-    },
-    {
-      "name": "Gemini 2.5 Pro",
-      "command": "gemini",
-      "vision": true,
-      "reasoning": true,
-      "encoding": "o200k_base",
-      "providers": {
-        "electronhub": {
-          "codenames": [
-            "gemini-2.5-pro:free"
-          ]
-        },
-        "google": {
-          "codenames": [
-            "gemini-2.5-pro"
-          ]
-        }
-      }
-    },
-    {
-      "name": "Gemini 2.5 Flash",
-      "command": "flash",
-      "vision": true,
-      "encoding": "o200k_base",
-      "providers": {
-        "electronhub": {
-          "codenames": [
-            "gemini-2.5-flash:free"
-          ]
-        },
-        "google": {
-          "codenames": [
-            "gemini-2.5-flash"
           ]
         }
       }
@@ -678,12 +369,10 @@
     }
   ],
   "default_models": [
-    "GLM 4.6 357B",
+    "GLM 4.5 Air",
     "DeepSeek V3.2 Exp",
-    "DeepSeek V3 671B (0324)",
-    "Meituan LongCat Flash Chat 560B",
-    "Moonshot AI Kimi K2 1000B (0905)",
-    "Gemini 2.5 Flash",
+    "Venice Uncensored",
+    "Kimi K2 0711",
     "Meta Llama 3.3 70B",
     "Meta Llama 4 Maverick 400B/17A",
     "Meta Llama 4 Scout 109B/17A"
@@ -694,25 +383,24 @@
     "Meta Llama 4 Maverick 400B/17A"
   ],
   "default_vision_models": [
-    "Gemini 2.5 Flash",
     "Meta Llama 4 Maverick 400B/17A",
     "Meta Llama 4 Scout 109B/17A"
   ],
   "providers_order": [
+    "openrouter",
+    "routeway",
     "groq",
     "cerebras",
     "zhipu",
     "together",
     "nineteen",
     "google",
-    "akash",
+    "llm7",
     "cloudflare",
     "mnn",
     "crof",
     "longcat",
-    "openrouter",
     "hcap",
-    "llm7",
     "helixmind",
     "zukijourney",
     "cohere",
@@ -721,8 +409,9 @@
     "pollinations",
     "huggingface",
     "navy",
+    "akash",
     "perplexity",
     "atlas"
   ],
-  "current_version": 12
+  "current_version": 14
 }
