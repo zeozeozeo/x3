@@ -45,12 +45,36 @@
       }
     },
     {
+      "name": "DeepSeek R1T-Chimera",
+      "command": "chimera",
+      "reasoning": true,
+      "providers": {
+        "openrouter": {
+          "codenames": [
+            "tngtech/tng-r1t-chimera:free"
+          ]
+        }
+      }
+    },
+    {
       "name": "Kimi K2 0711",
       "command": "kimi",
       "providers": {
         "openrouter": {
           "codenames": [
             "moonshotai/kimi-k2:free"
+          ]
+        }
+      }
+    },
+    {
+      "name": "GLM 4.7 Flash",
+      "command": "glmflash",
+      "reasoning": true,
+      "providers": {
+        "zhipu": {
+          "codenames": [
+            "glm-4.7-flash"
           ]
         }
       }
@@ -370,6 +394,7 @@
   ],
   "default_models": [
     "GLM 4.5 Air",
+    "GLM 4.7 Flash",
     "DeepSeek V3.2 Exp",
     "Venice Uncensored",
     "Kimi K2 0711",
