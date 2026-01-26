@@ -24,6 +24,17 @@ const (
 	RoleSystem    = openai.ChatMessageRoleSystem
 )
 
+// generateImageDescriptionCallback is a callback function for generating image descriptions
+var generateImageDescriptionCallback func(imageURL string, ctx context.Context) (string, error) = func(imageURL string, ctx context.Context) (string, error) {
+	slog.Warn("image description callback not initialized, skipping image description")
+	return "", nil
+}
+
+// SetImageDescriptionCallback sets the callback for generating image descriptions
+func SetImageDescriptionCallback(callback func(imageURL string, ctx context.Context) (string, error)) {
+	generateImageDescriptionCallback = callback
+}
+
 const (
 	markovChainOrder = 2
 	markovMaxLength  = 100
@@ -32,6 +43,10 @@ const (
 var (
 	errNoModelsForCompletion = errors.New("no models provided for completion")
 )
+
+func ErrNoModelsForCompletion() error {
+	return errNoModelsForCompletion
+}
 
 type Message struct {
 	Role    string       `json:"role"`
@@ -195,7 +210,7 @@ func (l *Llmer) AddImage(imageURL string) {
 	msg.Images = append(msg.Images, imageURL)
 }
 
-func (l Llmer) convertMessages(hasVision bool, prepend string) []openai.ChatCompletionMessage {
+func (l Llmer) convertMessages(hasVision bool, prepend string, ctx context.Context) []openai.ChatCompletionMessage {
 	// find the index of the last message with images
 	imageIdx := -1
 	for i := len(l.Messages) - 1; i >= 0; i-- {
@@ -216,10 +231,35 @@ func (l Llmer) convertMessages(hasVision bool, prepend string) []openai.ChatComp
 			continue // skip empty messages. HACK: they seem to appear after lobotomy, this is a hack
 		}
 		if len(msg.Images) == 0 || !hasVision || i != imageIdx {
+			content := msg.Content
+
+			// If this message has images but we don't have vision, generate/use descriptions
+			if len(msg.Images) > 0 && !hasVision {
+				for _, imageURL := range msg.Images {
+					description, err := generateImageDescriptionCallback(imageURL, ctx)
+					if err != nil {
+						slog.Warn("failed to generate image description", "err", err, "url", imageURL)
+						continue
+					}
+					if description != "" {
+						// Extract filename from URL
+						filename := "image.png"
+						if idx := strings.LastIndex(imageURL, "/"); idx != -1 {
+							filename = imageURL[idx+1:]
+							// Remove query parameters if any
+							if qIdx := strings.Index(filename, "?"); qIdx != -1 {
+								filename = filename[:qIdx]
+							}
+						}
+						content += fmt.Sprintf("\n[attached %s: %s]", filename, description)
+					}
+				}
+			}
+
 			role := msg.Role
 			messages = append(messages, openai.ChatCompletionMessage{
 				Role:    role,
-				Content: msg.Content,
+				Content: content,
 			})
 		} else {
 			slog.Debug("adding image")
@@ -312,7 +352,7 @@ func (l *Llmer) requestCompletionInternal2(
 	}
 	req := openai.ChatCompletionRequest{
 		Model:    codename,
-		Messages: l.convertMessages(m.Vision, prepend),
+		Messages: l.convertMessages(m.Vision, prepend, ctx),
 		Stream:   true,
 		StreamOptions: &openai.StreamOptions{
 			IncludeUsage: true,

@@ -60,7 +60,7 @@ func formatMsg(msg, username string, reference *discord.Message) string {
 	return msg
 }
 
-// addImageAttachments adds image URLs from attachments.
+// addImageAttachments adds image URLs from attachments
 func addImageAttachments(llmer *llm.Llmer, attachments []discord.Attachment) {
 	if attachments == nil {
 		return

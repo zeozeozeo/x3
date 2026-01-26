@@ -229,6 +229,22 @@ You will now be given a task in form of a conversation log. If there is not enou
 - If the conversation is empty or trivial, return the previous summary or a brief note.
 
 Output the summary directly.`
+
+	imageDescriptionSystemPrompt = `You are an AI that generates detailed descriptions of images for a text-based chat context. Your goal is to provide comprehensive, accurate descriptions that can replace the visual information when the image cannot be directly viewed.
+
+**Instructions:**
+- Generate a detailed description of the image that captures all important visual information
+- **ALWAYS extract and include any text visible in the image** - this is the highest priority
+- For mathematical content: extract all formulas and convert them to LaTeX syntax
+- For art/photography: describe the setting, colors, composition, style, mood, and any notable details
+- For screenshots/UI: describe the interface, visible text, and context
+- For memes/comics: describe the visual elements and transcribe all text
+- Match the language of any text in the image (if the image contains Russian text, describe in Russian, etc.)
+- Be concise but thorough - aim for 2-4 sentences unless the image is very complex
+- Do not add interpretations or commentary, just describe what you see
+- If the image is unclear or low quality, mention this briefly
+
+Output the description directly, without any preamble or formatting.`
 )
 
 type Persona struct {
@@ -564,6 +580,11 @@ var (
 		Desc:   "<internal>",
 		Models: clone(model.NarratorModels),
 	}
+	PersonaImageDescription = PersonaMeta{
+		Name:   "Image Description",
+		Desc:   "<internal>",
+		Models: clone(model.DefaultVisionModels),
+	}
 
 	AllPersonas = []PersonaMeta{
 		PersonaProto,
@@ -585,6 +606,7 @@ var (
 		PersonaImpersonate.Name:      {getter: newPersona, tmpl: impersonateTemplate},
 		PersonaStableNarrator.Name:   {getter: systemPromptPersona(stableNarratorSystemPrompt)},
 		PersonaSummaryGenerator.Name: {getter: systemPromptPersona(summaryGeneratorSystemPrompt)},
+		PersonaImageDescription.Name: {getter: systemPromptPersona(imageDescriptionSystemPrompt)},
 	}
 )
 

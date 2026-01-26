@@ -22,6 +22,7 @@ import (
 
 	"github.com/zeozeozeo/x3/commands"
 	"github.com/zeozeozeo/x3/db"
+	"github.com/zeozeozeo/x3/imagedesc"
 	"github.com/zeozeozeo/x3/modeled"
 )
 
@@ -64,6 +65,8 @@ func main() {
 			}
 		}
 	}()
+
+	imagedesc.DB = db.DB
 
 	commands.StartTime = startTime
 
