@@ -555,6 +555,7 @@ func (l *Llmer) inferEliza() string {
 	return "IDK"
 }
 
+/*
 // shouldSwapToVision returns true if any of the last 4 messages had images sent by user
 func (l Llmer) shouldSwapToVision() bool {
 	numMessages := len(l.Messages)
@@ -569,6 +570,7 @@ func (l Llmer) shouldSwapToVision() bool {
 
 	return false
 }
+*/
 
 func (l *Llmer) RequestCompletion(models []model.Model, settings persona.InferenceSettings, prepend string, ctx context.Context) (res string, usage Usage, err error) {
 	if len(models) == 0 {
@@ -593,21 +595,22 @@ func (l *Llmer) RequestCompletion(models []model.Model, settings persona.Inferen
 
 	modelsToTry := models
 
-	// if the last message has an image, filter models to only include vision models
-	if l.shouldSwapToVision() {
-		visionModels := []model.Model{}
-		for _, mod := range models {
-			if mod.Vision {
-				visionModels = append(visionModels, mod)
+	/*
+		if l.shouldSwapToVision() {
+			visionModels := []model.Model{}
+			for _, mod := range models {
+				if mod.Vision {
+					visionModels = append(visionModels, mod)
+				}
+			}
+			if len(visionModels) > 0 {
+				modelsToTry = visionModels
+			} else {
+				slog.Info("last message has image, but no vision models provided in the list; swapping to DefaultVisionModels")
+				modelsToTry = model.GetModelsByNames(model.DefaultVisionModels)
 			}
 		}
-		if len(visionModels) > 0 {
-			modelsToTry = visionModels
-		} else {
-			slog.Info("last message has image, but no vision models provided in the list; swapping to DefaultVisionModels")
-			modelsToTry = model.GetModelsByNames(model.DefaultVisionModels)
-		}
-	}
+	*/
 
 	var lastErr error
 
