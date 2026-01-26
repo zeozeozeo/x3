@@ -45,13 +45,13 @@
       }
     },
     {
-      "name": "DeepSeek R1T-Chimera",
+      "name": "DeepSeek R1T2-Chimera",
       "command": "chimera",
       "reasoning": true,
       "providers": {
         "openrouter": {
           "codenames": [
-            "tngtech/tng-r1t-chimera:free"
+            "tngtech/deepseek-r1t2-chimera:free"
           ]
         }
       }
