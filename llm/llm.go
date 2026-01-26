@@ -416,6 +416,9 @@ func (l *Llmer) requestCompletionInternal2(
 	unescaped := html.UnescapeString(text.String())
 	unescaped = strings.TrimSpace(unescaped)
 
+	// cool
+	unescaped = strings.ReplaceAll(unescaped, "<new_message]", "<new_message>")
+
 	// and trim spaces again after our checks, for good measure
 	unescaped = strings.TrimSpace(unescaped)
 	slog.Info("response", "len", len(unescaped), "duration", time.Since(completionStart), "model", m.Name, "provider", provider)
