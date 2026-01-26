@@ -61,6 +61,7 @@ const (
 	navyBaseURL         = "https://api.navy/v1"
 	perplexityBaseURL   = "https://api.perplexity.ai"
 	routewayBaseURL     = "https://api.routeway.ai/v1"
+	minimaxBaseURL      = "https://api.minimax.io/v1"
 )
 
 const (
@@ -92,6 +93,7 @@ const (
 	ProviderNavy         = "navy"
 	ProviderPerplexity   = "perplexity"
 	ProviderRouteway     = "routeway"
+	ProviderMinimax      = "minimax"
 )
 
 type ModelProvider struct {
@@ -154,6 +156,7 @@ var (
 		{Name: ProviderHuggingface},
 		{Name: ProviderNavy},
 		{Name: ProviderPerplexity},
+		{Name: ProviderMinimax},
 		//{Name: ProviderG4F},
 	}
 
@@ -345,6 +348,8 @@ func (m Model) Client(provider string) (baseUrls []string, tokens []string, code
 		tokenEnvKey, apiVar = "X3_PERPLEXITY_TOKEN", perplexityBaseURL
 	case ProviderRouteway:
 		tokenEnvKey, apiVar = "X3_ROUTEWAY_TOKEN", routewayBaseURL
+	case ProviderMinimax:
+		tokenEnvKey, apiVar = "X3_MINIMAX_TOKEN", minimaxBaseURL
 	default:
 		return nil, nil, nil
 	}
