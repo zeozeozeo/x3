@@ -122,6 +122,11 @@ var PersonaCommand = discord.SlashCommandCreate{
 			Required:    false,
 		},
 		discord.ApplicationCommandOptionBool{
+			Name:        "thinking",
+			Description: "Attach thinking traces",
+			Required:    false,
+		},
+		discord.ApplicationCommandOptionBool{
 			Name:        "ephemeral",
 			Description: "If the response should only be visible to you",
 			Required:    false,
@@ -210,9 +215,10 @@ func HandlePersona(event *handler.CommandEvent) error {
 	dataFreqPenalty, hasFreqPenalty := data.OptFloat("frequency_penalty")
 	dataSeed, hasDataSeed := data.OptInt("seed")
 	dataEnableImages, hasEnableImages := data.OptBool("images")
+	thinking, hasThinking := data.OptBool("thinking")
 	ephemeral := data.Bool("ephemeral")
 
-	if dataPersona == "" && dataModel == "" && dataSystem == "" && dataCard == "" && !hasContext && !hasTemperature && !hasTopP && !hasFreqPenalty && !hasDataSeed && !hasEnableImages {
+	if dataPersona == "" && dataModel == "" && dataSystem == "" && dataCard == "" && !hasContext && !hasTemperature && !hasTopP && !hasFreqPenalty && !hasDataSeed && !hasEnableImages && !hasThinking {
 		return handlePersonaInfo(event, ephemeral)
 	}
 
@@ -319,6 +325,10 @@ func HandlePersona(event *handler.CommandEvent) error {
 		cache.PersonaMeta.EnableImages = dataEnableImages
 	}
 
+	if hasThinking {
+		cache.PersonaMeta.ThinkingTraces = thinking
+	}
+
 	if err := cache.Write(event.Channel().ID()); err != nil {
 		if dataCard != "" {
 			return updateInteractionError(event, err.Error())
@@ -372,6 +382,15 @@ func HandlePersona(event *handler.CommandEvent) error {
 			s = "enabled images"
 		} else {
 			s = "disabled images"
+		}
+		didWhat = append(didWhat, s)
+	}
+	if cache.PersonaMeta.ThinkingTraces != prevMeta.ThinkingTraces {
+		var s string
+		if cache.PersonaMeta.ThinkingTraces {
+			s = "enabled reasoning.txt"
+		} else {
+			s = "disabled reasoning.txt"
 		}
 		didWhat = append(didWhat, s)
 	}

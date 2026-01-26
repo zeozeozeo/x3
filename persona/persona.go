@@ -503,6 +503,7 @@ type PersonaMeta struct {
 	Prepend        string            `json:"prepend,omitempty"`         // prefill assistant response
 	EnableImages   bool              `json:"enable_images"`             // disable random image narrations
 	ExcessiveSplit bool              `json:"excessive_split,omitempty"` // model produces too much <new_message> tags, punish it
+	ThinkingTraces bool              `json:"thinking_traces,omitempty"` // Whether reasoning.txt should be attached
 	Version        int               `json:"version,omitempty"`
 }
 

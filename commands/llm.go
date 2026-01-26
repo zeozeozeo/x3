@@ -163,7 +163,7 @@ func HandleLlm(event *handler.CommandEvent, models []model.Model) error {
 	}
 
 	var files []*discord.File
-	if thinking != "" {
+	if thinking != "" && cache.PersonaMeta.ThinkingTraces {
 		files = append(files, &discord.File{
 			Name:   "reasoning.txt",
 			Reader: strings.NewReader(thinking),
