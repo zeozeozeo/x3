@@ -4,6 +4,7 @@ import (
 	"container/list"
 	"encoding/base64"
 	"io"
+	"log/slog"
 	"net/http"
 	"sync"
 	"time"
@@ -68,11 +69,13 @@ func (ic *imageCache) MemoizedImageBase64(uri string) string {
 			ic.removeElement(ent)
 		} else {
 			ic.evictList.MoveToFront(ent)
+			slog.Debug("MemoizedImageBase64 cache hit!")
 			return entry.base64
 		}
 	}
 
 	ic.mu.Unlock()
+	slog.Info("MemoizedImageBase64 CACHE MISS: fetching image")
 	data := fetchImage(uri)
 	ic.mu.Lock()
 
