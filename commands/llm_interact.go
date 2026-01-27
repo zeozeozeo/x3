@@ -301,8 +301,10 @@ func handleLlmInteraction2(
 
 	cache.MessagesSinceSummary++
 	if cache.MessagesSinceSummary >= 30 {
-		// trigger summary generation
-		GetNarrator().QueueSummaryGeneration(channelID, *llmer)
+		if !models[0].IsVeryDumb() {
+			// trigger summary generation
+			GetNarrator().QueueSummaryGeneration(channelID, *llmer)
+		}
 		cache.MessagesSinceSummary = 0
 	}
 
@@ -317,7 +319,7 @@ func handleLlmInteraction2(
 	db.SetInteractionTime(userID, time.Now())
 
 	// maybe queue narration + generation
-	if !isImpersonate && !models[0].IsMarkov {
+	if !isImpersonate && !models[0].IsVeryDumb() {
 		if !db.IsChannelInImageBlacklist(channelID) &&
 			(strings.Contains(response, generateImageTag) ||
 				(cache.PersonaMeta.EnableImages && horder.GetHorder().IsFree())) {

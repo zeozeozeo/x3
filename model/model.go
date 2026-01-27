@@ -116,6 +116,10 @@ type Model struct {
 	Limited     bool                     `json:"limited,omitempty"` // disable custom inference settings
 }
 
+func (model Model) IsVeryDumb() bool {
+	return model.IsAlice || model.IsEliza || model.IsMarkov
+}
+
 type ScoredProvider struct {
 	Name            string
 	PreferReasoning bool
