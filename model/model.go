@@ -62,6 +62,7 @@ const (
 	perplexityBaseURL   = "https://api.perplexity.ai"
 	routewayBaseURL     = "https://api.routeway.ai/v1"
 	minimaxBaseURL      = "https://api.minimax.io/v1"
+	ollamaBaseURL       = "https://ollama.com/v1"
 )
 
 const (
@@ -94,6 +95,7 @@ const (
 	ProviderPerplexity   = "perplexity"
 	ProviderRouteway     = "routeway"
 	ProviderMinimax      = "minimax"
+	ProviderOllama       = "ollama"
 )
 
 type ModelProvider struct {
@@ -143,6 +145,7 @@ var (
 		{Name: ProviderAkash},
 		//{Name: ProviderTargon},
 		{Name: ProviderCloudflare},
+		{Name: ProviderOllama},
 		{Name: ProviderMNN},
 		{Name: ProviderCrof},
 		{Name: ProviderElectron},
@@ -350,6 +353,8 @@ func (m Model) Client(provider string) (baseUrls []string, tokens []string, code
 		tokenEnvKey, apiVar = "X3_ROUTEWAY_TOKEN", routewayBaseURL
 	case ProviderMinimax:
 		tokenEnvKey, apiVar = "X3_MINIMAX_TOKEN", minimaxBaseURL
+	case ProviderOllama:
+		tokenEnvKey, apiVar = "X3_OLLAMA_TOKEN", ollamaBaseURL
 	default:
 		return nil, nil, nil
 	}
