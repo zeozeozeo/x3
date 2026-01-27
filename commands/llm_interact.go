@@ -107,7 +107,7 @@ func handleLlmInteraction2(
 		return "", 0, nil // Card message was sent, no further LLM interaction needed now.
 	}
 
-	llmer := llm.NewLlmer(event.Channel().ID())
+	llmer := llm.NewLlmer(channelID)
 	models := cache.PersonaMeta.GetModels()
 
 	// fetch surrounding messages for context
