@@ -57,17 +57,6 @@
       }
     },
     {
-      "name": "Kimi K2 0711",
-      "command": "kimi",
-      "providers": {
-        "openrouter": {
-          "codenames": [
-            "moonshotai/kimi-k2:free"
-          ]
-        }
-      }
-    },
-    {
       "name": "GLM 4.7 Flash",
       "command": "glmflash",
       "reasoning": true,
@@ -75,6 +64,47 @@
         "zhipu": {
           "codenames": [
             "glm-4.7-flash"
+          ]
+        }
+      }
+    },
+    {
+      "name": "MiniMax M2.1",
+      "command": "minimax",
+      "reasoning": true,
+      "providers": {
+        "minimax": {
+          "codenames": [
+            "MiniMax-M2.1"
+          ]
+        },
+        "ollama": {
+          "codenames": [
+            "minimax-m2.1"
+          ]
+        }
+      }
+    },
+    {
+      "name": "GLM 4.7",
+      "command": "glm",
+      "reasoning": true,
+      "providers": {
+        "ollama": {
+          "codenames": [
+            "glm-4.7"
+          ]
+        }
+      }
+    },
+    {
+      "name": "MoonshotAI Kimi K2.5",
+      "command": "kimi",
+      "reasoning": true,
+      "providers": {
+        "ollama": {
+          "codenames": [
+            "kimi-k2.5"
           ]
         }
       }
@@ -371,7 +401,7 @@
       }
     },
     {
-      "name": "Sonar (🌐 Web Search)",
+      "name": "Perplexity Sonar (🌐 Web Search)",
       "command": "sonar",
       "providers": {
         "perplexity": {
@@ -395,9 +425,9 @@
   "default_models": [
     "GLM 4.5 Air",
     "GLM 4.7 Flash",
+    "MiniMax M2.1",
     "DeepSeek V3.2 Exp",
     "Venice Uncensored",
-    "Kimi K2 0711",
     "Meta Llama 3.3 70B",
     "Meta Llama 4 Maverick 400B/17A",
     "Meta Llama 4 Scout 109B/17A"
@@ -413,6 +443,8 @@
   ],
   "providers_order": [
     "openrouter",
+    "minimax",
+    "ollama",
     "routeway",
     "groq",
     "cerebras",
@@ -438,5 +470,5 @@
     "perplexity",
     "atlas"
   ],
-  "current_version": 14
+  "current_version": 15
 }
