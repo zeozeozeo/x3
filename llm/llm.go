@@ -24,6 +24,8 @@ const (
 	RoleSystem    = openai.ChatMessageRoleSystem
 )
 
+var gImageCache *imageCache = NewImageCache(100*1024*1024, 24*time.Hour)
+
 // generateImageDescriptionCallback is a callback function for generating image descriptions
 var generateImageDescriptionCallback func(imageURL string, ctx context.Context) (string, error) = func(imageURL string, ctx context.Context) (string, error) {
 	slog.Warn("image description callback not initialized, skipping image description")
@@ -51,7 +53,7 @@ func ErrNoModelsForCompletion() error {
 type Message struct {
 	Role    string       `json:"role"`
 	Content string       `json:"content"`
-	Images  []string     `json:"images"` // image URIs
+	Images  []string     `json:"images"` // image URIs or base64
 	ID      snowflake.ID `json:"-"`
 }
 
@@ -210,7 +212,7 @@ func (l *Llmer) AddImage(imageURL string) {
 	msg.Images = append(msg.Images, imageURL)
 }
 
-func (l Llmer) convertMessages(hasVision bool, prepend string, ctx context.Context) []openai.ChatCompletionMessage {
+func (l Llmer) convertMessages(hasVision bool, supportsImageURL bool, prepend string, ctx context.Context) []openai.ChatCompletionMessage {
 	// find the index of the last message with images
 	imageIdx := -1
 	for i := len(l.Messages) - 1; i >= 0; i-- {
@@ -282,12 +284,28 @@ func (l Llmer) convertMessages(hasVision bool, prepend string, ctx context.Conte
 			*/
 			// NB: most apis seem to only support one image sadly
 			// we choose the first attachment
-			parts = append(parts, openai.ChatMessagePart{
-				Type: openai.ChatMessagePartTypeImageURL,
-				ImageURL: &openai.ChatMessageImageURL{
-					URL: msg.Images[0],
-				},
-			})
+			if supportsImageURL {
+				parts = append(parts, openai.ChatMessagePart{
+					Type: openai.ChatMessagePartTypeImageURL,
+					ImageURL: &openai.ChatMessageImageURL{
+						URL: msg.Images[0],
+					},
+				})
+			} else { // api needs base64, will fetch image and store in memory cache
+				slog.Info("fetching image (memoized)....")
+				data := gImageCache.MemoizedImageBase64(msg.Images[0])
+				if data == "" {
+					slog.Error("failed to fetch image!")
+					parts[0].Text += fmt.Sprintf("\n<failed to fetch image `%s`>", msg.Images[0]) // notify llm
+				} else {
+					parts = append(parts, openai.ChatMessagePart{
+						Type: openai.ChatMessagePartTypeImageURL,
+						ImageURL: &openai.ChatMessageImageURL{
+							URL: data,
+						},
+					})
+				}
+			}
 
 			messages = append(messages, openai.ChatCompletionMessage{
 				Role:         msg.Role,
@@ -352,7 +370,7 @@ func (l *Llmer) requestCompletionInternal2(
 	}
 	req := openai.ChatCompletionRequest{
 		Model:    codename,
-		Messages: l.convertMessages(m.Vision, prepend, ctx),
+		Messages: l.convertMessages(m.Vision, provider != model.ProviderOllama, prepend, ctx), // ollama cloud doesn't support fetching from image URLs, how nice :)
 		Stream:   true,
 		StreamOptions: &openai.StreamOptions{
 			IncludeUsage: true,

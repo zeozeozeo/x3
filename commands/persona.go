@@ -296,17 +296,33 @@ func HandlePersona(event *handler.CommandEvent) error {
 			dataCard = "https://" + dataCard
 		}
 		slog.Debug("fetching character card", slog.String("url", dataCard))
+
 		resp, err := http.Get(dataCard)
 		if err != nil {
 			slog.Error("failed to fetch character card", "err", err)
 			return updateInteractionError(event, err.Error())
 		}
 		defer resp.Body.Close()
-		body, err := io.ReadAll(resp.Body)
+
+		const maxLimit = 10 * 1024 * 1024 // 10MB
+
+		if resp.ContentLength > maxLimit {
+			slog.Error("character card too large", "size", resp.ContentLength)
+			return updateInteractionError(event, "character card exceeds 10MB limit")
+		}
+
+		lr := io.LimitReader(resp.Body, maxLimit+1)
+		body, err := io.ReadAll(lr)
 		if err != nil {
 			slog.Error("failed to read character card resp body", "err", err)
 			return updateInteractionError(event, err.Error())
 		}
+
+		if len(body) > maxLimit {
+			slog.Error("character card download exceeded limit", "url", dataCard)
+			return updateInteractionError(event, "character card is too large (max 10MB)")
+		}
+
 		card, err := cache.PersonaMeta.ApplyChara(body, event.User().EffectiveName())
 		if err != nil {
 			slog.Error("failed to apply character card", "err", err)
