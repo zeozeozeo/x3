@@ -3,16 +3,21 @@ package llm
 import (
 	"container/list"
 	"encoding/base64"
+	"fmt"
 	"io"
 	"log/slog"
+	"mime"
 	"net/http"
+	"net/url"
+	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 )
 
 type cacheEntry struct {
 	uri       string
-	base64    string
+	dataURI   string
 	size      uint64
 	expiresAt time.Time
 }
@@ -33,6 +38,70 @@ func NewImageCache(maxSize uint64, ttl time.Duration) *imageCache {
 		maxSize:   maxSize,
 		ttl:       ttl,
 	}
+}
+
+// extractExtensionFromURL extracts the file extension from a URL,
+// handling query parameters and fragments properly.
+func extractExtensionFromURL(rawURL string) (string, error) {
+	parsedURL, err := url.Parse(rawURL)
+	if err != nil {
+		return "", fmt.Errorf("failed to parse URL '%s': %w", rawURL, err)
+	}
+
+	urlPath := parsedURL.Path
+	if urlPath == "" || urlPath == "/" {
+		return "", fmt.Errorf("URL '%s' has no path component", rawURL)
+	}
+
+	ext := filepath.Ext(urlPath)
+	if ext == "" {
+		return "", fmt.Errorf("no file extension found in URL '%s'", rawURL)
+	}
+
+	return strings.ToLower(ext), nil
+}
+
+// getMimeTypeFromExtension converts a file extension to a MIME type
+func getMimeTypeFromExtension(ext string) string {
+	if !strings.HasPrefix(ext, ".") {
+		ext = "." + ext
+	}
+
+	mimeType := mime.TypeByExtension(ext)
+	if mimeType == "" {
+		switch ext {
+		case ".webp":
+			return "image/webp"
+		case ".avif":
+			return "image/avif"
+		case ".svg":
+			return "image/svg+xml"
+		default:
+			return "application/octet-stream"
+		}
+	}
+
+	if strings.HasPrefix(mimeType, "image/") {
+		if idx := strings.Index(mimeType, ";"); idx > 0 {
+			mimeType = mimeType[:idx]
+		}
+	}
+
+	return mimeType
+}
+
+// buildDataURI creates a proper data URI from binary data and URL.
+func buildDataURI(data []byte, sourceURL string) (string, error) {
+	ext, err := extractExtensionFromURL(sourceURL)
+	if err != nil {
+		slog.Warn("Failed to extract extension, using default", "url", sourceURL, "error", err)
+		ext = ".bin"
+	}
+
+	mimeType := getMimeTypeFromExtension(ext)
+	encoded := base64.StdEncoding.EncodeToString(data)
+
+	return fmt.Sprintf("data:%s;base64,%s", mimeType, encoded), nil
 }
 
 // fetchImage retrieves an image from a URL, restricted to a 10MB limit.
@@ -70,7 +139,7 @@ func (ic *imageCache) MemoizedImageBase64(uri string) string {
 		} else {
 			ic.evictList.MoveToFront(ent)
 			slog.Debug("MemoizedImageBase64 cache hit!")
-			return entry.base64
+			return entry.dataURI
 		}
 	}
 
@@ -82,8 +151,14 @@ func (ic *imageCache) MemoizedImageBase64(uri string) string {
 	if data == nil {
 		return ""
 	}
-	encoded := base64.StdEncoding.EncodeToString(data)
-	newSize := uint64(len(encoded))
+
+	dataURI, err := buildDataURI(data, uri)
+	if err != nil {
+		slog.Error("Failed to build data URI", "uri", uri, "error", err)
+		return ""
+	}
+
+	newSize := uint64(len(dataURI))
 
 	for ic.currentSize+newSize > ic.maxSize && ic.evictList.Len() > 0 {
 		ic.removeOldest()
@@ -91,7 +166,7 @@ func (ic *imageCache) MemoizedImageBase64(uri string) string {
 
 	entry := &cacheEntry{
 		uri:       uri,
-		base64:    encoded,
+		dataURI:   dataURI,
 		size:      newSize,
 		expiresAt: time.Now().Add(ic.ttl),
 	}
@@ -99,7 +174,7 @@ func (ic *imageCache) MemoizedImageBase64(uri string) string {
 	ic.items[uri] = element
 	ic.currentSize += newSize
 
-	return encoded
+	return dataURI
 }
 
 func (ic *imageCache) removeOldest() {
