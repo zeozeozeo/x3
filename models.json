@@ -421,6 +421,11 @@
       "name": "Eliza (psychotherapist, not an LLM)",
       "command": "eliza",
       "is_eliza": true
+    },
+    {
+      "name": "Alice (chatbot, not an LLM)",
+      "command": "alice",
+      "is_alice": true
     }
   ],
   "default_models": [

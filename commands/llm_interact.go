@@ -107,14 +107,14 @@ func handleLlmInteraction2(
 		return "", 0, nil // Card message was sent, no further LLM interaction needed now.
 	}
 
-	llmer := llm.NewLlmer()
+	llmer := llm.NewLlmer(event.Channel().ID())
 	models := cache.PersonaMeta.GetModels()
 
 	// fetch surrounding messages for context
 	ctxLen := cache.ContextLength
 	if models[0].IsMarkov {
 		ctxLen = 200
-	} else if models[0].IsEliza {
+	} else if models[0].IsEliza || models[0].IsAlice {
 		ctxLen = 0
 	}
 	numCtxMessages, usernames, lastResponseMessage, lastAssistantMessageID, lastUserID := addContextMessages(

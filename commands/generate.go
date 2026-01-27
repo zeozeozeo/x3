@@ -172,7 +172,7 @@ func HandleGenerate(event *handler.CommandEvent) error {
 		}
 		tagChan := make(chan string)
 
-		llmer := llm.NewLlmer()
+		llmer := llm.NewLlmer(event.Channel().ID())
 		llmer.AddMessage(llm.RoleUser, prompt, 0)
 		GetNarrator().QueueNarration(*llmer, stableNarratorPrepend, func(llmer *llm.Llmer, response string) {
 			tags, err := parseStableNarratorTags(response)

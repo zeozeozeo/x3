@@ -112,6 +112,7 @@ type Model struct {
 	Providers   map[string]ModelProvider `json:"providers,omitempty"`
 	IsMarkov    bool                     `json:"is_markov,omitempty"`
 	IsEliza     bool                     `json:"is_eliza,omitempty"`
+	IsAlice     bool                     `json:"is_alice,omitempty"`
 	Limited     bool                     `json:"limited,omitempty"` // disable custom inference settings
 }
 

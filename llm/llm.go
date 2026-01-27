@@ -2,6 +2,7 @@ package llm
 
 import (
 	"context"
+	"embed"
 	"errors"
 	"fmt"
 	"html"
@@ -16,6 +17,10 @@ import (
 	"github.com/zeozeozeo/x3/model"
 	"github.com/zeozeozeo/x3/openai"
 	"github.com/zeozeozeo/x3/persona"
+
+	"github.com/zeozeozeo/go-aiml"
+
+	_ "embed"
 )
 
 const (
@@ -24,7 +29,54 @@ const (
 	RoleSystem    = openai.ChatMessageRoleSystem
 )
 
-var gImageCache *imageCache = NewImageCache(100*1024*1024, 24*time.Hour)
+var (
+	gImageCache *imageCache = NewImageCache(100*1024*1024, 24*time.Hour)
+	gAlice      *aiml.Kernel
+)
+
+//go:embed alicebot/*.aiml
+var aliceFS embed.FS
+
+func init() {
+	gAlice = aiml.NewKernel()
+	gAlice.SetVerbose(false)
+	gAlice.SetBotPredicate("name", "Alice")
+	gAlice.SetBotPredicate("gender", "female")
+	gAlice.SetBotPredicate("age", "25")
+	gAlice.SetBotPredicate("location", "California")
+	gAlice.SetBotPredicate("size", "98000")
+
+	entries, err := aliceFS.ReadDir("alicebot")
+	if err == nil {
+		categoryCount := 0
+		for _, entry := range entries {
+			if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".aiml") {
+				continue
+			}
+
+			filepath := "alicebot/" + entry.Name()
+			data, err := aliceFS.ReadFile(filepath)
+			if err != nil {
+				continue
+			}
+
+			// Parse the AIML data
+			parser := aiml.NewParser()
+			if err := parser.Parse(strings.NewReader(string(data))); err != nil {
+				continue
+			}
+
+			for key, template := range parser.GetCategories() {
+				normalizedPattern := strings.ToUpper(strings.TrimSpace(key.Pattern))
+				normalizedThat := strings.ToUpper(strings.TrimSpace(key.That))
+				normalizedTopic := strings.ToUpper(strings.TrimSpace(key.Topic))
+				gAlice.AddPattern(normalizedPattern, normalizedThat, normalizedTopic, template)
+				categoryCount++
+			}
+		}
+		slog.Info("loaded alice brain", "categoryCount", categoryCount, "files", len(entries))
+	}
+}
 
 // generateImageDescriptionCallback is a callback function for generating image descriptions
 var generateImageDescriptionCallback func(imageURL string, ctx context.Context) (string, error) = func(imageURL string, ctx context.Context) (string, error) {
@@ -80,11 +132,14 @@ func (u Usage) IsEmpty() bool {
 }
 
 type Llmer struct {
-	Messages []Message `json:"messages"`
+	Messages  []Message    `json:"messages"`
+	ChannelID snowflake.ID `json:"channel_id"`
 }
 
-func NewLlmer() *Llmer {
-	return &Llmer{}
+func NewLlmer(channelID snowflake.ID) *Llmer {
+	return &Llmer{
+		ChannelID: channelID,
+	}
 }
 
 func (l *Llmer) NumMessages() int {
@@ -576,6 +631,15 @@ func (l *Llmer) inferEliza() string {
 	return "IDK"
 }
 
+var weirdAliceReplacer = strings.NewReplacer(" .", ".", ", ,", ",", " ,", ",", " ?", "?")
+
+func (l *Llmer) inferAlice() string {
+	msg := l.Messages[len(l.Messages)-1]
+	content := msg.Content
+	response := gAlice.Respond(content, l.ChannelID.String())
+	return weirdAliceReplacer.Replace(strings.Join(strings.Fields(strings.TrimSpace(response)), " "))
+}
+
 /*
 // shouldSwapToVision returns true if any of the last 4 messages had images sent by user
 func (l Llmer) shouldSwapToVision() bool {
@@ -611,6 +675,12 @@ func (l *Llmer) RequestCompletion(models []model.Model, settings persona.Inferen
 		err = nil
 		return
 	}
+	if models[0].IsAlice {
+		res = l.inferAlice()
+		usage = Usage{}
+		err = nil
+		return
+	}
 
 	settings.Remap() // remap values (1.0 temp -> 0.6 temp)
 
@@ -636,7 +706,7 @@ func (l *Llmer) RequestCompletion(models []model.Model, settings persona.Inferen
 	var lastErr error
 
 	for _, m := range modelsToTry {
-		if m.IsMarkov || m.IsEliza {
+		if m.IsMarkov || m.IsEliza || m.IsAlice {
 			continue
 		}
 

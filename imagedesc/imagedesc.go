@@ -33,7 +33,7 @@ func GenerateImageDescription(imageURL string, ctx context.Context) (string, err
 
 	slog.Info("generating image description", "url", imageURL)
 
-	llmer := llm.NewLlmer()
+	llmer := llm.NewLlmer(0)
 
 	meta := persona.PersonaImageDescription
 	p := persona.GetPersonaByMeta(meta, nil, "", false, time.Time{}, nil)

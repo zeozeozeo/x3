@@ -99,10 +99,12 @@ func HandleLlm(event *handler.CommandEvent, models []model.Model) error {
 	if useCache {
 		llmer = cache.Llmer
 		if llmer == nil {
-			llmer = llm.NewLlmer()
+			llmer = llm.NewLlmer(event.Channel().ID())
+		} else {
+			llmer.ChannelID = event.Channel().ID()
 		}
 	} else {
-		llmer = llm.NewLlmer()
+		llmer = llm.NewLlmer(event.Channel().ID())
 		lastMessage := event.Channel().MessageChannel.LastMessageID()
 		if lastMessage != nil {
 			_, usernames, _, _, _ = addContextMessages(event.Client(), llmer, event.Channel().ID(), *lastMessage, cache.ContextLength)

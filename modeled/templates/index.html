@@ -1,143 +1,225 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Model Configuration Editor</title>
-    <link rel="stylesheet" href="/static/style.css">
-    <script src="https://unpkg.com/sortablejs@1.15.0/Sortable.min.js"></script>
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>Model Configuration Editor</title>
+        <link rel="stylesheet" href="/static/style.css" />
+        <script src="https://unpkg.com/sortablejs@1.15.0/Sortable.min.js"></script>
 
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Rubik:ital,wght@0,300..900;1,300..900&display=swap" rel="stylesheet">
-</head>
-<body>
-    <div class="container">
-        <header>
-            <h1>Model Configuration Editor</h1>
-            <div class="controls">
-                <button id="saveBtn" class="btn btn-primary">Save Changes</button>
-                <button id="addModelBtn" class="btn btn-secondary">Add Model</button>
-                <button id="reloadBtn" class="btn btn-secondary">Reload</button>
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+        <link
+            href="https://fonts.googleapis.com/css2?family=Rubik:ital,wght@0,300..900;1,300..900&display=swap"
+            rel="stylesheet"
+        />
+    </head>
+    <body>
+        <div class="container">
+            <header>
+                <h1>Model Configuration Editor</h1>
+                <div class="controls">
+                    <button id="saveBtn" class="btn btn-primary">
+                        Save Changes
+                    </button>
+                    <button id="addModelBtn" class="btn btn-secondary">
+                        Add Model
+                    </button>
+                    <button id="reloadBtn" class="btn btn-secondary">
+                        Reload
+                    </button>
+                </div>
+            </header>
+
+            <!-- Version Display and Edit -->
+            <div class="version-section">
+                <div class="version-info">
+                    <span class="version-label">Current Version:</span>
+                    <span id="currentVersionDisplay">6</span>
+                    <button
+                        id="editVersionBtn"
+                        class="btn btn-secondary btn-sm"
+                    >
+                        Edit
+                    </button>
+                </div>
             </div>
-        </header>
 
-        <!-- Version Display and Edit -->
-        <div class="version-section">
-            <div class="version-info">
-                <span class="version-label">Current Version:</span>
-                <span id="currentVersionDisplay">6</span>
-                <button id="editVersionBtn" class="btn btn-secondary btn-sm">Edit</button>
+            <div class="tabs">
+                <button class="tab-btn active" data-tab="models">Models</button>
+                <button class="tab-btn" data-tab="providers">
+                    Provider Order
+                </button>
+                <button class="tab-btn" data-tab="defaults">Defaults</button>
+            </div>
+
+            <div id="models-tab" class="tab-content active">
+                <div id="models-list" class="models-container"></div>
+            </div>
+
+            <div id="providers-tab" class="tab-content">
+                <div class="section">
+                    <h3>Provider Order (Drag to reorder)</h3>
+                    <p>
+                        Providers are tried in this order when making API calls
+                    </p>
+                    <ul id="providers-list" class="sortable-list"></ul>
+                </div>
+            </div>
+
+            <div id="defaults-tab" class="tab-content">
+                <div class="section">
+                    <h3>Default Models</h3>
+                    <p>Models available for general use</p>
+                    <div id="default-models" class="sortable-list"></div>
+                </div>
+                <div class="section">
+                    <h3>Narrator Models</h3>
+                    <p>Models used for narration</p>
+                    <div id="narrator-models" class="sortable-list"></div>
+                </div>
+                <div class="section">
+                    <h3>Default Vision Models</h3>
+                    <p>Models with vision capabilities</p>
+                    <div id="vision-models" class="sortable-list"></div>
+                </div>
             </div>
         </div>
 
-        <div class="tabs">
-            <button class="tab-btn active" data-tab="models">Models</button>
-            <button class="tab-btn" data-tab="providers">Provider Order</button>
-            <button class="tab-btn" data-tab="defaults">Defaults</button>
-        </div>
-
-        <div id="models-tab" class="tab-content active">
-            <div id="models-list" class="models-container"></div>
-        </div>
-
-        <div id="providers-tab" class="tab-content">
-            <div class="section">
-                <h3>Provider Order (Drag to reorder)</h3>
-                <p>Providers are tried in this order when making API calls</p>
-                <ul id="providers-list" class="sortable-list"></ul>
+        <!-- Model Editor Modal -->
+        <div id="modelModal" class="modal">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h3 id="modalTitle">Edit Model</h3>
+                    <span class="close">&times;</span>
+                </div>
+                <div class="modal-body">
+                    <form id="modelForm">
+                        <div class="form-group">
+                            <label for="modelName">Name:</label>
+                            <input
+                                type="text"
+                                id="modelName"
+                                name="name"
+                                required
+                            />
+                        </div>
+                        <div class="form-group">
+                            <label for="modelCommand">Command:</label>
+                            <input
+                                type="text"
+                                id="modelCommand"
+                                name="command"
+                                required
+                            />
+                        </div>
+                        <div class="form-group checkbox">
+                            <label>
+                                <input
+                                    type="checkbox"
+                                    id="modelVision"
+                                    name="vision"
+                                />
+                                Vision Capable
+                            </label>
+                        </div>
+                        <div class="form-group checkbox">
+                            <label>
+                                <input
+                                    type="checkbox"
+                                    id="modelReasoning"
+                                    name="reasoning"
+                                />
+                                Reasoning Model
+                            </label>
+                        </div>
+                        <div class="form-group checkbox">
+                            <label>
+                                <input
+                                    type="checkbox"
+                                    id="modelIsMarkov"
+                                    name="is_markov"
+                                />
+                                Is Markov Chain
+                            </label>
+                        </div>
+                        <div class="form-group checkbox">
+                            <label>
+                                <input
+                                    type="checkbox"
+                                    id="modelIsEliza"
+                                    name="is_eliza"
+                                />
+                                Is Eliza
+                            </label>
+                        </div>
+                        <div class="form-group checkbox">
+                            <label>
+                                <input
+                                    type="checkbox"
+                                    id="modelIsAlice"
+                                    name="is_alice"
+                                />
+                                Is Alice
+                            </label>
+                        </div>
+                        <div class="form-group checkbox">
+                            <label>
+                                <input
+                                    type="checkbox"
+                                    id="modelLimited"
+                                    name="limited"
+                                />
+                                Limited (disable custom inference)
+                            </label>
+                        </div>
+                        <div class="form-group">
+                            <label for="modelEncoding">Encoding:</label>
+                            <select id="modelEncoding" name="encoding">
+                                <option value="">Default (cl100k_base)</option>
+                                <option value="o200k_base">o200k_base</option>
+                                <option value="cl100k_base">cl100k_base</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <h4>Providers</h4>
+                            <div id="providers-container"></div>
+                            <button
+                                type="button"
+                                id="addProviderBtn"
+                                class="btn btn-secondary"
+                            >
+                                Add Provider
+                            </button>
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button
+                        type="button"
+                        id="saveModelBtn"
+                        class="btn btn-primary"
+                    >
+                        Save Model
+                    </button>
+                    <button
+                        type="button"
+                        id="deleteModelBtn"
+                        class="btn btn-danger"
+                    >
+                        Delete Model
+                    </button>
+                    <button
+                        type="button"
+                        id="cancelModelBtn"
+                        class="btn btn-secondary"
+                    >
+                        Cancel
+                    </button>
+                </div>
             </div>
         </div>
 
-        <div id="defaults-tab" class="tab-content">
-            <div class="section">
-                <h3>Default Models</h3>
-                <p>Models available for general use</p>
-                <div id="default-models" class="sortable-list"></div>
-            </div>
-            <div class="section">
-                <h3>Narrator Models</h3>
-                <p>Models used for narration</p>
-                <div id="narrator-models" class="sortable-list"></div>
-            </div>
-            <div class="section">
-                <h3>Default Vision Models</h3>
-                <p>Models with vision capabilities</p>
-                <div id="vision-models" class="sortable-list"></div>
-            </div>
-        </div>
-    </div>
-
-    <!-- Model Editor Modal -->
-    <div id="modelModal" class="modal">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h3 id="modalTitle">Edit Model</h3>
-                <span class="close">&times;</span>
-            </div>
-            <div class="modal-body">
-                <form id="modelForm">
-                    <div class="form-group">
-                        <label for="modelName">Name:</label>
-                        <input type="text" id="modelName" name="name" required>
-                    </div>
-                    <div class="form-group">
-                        <label for="modelCommand">Command:</label>
-                        <input type="text" id="modelCommand" name="command" required>
-                    </div>
-                    <div class="form-group checkbox">
-                        <label>
-                            <input type="checkbox" id="modelVision" name="vision">
-                            Vision Capable
-                        </label>
-                    </div>
-                    <div class="form-group checkbox">
-                        <label>
-                            <input type="checkbox" id="modelReasoning" name="reasoning">
-                            Reasoning Model
-                        </label>
-                    </div>
-                    <div class="form-group checkbox">
-                        <label>
-                            <input type="checkbox" id="modelIsMarkov" name="is_markov">
-                            Is Markov Chain
-                        </label>
-                    </div>
-                    <div class="form-group checkbox">
-                        <label>
-                            <input type="checkbox" id="modelIsEliza" name="is_eliza">
-                            Is Eliza
-                        </label>
-                    </div>
-                    <div class="form-group checkbox">
-                        <label>
-                            <input type="checkbox" id="modelLimited" name="limited">
-                            Limited (disable custom inference)
-                        </label>
-                    </div>
-                    <div class="form-group">
-                        <label for="modelEncoding">Encoding:</label>
-                        <select id="modelEncoding" name="encoding">
-                            <option value="">Default (cl100k_base)</option>
-                            <option value="o200k_base">o200k_base</option>
-                            <option value="cl100k_base">cl100k_base</option>
-                        </select>
-                    </div>
-                    <div class="form-group">
-                        <h4>Providers</h4>
-                        <div id="providers-container"></div>
-                        <button type="button" id="addProviderBtn" class="btn btn-secondary">Add Provider</button>
-                    </div>
-                </form>
-            </div>
-            <div class="modal-footer">
-                <button type="button" id="saveModelBtn" class="btn btn-primary">Save Model</button>
-                <button type="button" id="deleteModelBtn" class="btn btn-danger">Delete Model</button>
-                <button type="button" id="cancelModelBtn" class="btn btn-secondary">Cancel</button>
-            </div>
-        </div>
-    </div>
-
-    <script src="/static/script.js"></script>
-</body>
+        <script src="/static/script.js"></script>
+    </body>
 </html>
