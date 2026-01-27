@@ -570,6 +570,15 @@ func (l *Llmer) requestCompletionInternal(
 	return "", Usage{}, fmt.Errorf("all configurations for provider %s failed: %w", provider, lastErr) // all baseUrls/tokens/codenames errored
 }
 
+// removes `name:` prefix
+func desugarContent(content string) string {
+	_, after, found := strings.Cut(content, ": ")
+	if found {
+		return after
+	}
+	return content
+}
+
 func (l *Llmer) inferMarkovChain() string {
 	if len(l.Messages) == 0 {
 		return ""
@@ -581,7 +590,7 @@ func (l *Llmer) inferMarkovChain() string {
 		//if len(l.Messages) > 1 && msg.Role == RoleSystem {
 		//	continue
 		//}
-		content := msg.Content
+		content := desugarContent(msg.Content)
 		words := strings.Fields(content)
 		if len(words) > 0 {
 			chain.Add(words)
@@ -624,7 +633,7 @@ func (l *Llmer) inferMarkovChain() string {
 
 func (l *Llmer) inferEliza() string {
 	msg := l.Messages[len(l.Messages)-1]
-	content := msg.Content
+	content := desugarContent(msg.Content)
 	if anal, err := eliza.AnalyzeString(content); err == nil {
 		return anal
 	}
@@ -635,7 +644,7 @@ var weirdAliceReplacer = strings.NewReplacer(" .", ".", ", ,", ",", " ,", ",", "
 
 func (l *Llmer) inferAlice() string {
 	msg := l.Messages[len(l.Messages)-1]
-	content := msg.Content
+	content := desugarContent(msg.Content)
 	response := gAlice.Respond(content, l.ChannelID.String())
 	return weirdAliceReplacer.Replace(strings.Join(strings.Fields(strings.TrimSpace(response)), " "))
 }
