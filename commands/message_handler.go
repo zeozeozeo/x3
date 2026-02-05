@@ -67,7 +67,7 @@ func handleLlmInteraction(event *events.MessageCreate) error {
 
 	if err != nil {
 		slog.Error("handleLlmInteraction failed", "err", err)
-		sendPrettyError(event.Client(), "Epic fail", event.ChannelID, event.MessageID)
+		//sendPrettyError(event.Client(), "Epic fail", event.ChannelID, event.MessageID)
 	}
 	return err
 }
@@ -181,7 +181,7 @@ func OnMessageCreate(event *events.MessageCreate) {
 	}
 
 	// recent interaction?
-	if !shouldTriggerLlm {
+	if !shouldTriggerLlm && event.Message.ReferencedMessage == nil {
 		cache := db.GetChannelCache(event.ChannelID)
 		if time.Since(cache.LastInteraction) < 30*time.Second {
 			shouldTriggerLlm = true
