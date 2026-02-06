@@ -267,7 +267,7 @@ func (l *Llmer) AddImage(imageURL string) {
 	msg.Images = append(msg.Images, imageURL)
 }
 
-func (l Llmer) convertMessages(hasVision bool, supportsImageURL bool, prepend string, ctx context.Context) []openai.ChatCompletionMessage {
+func (l Llmer) convertMessages(hasVision, supportsImageURL bool, prepend, searchResults string, ctx context.Context) []openai.ChatCompletionMessage {
 	// find the index of the last message with images
 	imageIdx := -1
 	for i := len(l.Messages) - 1; i >= 0; i-- {
@@ -288,7 +288,8 @@ func (l Llmer) convertMessages(hasVision bool, supportsImageURL bool, prepend st
 			continue // skip empty messages. HACK: they seem to appear after lobotomy, this is a hack
 		}
 		if len(msg.Images) == 0 || !hasVision || i != imageIdx {
-			content := msg.Content
+			var content strings.Builder
+			content.WriteString(msg.Content)
 
 			// If this message has images but we don't have vision, generate/use descriptions
 			if len(msg.Images) > 0 && !hasVision {
@@ -308,7 +309,7 @@ func (l Llmer) convertMessages(hasVision bool, supportsImageURL bool, prepend st
 								filename = filename[:qIdx]
 							}
 						}
-						content += fmt.Sprintf("\n[attached %s: %s]", filename, description)
+						fmt.Fprintf(&content, "\n[attached %s: %s]", filename, description)
 					}
 				}
 			}
@@ -316,10 +317,9 @@ func (l Llmer) convertMessages(hasVision bool, supportsImageURL bool, prepend st
 			role := msg.Role
 			messages = append(messages, openai.ChatCompletionMessage{
 				Role:    role,
-				Content: content,
+				Content: content.String(),
 			})
 		} else {
-			slog.Debug("adding image")
 			// must structure as a multipart message if we have images
 			parts := []openai.ChatMessagePart{
 				{
@@ -347,7 +347,6 @@ func (l Llmer) convertMessages(hasVision bool, supportsImageURL bool, prepend st
 					},
 				})
 			} else { // api needs base64, will fetch image and store in memory cache
-				slog.Info("fetching image (memoized)....")
 				data := gImageCache.MemoizedImageBase64(msg.Images[0])
 				if data == "" {
 					slog.Error("failed to fetch image!")
@@ -367,6 +366,10 @@ func (l Llmer) convertMessages(hasVision bool, supportsImageURL bool, prepend st
 				MultiContent: parts,
 			})
 		}
+	}
+
+	if searchResults != "" && len(messages) > 0 {
+		messages[len(messages)-1].Content += searchResults
 	}
 
 	if prepend != "" {
@@ -419,6 +422,9 @@ func (l *Llmer) requestCompletionInternal2(
 	client *openai.Client,
 	prepend string,
 	ctx context.Context,
+	searchDepth int,
+	searchCitemap map[int]string,
+	searchResults string,
 ) (string, Usage, error) {
 	if m.Limited {
 		settings = persona.InferenceSettings{}
@@ -489,6 +495,24 @@ func (l *Llmer) requestCompletionInternal2(
 	unescaped := html.UnescapeString(text.String())
 	unescaped = strings.TrimSpace(unescaped)
 
+	if searchDepth < 4 {
+		if search := extractSearch(unescaped); search != "" {
+			results, citemap := getSearchResults(search)
+			return l.requestCompletionInternal2(
+				m,
+				codename,
+				provider,
+				settings,
+				client,
+				prepend,
+				ctx,
+				searchDepth+1,
+				citemap,
+				results,
+			)
+		}
+	}
+
 	// cool
 	unescaped = strings.ReplaceAll(unescaped, "<new_message]", "<new_message>")
 
@@ -500,6 +524,10 @@ func (l *Llmer) requestCompletionInternal2(
 		Role:    RoleAssistant,
 		Content: unescaped,
 	})
+
+	if searchDepth > 0 {
+		unescaped += extractCites(unescaped, searchCitemap)
+	}
 
 	return unescaped, usage, nil
 }
@@ -552,7 +580,7 @@ func (l *Llmer) requestCompletionInternal(
 
 			for _, codename := range codenames {
 				slog.Info("attempting request", "provider", provider, "baseUrl", baseUrl, "codename", codename)
-				res, usage, err := l.requestCompletionInternal2(m, codename, provider, settings, client, prepend, ctx)
+				res, usage, err := l.requestCompletionInternal2(m, codename, provider, settings, client, prepend, ctx, 0, nil, "")
 				if err == nil {
 					// we got a response, but if we used a prefill, we should indicate that it was used
 					// (prepend it to the response in bold)

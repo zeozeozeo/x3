@@ -51,8 +51,8 @@ type PostData struct {
 }
 
 func trimStringFromStr(s string, str string) string {
-	if idx := strings.Index(s, str); idx != -1 {
-		return s[:idx]
+	if before, _, ok := strings.Cut(s, str); ok {
+		return before
 	}
 	return s
 }

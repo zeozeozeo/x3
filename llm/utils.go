@@ -1,6 +1,13 @@
 package llm
 
-import "strings"
+import (
+	"fmt"
+	"regexp"
+	"sort"
+	"strings"
+
+	"github.com/zeozeozeo/x3/ddg"
+)
 
 var thinkingTags = [][2]string{
 	{"<think>", "</think>"},
@@ -33,4 +40,75 @@ func ExtractThinking(response string) (string, string) {
 	}
 
 	return "", response
+}
+
+// extract stuff in <search></search>
+func extractSearch(s string) string {
+	startTag := "<search>"
+	endTag := "</search>"
+
+	startIdx := strings.Index(s, startTag)
+	if startIdx == -1 {
+		return ""
+	}
+
+	endIdx := strings.Index(s[startIdx+len(startTag):], endTag)
+	if endIdx == -1 {
+		return ""
+	}
+
+	contentStart := startIdx + len(startTag)
+	contentEnd := contentStart + endIdx
+
+	return strings.TrimSpace(s[contentStart:contentEnd])
+}
+
+func extractCites(response string, citemap map[int]string) string {
+	re := regexp.MustCompile(`\[(\d+)\]`)
+	matches := re.FindAllStringSubmatch(response, -1)
+
+	if len(matches) == 0 {
+		return ""
+	}
+
+	foundIDs := make(map[int]bool)
+	var uniqueIDs []int
+
+	for _, match := range matches {
+		var id int
+		fmt.Sscanf(match[1], "%d", &id)
+		if _, exists := citemap[id]; exists && !foundIDs[id] {
+			foundIDs[id] = true
+			uniqueIDs = append(uniqueIDs, id)
+		}
+	}
+
+	sort.Ints(uniqueIDs)
+
+	var sb strings.Builder
+	if len(uniqueIDs) > 0 {
+		sb.WriteString("\n\n")
+	}
+	for _, id := range uniqueIDs {
+		fmt.Fprintf(&sb, "-# [%d]: %s\n", id, citemap[id])
+	}
+
+	return sb.String()
+}
+
+func getSearchResults(search string) (string, map[int]string) {
+	citemap := make(map[int]string)
+	results, err := ddg.Query(search, 10)
+	if err != nil {
+		return fmt.Sprintf("<failed to search for '%s': %v>", search, err), citemap
+	}
+
+	var sb strings.Builder
+	fmt.Fprintf(&sb, "\n<You ran a search for '%s', here are the 10 search results. If these are not useful, you may run a new search. Make sure to use citing in your response when using relevant sources, e.g. [1]>\n", search)
+	for i, res := range results {
+		fmt.Fprintf(&sb, "---\n## Source [%d]: '%s'\nURL: %s\nContent: %s\n---\n", i+1, res.Title, res.URL, res.Info)
+		citemap[i+1] = res.URL
+	}
+
+	return sb.String(), citemap
 }
