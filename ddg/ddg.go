@@ -26,13 +26,15 @@ func Query(query string, maxResult int) ([]Result, error) {
 	return QueryWithProxy(query, maxResult, "")
 }
 
+const requestTimeout = 6 * time.Second
+
 func QueryWithProxy(query string, maxResult int, proxyUrl string) ([]Result, error) {
 	results := []Result{}
 	queryUrl := fmt.Sprintf("https://html.duckduckgo.com/html/?q=%s", url.QueryEscape(query))
 
 	transport := &http.Transport{
 		DialContext: (&net.Dialer{
-			Timeout: 5 * time.Second,
+			Timeout: requestTimeout,
 		}).DialContext,
 	}
 	if proxyUrl != "" {
@@ -43,7 +45,7 @@ func QueryWithProxy(query string, maxResult int, proxyUrl string) ([]Result, err
 		transport.Proxy = http.ProxyURL(proxy)
 	}
 
-	client := &http.Client{Transport: transport}
+	client := &http.Client{Transport: transport, Timeout: requestTimeout}
 	req, err := http.NewRequest("GET", queryUrl, nil)
 	if err != nil {
 		return results, fmt.Errorf("new request error: %w", err)
