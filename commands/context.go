@@ -31,6 +31,12 @@ var contextCommand = discord.SlashCommandCreate{
 		discord.ApplicationCommandOptionSubCommand{
 			Name:        "list",
 			Description: "List current context items",
+			Options: []discord.ApplicationCommandOption{
+				discord.ApplicationCommandOptionBool{
+					Name:        "ephemeral",
+					Description: "If the response should only be visible to you",
+				},
+			},
 		},
 	},
 }
@@ -50,7 +56,7 @@ func handleContext(e *handler.CommandEvent) error {
 		if err := cache.Write(channelID); err != nil {
 			return sendInteractionError(e, "Failed to save context: "+err.Error(), true)
 		}
-		return sendInteractionOk(e, "Context Added", fmt.Sprintf("Added to context: `%s`", text), false)
+		return sendInteractionOk(e, "Context added", fmt.Sprintf("Added to context: `%s`", text), false)
 
 	case "clear":
 		prevLen := len(cache.Context)
@@ -58,18 +64,18 @@ func handleContext(e *handler.CommandEvent) error {
 		if err := cache.Write(channelID); err != nil {
 			return sendInteractionError(e, "Failed to clear context: "+err.Error(), true)
 		}
-		return sendInteractionOk(e, "Context Cleared", fmt.Sprintf("Cleared %s from context.", pluralize(prevLen, "item")), false)
+		return sendInteractionOk(e, "Context cleared", fmt.Sprintf("Cleared %s from context.", pluralize(prevLen, "item")), false)
 
 	case "list":
 		if len(cache.Context) == 0 {
-			return sendInteractionOk(e, "Chat Context", "No context set for this channel.", false)
+			return sendInteractionOk(e, "Chat context", "No context set for this channel.", false)
 		}
 		var b strings.Builder
 		b.WriteString("**Current Context:**\n")
 		for i, ctx := range cache.Context {
-			b.WriteString(fmt.Sprintf("%d. %s\n", i+1, ctx))
+			fmt.Fprintf(&b, "%d. %s\n", i+1, ctx)
 		}
-		return sendInteractionOk(e, "Chat Context", ellipsisTrim(b.String(), 1024), false)
+		return sendInteractionOk(e, "Chat context", ellipsisTrim(b.String(), 1024), e.SlashCommandInteractionData().Bool("ephemeral"))
 	}
 
 	return nil
