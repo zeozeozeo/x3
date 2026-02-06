@@ -26,7 +26,7 @@ func Query(query string, maxResult int) ([]Result, error) {
 	return QueryWithProxy(query, maxResult, "")
 }
 
-const requestTimeout = 6 * time.Second
+const requestTimeout = 5 * time.Second
 
 func QueryWithProxy(query string, maxResult int, proxyUrl string) ([]Result, error) {
 	results := []Result{}
