@@ -88,6 +88,13 @@ func readTxtCache(attachmentID snowflake.ID) ([]byte, bool) {
 	return content, err == nil
 }
 
+var citeCleanupRegexp = regexp.MustCompile(`\[+(\d+)\]+\(<[^>]+>\)`)
+
+// [[1]](<https://example.com>) -> [1]
+func cleanupCites(s string) string {
+	return citeCleanupRegexp.ReplaceAllString(s, "[$1]")
+}
+
 // getMessageContent extracts the text content from a message, including text attachments
 func getMessageContent(message discord.Message) string {
 	content := message.Content
@@ -292,7 +299,7 @@ func addContextMessages(
 				content = fromLatexAPI(msg.Content)
 				isSplitAnyway = true
 			} else {
-				content = getMessageContent(msg)
+				content = cleanupCites(getMessageContent(msg))
 			}
 
 			if msg.ReferencedMessage != nil {
