@@ -32,7 +32,7 @@ func QueryWithProxy(query string, maxResult int, proxyUrl string) ([]Result, err
 
 	transport := &http.Transport{
 		DialContext: (&net.Dialer{
-			Timeout: 30 * time.Second,
+			Timeout: 5 * time.Second,
 		}).DialContext,
 	}
 	if proxyUrl != "" {

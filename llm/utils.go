@@ -82,7 +82,14 @@ func formatCites(response string, citemap map[int]string) string {
 func getSearchResults(search string) (string, map[int]string) {
 	citemap := make(map[int]string)
 	slog.Info("running search")
-	results, err := ddg.Query(search, 10)
+	var err error
+	var results []ddg.Result
+	for range 3 {
+		results, err = ddg.Query(search, 10)
+		if err == nil {
+			break
+		}
+	}
 	if err != nil {
 		return fmt.Sprintf("<failed to search for '%s': %v>", search, err), citemap
 	}
