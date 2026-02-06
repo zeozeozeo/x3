@@ -332,8 +332,6 @@ func handleLlmInteraction2(
 				content = messages[len(messages)-1]
 			}
 			handleNarration(client, channelID, narrationMessageID, *llmer, content)
-		} else {
-			slog.Info("narrator: skipping narration", slog.Bool("enableImages", cache.PersonaMeta.EnableImages), slog.Bool("timeSinceLastInteraction", time.Since(GetNarrator().LastInteractionTime()) > 2*time.Minute), slog.Bool("isFree", horder.GetHorder().IsFree()))
 		}
 	}
 

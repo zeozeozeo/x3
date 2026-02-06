@@ -2,8 +2,8 @@ package llm
 
 import (
 	"fmt"
+	"log/slog"
 	"regexp"
-	"sort"
 	"strings"
 
 	"github.com/zeozeozeo/x3/ddg"
@@ -63,41 +63,25 @@ func extractSearch(s string) string {
 	return strings.TrimSpace(s[contentStart:contentEnd])
 }
 
-func extractCites(response string, citemap map[int]string) string {
+func formatCites(response string, citemap map[int]string) string {
 	re := regexp.MustCompile(`\[(\d+)\]`)
-	matches := re.FindAllStringSubmatch(response, -1)
-
-	if len(matches) == 0 {
-		return ""
-	}
-
-	foundIDs := make(map[int]bool)
-	var uniqueIDs []int
-
-	for _, match := range matches {
+	return re.ReplaceAllStringFunc(response, func(match string) string {
 		var id int
-		fmt.Sscanf(match[1], "%d", &id)
-		if _, exists := citemap[id]; exists && !foundIDs[id] {
-			foundIDs[id] = true
-			uniqueIDs = append(uniqueIDs, id)
+		_, err := fmt.Sscanf(match, "[%d]", &id)
+		if err != nil {
+			return match
 		}
-	}
-
-	sort.Ints(uniqueIDs)
-
-	var sb strings.Builder
-	if len(uniqueIDs) > 0 {
-		sb.WriteString("\n\n")
-	}
-	for _, id := range uniqueIDs {
-		fmt.Fprintf(&sb, "-# [%d]: %s\n", id, citemap[id])
-	}
-
-	return sb.String()
+		url, exists := citemap[id]
+		if !exists {
+			return match
+		}
+		return fmt.Sprintf("[[%d]](<%s>)", id, url)
+	})
 }
 
 func getSearchResults(search string) (string, map[int]string) {
 	citemap := make(map[int]string)
+	slog.Info("running search")
 	results, err := ddg.Query(search, 10)
 	if err != nil {
 		return fmt.Sprintf("<failed to search for '%s': %v>", search, err), citemap

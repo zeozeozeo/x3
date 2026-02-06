@@ -431,7 +431,7 @@ func (l *Llmer) requestCompletionInternal2(
 	}
 	req := openai.ChatCompletionRequest{
 		Model:    codename,
-		Messages: l.convertMessages(m.Vision, provider != model.ProviderOllama, prepend, ctx), // ollama cloud doesn't support fetching from image URLs, how nice :)
+		Messages: l.convertMessages(m.Vision, provider != model.ProviderOllama, prepend, searchResults, ctx), // ollama cloud doesn't support fetching from image URLs, how nice :)
 		Stream:   true,
 		StreamOptions: &openai.StreamOptions{
 			IncludeUsage: true,
@@ -516,6 +516,11 @@ func (l *Llmer) requestCompletionInternal2(
 	// cool
 	unescaped = strings.ReplaceAll(unescaped, "<new_message]", "<new_message>")
 
+	// cites like [1] get turned into [1](<https://google.com/>)
+	if searchDepth > 0 {
+		unescaped = formatCites(unescaped, searchCitemap)
+	}
+
 	// and trim spaces again after our checks, for good measure
 	unescaped = strings.TrimSpace(unescaped)
 	slog.Info("response", "len", len(unescaped), "duration", time.Since(completionStart), "model", m.Name, "provider", provider)
@@ -524,10 +529,6 @@ func (l *Llmer) requestCompletionInternal2(
 		Role:    RoleAssistant,
 		Content: unescaped,
 	})
-
-	if searchDepth > 0 {
-		unescaped += extractCites(unescaped, searchCitemap)
-	}
 
 	return unescaped, usage, nil
 }
