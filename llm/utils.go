@@ -86,6 +86,7 @@ func getSearchResults(search string) (string, map[int]string) {
 	if err != nil {
 		return fmt.Sprintf("<failed to search for '%s': %v>", search, err), citemap
 	}
+	slog.Info("search: got results", "results", len(results))
 
 	var sb strings.Builder
 	fmt.Fprintf(&sb, "\n<You ran a search for '%s', here are the 10 search results. If these are not useful, you may run a new search. Make sure to use citing in your response when using relevant sources, e.g. [1]>\n", search)
