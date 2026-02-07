@@ -160,6 +160,14 @@ func OnMessageCreate(event *events.MessageCreate) {
 
 	shouldTriggerLlm := false
 
+	// is this a DM?
+	if !shouldTriggerLlm && event.GuildID == nil {
+		if maybeHandlePersonaNewFlowMessage(event) {
+			return
+		}
+		shouldTriggerLlm = true
+	}
+
 	// are we @mentioned?
 	for _, user := range event.Message.Mentions {
 		if user.ID == event.Client().ID() {
@@ -188,11 +196,6 @@ func OnMessageCreate(event *events.MessageCreate) {
 		}
 	}
 
-	// is this a DM?
-	if !shouldTriggerLlm && event.GuildID == nil {
-		shouldTriggerLlm = true
-	}
-
 	if shouldTriggerLlm {
 		handleLlmInteraction(event)
 		return
@@ -219,11 +222,6 @@ func OnMessageCreate(event *events.MessageCreate) {
 				AddFile("sigma-boy.mp4", "", bytes.NewReader(media.SigmaBoyMp4)).
 				Build(),
 		)
-		return
-	}
-
-	if event.GuildID == nil {
-		handleLlmInteraction(event)
 		return
 	}
 }

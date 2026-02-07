@@ -33,6 +33,14 @@ type TavernCardV1 struct {
 	AlternateGreetings []string `json:"alternate_greetings,omitempty"`
 }
 
+func (card TavernCardV1) AllGreetings() []string {
+	var greetings []string
+	if card.FirstMes != "" {
+		greetings = append(greetings, card.FirstMes)
+	}
+	return append(greetings, card.AlternateGreetings...)
+}
+
 // https://github.com/malfoyslastname/character-card-spec-v2
 type TavernCardV2 struct {
 	Spec        string        `json:"spec,omitempty"`

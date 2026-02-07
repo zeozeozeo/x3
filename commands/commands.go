@@ -15,6 +15,7 @@ var AllCommands []discord.ApplicationCommandCreate = []discord.ApplicationComman
 	WhitelistCommand,
 	LobotomyCommand,
 	PersonaCommand,
+	PersonaMakerCommand,
 	StatsCommand,
 	QuoteCommand,
 	RandomDMsCommand,
@@ -70,10 +71,11 @@ func RegisterHandlers(r handler.Router) error {
 	mux.Command("/random_dms", HandleRandomDMs)
 	mux.Command("/regenerate", HandleRegenerate)
 	mux.Command("/blacklist", HandleBlacklist)
+	mux.Command("/personamaker", HandlePersonaNew)
+	r.ButtonComponent("/personamaker/{id}", HandlePersonaNewSetButton)
 
 	// /quote
 	mux.Route("/quote", func(r handler.Router) {
-		r.Use()
 		r.Autocomplete("/get", HandleQuoteGetAutocomplete)
 		r.Command("/get", HandleQuoteGet)
 		r.Command("/random", HandleQuoteRandom)

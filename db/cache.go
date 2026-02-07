@@ -19,6 +19,12 @@ const (
 	DefaultContextMessages = 60
 )
 
+type PersonaNewFlow struct {
+	Card          persona.TavernCardV1 `json:"card"`
+	SettingWhat   string               `json:"setting_what,omitempty"`
+	FlowMessageID snowflake.ID         `json:"flow_message_id,omitempty"`
+}
+
 // ChannelCache holds per-channel settings and temporary state.
 type ChannelCache struct {
 	// Llmer is used for caching message history in channels where the bot cannot read messages (e.g., DMs).
@@ -46,7 +52,8 @@ type ChannelCache struct {
 	// Context is a list of user-defined context strings.
 	Context []string `json:"context,omitempty"`
 	// MessagesSinceSummary tracks the number of messages since the last summary update.
-	MessagesSinceSummary int `json:"messages_since_summary"`
+	MessagesSinceSummary int             `json:"messages_since_summary"`
+	PersonaNewFlow       *PersonaNewFlow `json:"persona_new_flow,omitempty"`
 }
 
 func (cache *ChannelCache) UpdateSummary(summary persona.Summary) {

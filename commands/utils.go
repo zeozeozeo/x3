@@ -526,3 +526,27 @@ func ptr[T any](v T) *T {
 func isImageAttachment(attachment discord.Attachment) bool {
 	return attachment.ContentType != nil && strings.HasPrefix(*attachment.ContentType, "image/")
 }
+
+func purgeBotMessagesAfter(client bot.Client, messageID, channelID snowflake.ID, inclusive bool) error {
+	messages, err := client.Rest().GetMessages(channelID, 0, 0, messageID, 100)
+	if err != nil {
+		return err
+	}
+	ids := make([]snowflake.ID, 0, len(messages)/2)
+	for _, msg := range messages {
+		if msg.Author.Bot {
+			ids = append(ids, msg.ID)
+		}
+	}
+	if inclusive {
+		ids = append(ids, messageID)
+	}
+
+	if len(ids) >= 2 {
+		return client.Rest().BulkDeleteMessages(channelID, ids)
+	} else if len(ids) == 1 {
+		return client.Rest().DeleteMessage(channelID, ids[0])
+	}
+
+	return nil
+}
