@@ -323,7 +323,7 @@ func HandlePersona(event *handler.CommandEvent) error {
 			return updateInteractionError(event, "character card is too large (max 10MB)")
 		}
 
-		card, err := cache.PersonaMeta.ApplyChara(body, event.User().EffectiveName())
+		card, err := cache.PersonaMeta.ApplyChara(body, event.User().EffectiveName(), cache.Context)
 		if err != nil {
 			slog.Error("failed to apply character card", "err", err)
 			return updateInteractionError(event, err.Error())
