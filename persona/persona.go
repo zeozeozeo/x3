@@ -64,7 +64,7 @@ x3 is allowed to generate images. When a user explicitly asks you to generate an
 {{ end }}
 
 {{ if .Context }}
-**Additional Context:**
+**Additional instructions for x3's behavior:**
 {{ range .Context }}
 - {{ . }}
 {{ end }}
@@ -108,7 +108,7 @@ Personality:
 {{ end }}
 
 {{ if .Context }}
-**Context:**
+**Additional instructions for Yapper's behavior:**
 {{ range .Context }}
 - {{ . }}
 {{ end }}

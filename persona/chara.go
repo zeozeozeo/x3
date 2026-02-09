@@ -146,13 +146,20 @@ var (
 {{ .Examples }}
 """{{ end }}
 
+{{ if .Context }}
+**Additional instructions for the character's behavior:**
+{{ range .Context }}
+- {{ . }}
+{{ end }}
+
+{{ end }}
 Write {{ .Char }}'s next replies in a fictional chat between {{ .Char }} and {{ .User }}.`))
 
 	errCharaExifNotFound = errors.New("character card not found in image exif")
 )
 
 // Apply json character card
-func (meta *PersonaMeta) ApplyJsonChara(data []byte, user string) (TavernCardV2, error) {
+func (meta *PersonaMeta) ApplyJsonChara(data []byte, user string, context []string) (TavernCardV2, error) {
 	slog.Debug("ApplyChara: chara", slog.Int("len", len(data)))
 
 	var card TavernCardV2
@@ -182,6 +189,7 @@ func (meta *PersonaMeta) ApplyJsonChara(data []byte, user string) (TavernCardV2,
 		Personality string
 		Scenario    string
 		Examples    string
+		Context     []string
 	}{
 		Char:        card.Data.Name,
 		User:        user,
@@ -189,6 +197,7 @@ func (meta *PersonaMeta) ApplyJsonChara(data []byte, user string) (TavernCardV2,
 		Personality: card.formatField(card.Data.Personality, user),
 		Scenario:    card.formatField(card.Data.Scenario, user),
 		Examples:    card.formatExamples(user),
+		Context:     context,
 	})
 	if err != nil {
 		return card, err
@@ -232,9 +241,9 @@ func writeTempFile(data []byte) (string, error) {
 	return filepath, nil
 }
 
-func (meta *PersonaMeta) ApplyChara(data []byte, user string) (TavernCardV2, error) {
+func (meta *PersonaMeta) ApplyChara(data []byte, user string, context []string) (TavernCardV2, error) {
 	// try json first
-	card, err := meta.ApplyJsonChara(data, user)
+	card, err := meta.ApplyJsonChara(data, user, context)
 	if err == nil {
 		return card, nil
 	}
@@ -266,7 +275,7 @@ func (meta *PersonaMeta) ApplyChara(data []byte, user string) (TavernCardV2, err
 				return card, err
 			}
 
-			card, err = meta.ApplyJsonChara(decodedData, user)
+			card, err = meta.ApplyJsonChara(decodedData, user, context)
 			return card, err
 		}
 	}
