@@ -157,6 +157,14 @@ func sendOrReplyWithFlowEmbed(event *handler.CommandEvent, channelID snowflake.I
 		dynamicButton("Tags", "/personamaker/settags", len(flow.Card.Tags)),
 		discord.ButtonComponent{
 			Style: discord.ButtonStyleSecondary,
+			Label: "Done",
+			Emoji: &discord.ComponentEmoji{
+				Name: "✅",
+			},
+			CustomID: "/personamaker/done",
+		},
+		discord.ButtonComponent{
+			Style: discord.ButtonStyleSecondary,
 			Label: "Cancel",
 			Emoji: &discord.ComponentEmoji{
 				Name: "❌",
@@ -186,6 +194,9 @@ func HandlePersonaNew(event *handler.CommandEvent) error {
 	}
 
 	cache := db.GetChannelCache(event.Channel().ID())
+	if cache.PersonaNewFlow != nil && cache.PersonaNewFlow.FlowMessageID != 0 {
+		event.Client().Rest().DeleteMessage(event.Channel().ID(), cache.PersonaNewFlow.FlowMessageID)
+	}
 	cache.PersonaNewFlow = &db.PersonaNewFlow{}
 	cache.Write(event.Channel().ID())
 
@@ -206,6 +217,23 @@ func HandlePersonaNewSetButton(data discord.ButtonInteractionData, event *handle
 			return err
 		}
 		return event.Client().Rest().DeleteMessage(event.Channel().ID(), event.Message.ID)
+	}
+
+	if customID == "done" {
+		if cache.PersonaNewFlow == nil {
+			return sendInteractionErrorComponent(event, "Persona maker not running", true)
+		}
+		var missingFields []string
+		if cache.PersonaNewFlow.Card.Name == "" {
+			missingFields = append(missingFields, "Name")
+		}
+		if cache.PersonaNewFlow.Card.Personality == "" {
+			missingFields = append(missingFields, "Personality")
+		}
+		if len(missingFields) > 0 {
+			return sendInteractionErrorComponent(event, fmt.Sprintf("Missing required fields: %s", strings.Join(missingFields, ", ")), true)
+		}
+		return purgeBotMessagesAfter(event.Client(), cache.PersonaNewFlow.FlowMessageID, event.Channel().ID(), true /* inclusive */, true)
 	}
 
 	if cache.PersonaNewFlow == nil {
@@ -307,7 +335,7 @@ func maybeHandlePersonaNewFlowMessage(event *events.MessageCreate) bool {
 
 	flow.SettingWhat = ""
 
-	if err := purgeBotMessagesAfter(event.Client(), flow.FlowMessageID, event.ChannelID, true /* inclusive */); err != nil {
+	if err := purgeBotMessagesAfter(event.Client(), flow.FlowMessageID, event.ChannelID, true /* inclusive */, true); err != nil {
 		slog.Error("purgeBotMessagesAfter failed", "err", err)
 	}
 

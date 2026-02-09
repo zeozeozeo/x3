@@ -2,6 +2,7 @@ package commands
 
 import (
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -28,6 +29,26 @@ const (
 
 // sendInteractionError sends a formatted error message as a response to a command event
 func sendInteractionError(event *handler.CommandEvent, msg string, ephemeral bool) error {
+	return event.CreateMessage(
+		discord.NewMessageCreateBuilder().
+			SetAllowedMentions(&discord.AllowedMentions{
+				RepliedUser: false,
+			}).
+			SetEphemeral(ephemeral).
+			AddEmbeds(
+				discord.NewEmbedBuilder().
+					SetColor(0xf54242).
+					SetTitle("❌ Error").
+					SetFooter("x3", x3ErrorIcon).
+					SetTimestamp(time.Now()).
+					SetDescription(toTitle(msg)).
+					Build(),
+			).
+			Build(),
+	)
+}
+
+func sendInteractionErrorComponent(event *handler.ComponentEvent, msg string, ephemeral bool) error {
 	return event.CreateMessage(
 		discord.NewMessageCreateBuilder().
 			SetAllowedMentions(&discord.AllowedMentions{
@@ -527,7 +548,10 @@ func isImageAttachment(attachment discord.Attachment) bool {
 	return attachment.ContentType != nil && strings.HasPrefix(*attachment.ContentType, "image/")
 }
 
-func purgeBotMessagesAfter(client bot.Client, messageID, channelID snowflake.ID, inclusive bool) error {
+func purgeBotMessagesAfter(client bot.Client, messageID, channelID snowflake.ID, inclusive, inDM bool) error {
+	if messageID == 0 {
+		return errors.New("message ID cannot be zero")
+	}
 	messages, err := client.Rest().GetMessages(channelID, 0, 0, messageID, 100)
 	if err != nil {
 		return err
@@ -542,10 +566,21 @@ func purgeBotMessagesAfter(client bot.Client, messageID, channelID snowflake.ID,
 		ids = append(ids, messageID)
 	}
 
-	if len(ids) >= 2 {
-		return client.Rest().BulkDeleteMessages(channelID, ids)
-	} else if len(ids) == 1 {
-		return client.Rest().DeleteMessage(channelID, ids[0])
+	slog.Debug("purgeBotMessagesAfter:", "ids", ids)
+
+	if !inDM {
+		if len(ids) >= 2 {
+			return client.Rest().BulkDeleteMessages(channelID, ids)
+		} else if len(ids) == 1 {
+			return client.Rest().DeleteMessage(channelID, ids[0])
+		}
+	} else {
+		for _, id := range ids {
+			err := client.Rest().DeleteMessage(channelID, id)
+			if err != nil {
+				return err
+			}
+		}
 	}
 
 	return nil

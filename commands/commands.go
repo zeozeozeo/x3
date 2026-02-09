@@ -15,7 +15,7 @@ var AllCommands []discord.ApplicationCommandCreate = []discord.ApplicationComman
 	WhitelistCommand,
 	LobotomyCommand,
 	PersonaCommand,
-	PersonaMakerCommand,
+	//PersonaMakerCommand,
 	StatsCommand,
 	QuoteCommand,
 	RandomDMsCommand,
