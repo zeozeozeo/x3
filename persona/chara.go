@@ -146,13 +146,6 @@ var (
 {{ .Examples }}
 """{{ end }}
 
-{{ if .Context }}
-**Additional instructions for the character's behavior:**
-{{ range .Context }}
-- {{ . }}
-{{ end }}
-
-{{ end }}
 Write {{ .Char }}'s next replies in a fictional chat between {{ .Char }} and {{ .User }}.`))
 
 	errCharaExifNotFound = errors.New("character card not found in image exif")

@@ -89,7 +89,20 @@ func RegisterHandlers(r handler.Router) error {
 	mux.ButtonComponent("/cancel/{id}", HandleGenerateCancel)
 
 	mux.Command("/impersonate", HandleImpersonate)
-	mux.Command("/context", handleContext)
+	
+	// /context
+	mux.Route("/context", func(r handler.Router) {
+		r.Command("/add", handleContext)
+		r.Command("/clear", handleContext)
+		r.Command("/list", handleContext)
+		r.Autocomplete("/delete", handleContextAutocomplete)
+		r.Command("/delete", handleContext)
+		r.Autocomplete("/edit", handleContextAutocomplete)
+		r.Command("/edit", handleContext)
+		r.Autocomplete("/get", handleContextAutocomplete)
+		r.Command("/get", handleContext)
+	})
+	
 	mux.Command("/antiscam", HandleAntiscam)
 
 	// image commands

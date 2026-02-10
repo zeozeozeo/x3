@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"log/slog"
 	"math/rand"
-	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -14,7 +13,6 @@ import (
 	"github.com/disgoorg/disgo/events"
 	"github.com/disgoorg/disgo/handler"
 	"github.com/disgoorg/snowflake/v2"
-	"github.com/lithammer/fuzzysearch/fuzzy"
 	"github.com/zeozeozeo/x3/db"
 )
 
@@ -166,32 +164,12 @@ func HandleQuoteGetAutocomplete(event *handler.AutocompleteEvent) error {
 		return event.AutocompleteResult(nil)
 	}
 
-	name := event.Data.String("name")
-	slog.Debug("handling quote autocomplete", slog.String("name", name), slog.String("server_id", serverID.String()))
-
-	var names []string
-	for i, quote := range server.Quotes {
-		// include both text and author for better searchability
-		names = append(names, fmt.Sprintf("#%d %s by %s", i+1, quote.Text, quote.AuthorUser))
-	}
-
-	matches := fuzzy.RankFindNormalizedFold(name, names)
-	sort.Sort(matches)
-
-	var choices []discord.AutocompleteChoice
-	for _, match := range matches {
-		if len(choices) >= 25 {
-			break
-		}
-		quote := server.Quotes[match.OriginalIndex]
-		res := fmt.Sprintf("#%d: %s (%s)", match.OriginalIndex+1, quote.Text, quote.AuthorUser)
-		choices = append(choices, discord.AutocompleteChoiceString{
-			Name:  ellipsisTrim(res, 100),                   // trim for discord's limit
-			Value: fmt.Sprintf("%d", match.OriginalIndex+1), // 1-based index
-		})
-	}
-
-	return event.AutocompleteResult(choices)
+	return HandleGenericAutocomplete(event, "name", server.Quotes, func(item any, index int) (string, string) {
+		quote := item.(db.Quote)
+		name := fmt.Sprintf("#%d: %s (%s)", index+1, quote.Text, quote.AuthorUser)
+		value := fmt.Sprintf("%d", index+1) // 1-based index
+		return name, value
+	})
 }
 
 // HandleQuoteGet handles the /quote get subcommand.

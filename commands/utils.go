@@ -9,6 +9,8 @@ import (
 	"net/http"
 	"net/url"
 	"path/filepath"
+	"reflect"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -19,6 +21,7 @@ import (
 	"github.com/disgoorg/disgo/discord"
 	"github.com/disgoorg/disgo/handler"
 	"github.com/disgoorg/snowflake/v2"
+	"github.com/lithammer/fuzzysearch/fuzzy"
 )
 
 const (
@@ -26,6 +29,75 @@ const (
 	x3ErrorIcon         = "https://i.imgur.com/hCF06SC.png"
 	interactionReminder = "\n-# if you wish to disable this, use `/random_dms enable: false`"
 )
+
+type AutocompleteItemFormatter func(item any, index int) (name string, value string)
+
+func HandleGenericAutocomplete(
+	event *handler.AutocompleteEvent,
+	optionName string,
+	items any,
+	formatter AutocompleteItemFormatter,
+) error {
+	query := event.Data.String(optionName)
+
+	var searchStrings []string
+	var itemCount int
+
+	switch v := items.(type) {
+	case []string:
+		searchStrings = v
+		itemCount = len(v)
+		if formatter == nil {
+			formatter = func(item any, index int) (string, string) {
+				return fmt.Sprintf("#%d %s", index+1, item.(string)), fmt.Sprintf("%d", index+1)
+			}
+		}
+	default:
+		if formatter == nil {
+			return event.AutocompleteResult(nil)
+		}
+		val := reflect.ValueOf(items)
+		if val.Kind() != reflect.Slice {
+			return event.AutocompleteResult(nil)
+		}
+		itemCount = val.Len()
+		searchStrings = make([]string, itemCount)
+		for i := range itemCount {
+			name, _ := formatter(val.Index(i).Interface(), i)
+			searchStrings[i] = name
+		}
+	}
+
+	if itemCount == 0 {
+		return event.AutocompleteResult(nil)
+	}
+
+	matches := fuzzy.RankFindNormalizedFold(query, searchStrings)
+	sort.Sort(matches)
+
+	var choices []discord.AutocompleteChoice
+	for _, match := range matches {
+		if len(choices) >= 25 {
+			break
+		}
+
+		var name, value string
+		switch v := items.(type) {
+		case []string:
+			name, value = formatter(v[match.OriginalIndex], match.OriginalIndex)
+		default:
+			val := reflect.ValueOf(items)
+			name, value = formatter(val.Index(match.OriginalIndex).Interface(), match.OriginalIndex)
+		}
+
+		choices = append(choices, discord.AutocompleteChoiceString{
+			Name:  ellipsisTrim(name, 100),
+			Value: value,
+		})
+	}
+
+	return event.AutocompleteResult(choices)
+}
 
 // sendInteractionError sends a formatted error message as a response to a command event
 func sendInteractionError(event *handler.CommandEvent, msg string, ephemeral bool) error {

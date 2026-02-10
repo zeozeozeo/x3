@@ -4,13 +4,11 @@ import (
 	"bytes"
 	"fmt"
 	"log/slog"
-	"sort"
 	"strings"
 	"time"
 
 	"github.com/disgoorg/disgo/discord"
 	"github.com/disgoorg/disgo/handler"
-	"github.com/lithammer/fuzzysearch/fuzzy"
 	"github.com/zeozeozeo/x3/db"
 	"github.com/zeozeozeo/x3/horder"
 	"github.com/zeozeozeo/x3/llm"
@@ -427,44 +425,15 @@ func HandleGenerateCancel(data discord.ButtonInteractionData, event *handler.Com
 }
 
 func HandleGenerateModelAutocomplete(event *handler.AutocompleteEvent) error {
-	dataModel := event.Data.String("model")
-
 	scoredModels := horder.GetHorder().ScoreModels()
-	models := make([]string, 0, len(scoredModels))
-	for _, m := range scoredModels {
+
+	return HandleGenericAutocomplete(event, "model", scoredModels, func(item any, index int) (string, string) {
+		m := item.(horder.ScoredModel)
 		name := m.String()
 		if m.Detail.Description != "" {
 			name += ": " + m.Detail.Description
 		}
-		models = append(models, name)
-	}
-
-	var matches fuzzy.Ranks
-	if dataModel != "" {
-		matches = fuzzy.RankFindNormalizedFold(dataModel, models)
-		sort.Sort(matches)
-	} else {
-		// fake it to keep the order
-		matches = fuzzy.Ranks{}
-		for i, m := range models {
-			matches = append(matches, fuzzy.Rank{
-				Source:        "",
-				Target:        m,
-				OriginalIndex: i,
-			})
-		}
-	}
-
-	var choices []discord.AutocompleteChoice
-	for _, match := range matches {
-		if len(choices) >= 25 {
-			break
-		}
-		choices = append(choices, discord.AutocompleteChoiceString{
-			Name:  ellipsisTrim(match.Target, 100),
-			Value: scoredModels[match.OriginalIndex].Model.Name,
-		})
-	}
-
-	return event.AutocompleteResult(choices)
+		value := m.Model.Name
+		return name, value
+	})
 }

@@ -7,7 +7,6 @@ import (
 	"net/http"
 	"path"
 	"reflect"
-	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -15,7 +14,6 @@ import (
 
 	"github.com/disgoorg/disgo/discord"
 	"github.com/disgoorg/disgo/handler"
-	"github.com/lithammer/fuzzysearch/fuzzy"
 	"github.com/zeozeozeo/x3/db"
 	"github.com/zeozeozeo/x3/model"
 	"github.com/zeozeozeo/x3/persona"
@@ -460,43 +458,19 @@ func HandlePersona(event *handler.CommandEvent) error {
 
 // HandlePersonaModelAutocomplete handles the autocomplete for the model option in the /persona command.
 func HandlePersonaModelAutocomplete(event *handler.AutocompleteEvent) error {
-	dataModel := event.Data.String("model")
-
-	models := []string{}
+	var availableModels []model.Model
 	inWhitelist := db.IsInWhitelist(event.User().ID)
 	for _, m := range model.AllModels {
 		if m.Whitelisted && !inWhitelist {
 			continue
 		}
-		models = append(models, formatModel(m))
+		availableModels = append(availableModels, m)
 	}
 
-	var matches fuzzy.Ranks
-	if dataModel != "" {
-		matches = fuzzy.RankFindNormalizedFold(dataModel, models)
-		sort.Sort(matches)
-	} else {
-		// fake it to keep the order
-		matches = fuzzy.Ranks{}
-		for i, m := range models {
-			matches = append(matches, fuzzy.Rank{
-				Source:        "",
-				Target:        m,
-				OriginalIndex: i,
-			})
-		}
-	}
-
-	var choices []discord.AutocompleteChoice
-	for _, match := range matches {
-		if len(choices) >= 25 {
-			break
-		}
-		choices = append(choices, discord.AutocompleteChoiceString{
-			Name:  ellipsisTrim(match.Target, 100),
-			Value: model.AllModels[match.OriginalIndex].Name,
-		})
-	}
-
-	return event.AutocompleteResult(choices)
+	return HandleGenericAutocomplete(event, "model", availableModels, func(item any, index int) (string, string) {
+		m := item.(model.Model)
+		name := formatModel(m)
+		value := m.Name
+		return name, value
+	})
 }
