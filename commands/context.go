@@ -9,7 +9,7 @@ import (
 	"github.com/zeozeozeo/x3/db"
 )
 
-var contextCommand = discord.SlashCommandCreate{
+var ContextCommand = discord.SlashCommandCreate{
 	Name:        "context",
 	Description: "Manage user-defined context for this channel",
 	Options: []discord.ApplicationCommandOption{

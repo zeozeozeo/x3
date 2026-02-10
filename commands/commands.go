@@ -24,7 +24,7 @@ var AllCommands []discord.ApplicationCommandCreate = []discord.ApplicationComman
 	ChatCommand, // generic /chat command
 	GenerateCommand,
 	ImpersonateCommand,
-	contextCommand,
+	ContextCommand,
 	AntiscamCommand,
 }
 
@@ -89,7 +89,7 @@ func RegisterHandlers(r handler.Router) error {
 	mux.ButtonComponent("/cancel/{id}", HandleGenerateCancel)
 
 	mux.Command("/impersonate", HandleImpersonate)
-	
+
 	// /context
 	mux.Route("/context", func(r handler.Router) {
 		r.Command("/add", handleContext)
@@ -102,7 +102,7 @@ func RegisterHandlers(r handler.Router) error {
 		r.Autocomplete("/get", handleContextAutocomplete)
 		r.Command("/get", handleContext)
 	})
-	
+
 	mux.Command("/antiscam", HandleAntiscam)
 
 	// image commands

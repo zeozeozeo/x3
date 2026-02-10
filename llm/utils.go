@@ -104,3 +104,16 @@ func getSearchResults(search string) (string, map[int]string) {
 
 	return sb.String(), citemap
 }
+
+func replaceEnd(s string, pairs ...string) string {
+	if len(pairs)%2 != 0 {
+		panic("ReplaceEnd: odd argument count")
+	}
+	for i := 0; i < len(pairs); i += 2 {
+		old, new := pairs[i], pairs[i+1]
+		if before, found := strings.CutSuffix(s, old); found {
+			return before + new
+		}
+	}
+	return s
+}

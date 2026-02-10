@@ -5,7 +5,6 @@ import (
 	"embed"
 	"errors"
 	"fmt"
-	"html"
 	"io"
 	"log/slog"
 	"strings"
@@ -490,10 +489,8 @@ func (l *Llmer) requestCompletionInternal2(
 	in := time.Since(firstTokenTime)
 	slog.Info("stream closed", "sinceFirst", in, "sinceStart", time.Since(completionStart), "tok/s", float64(usage.ResponseTokens)/in.Seconds())
 
-	// if the api provider is retarded enough to use HTML escapes like &lt; in a fucking API,
-	// strip the fuckers off
-	unescaped := html.UnescapeString(text.String())
-	unescaped = strings.TrimSpace(unescaped)
+	unescaped := strings.TrimSpace(text.String())
+	unescaped = replaceEnd(unescaped, ">w", ">w<", ">///", ">///<", ">.", ">.<")
 
 	if searchDepth < 4 {
 		if search := extractSearch(unescaped); search != "" {
