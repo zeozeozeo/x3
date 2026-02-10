@@ -414,7 +414,7 @@ func (l Llmer) estimateUsage(m model.Model) Usage {
 	return usage
 }
 
-var weirdEndRegexp = regexp.MustCompile(`(>[:\./\w]+)$`)
+var weirdEndRegexp = regexp.MustCompile(`(>[\./w]+)$`)
 
 func (l *Llmer) requestCompletionInternal2(
 	m model.Model,
