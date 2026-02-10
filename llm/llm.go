@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"regexp"
 	"strings"
 	"time"
 
@@ -413,6 +414,8 @@ func (l Llmer) estimateUsage(m model.Model) Usage {
 	return usage
 }
 
+var weirdEndRegexp = regexp.MustCompile(`(>[:\./\w]+)$`)
+
 func (l *Llmer) requestCompletionInternal2(
 	m model.Model,
 	codename,
@@ -490,7 +493,7 @@ func (l *Llmer) requestCompletionInternal2(
 	slog.Info("stream closed", "sinceFirst", in, "sinceStart", time.Since(completionStart), "tok/s", float64(usage.ResponseTokens)/in.Seconds())
 
 	unescaped := strings.TrimSpace(text.String())
-	unescaped = replaceEnd(unescaped, ">w", ">w<", ">///", ">///<", ">.", ">.<")
+	unescaped = weirdEndRegexp.ReplaceAllString(unescaped, "$1<")
 
 	if searchDepth < 4 {
 		if search := extractSearch(unescaped); search != "" {
