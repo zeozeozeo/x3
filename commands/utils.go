@@ -38,7 +38,7 @@ func HandleGenericAutocomplete(
 	items any,
 	formatter AutocompleteItemFormatter,
 ) error {
-	query := event.Data.String(optionName)
+	query := strings.TrimSpace(event.Data.String(optionName))
 
 	var searchStrings []string
 	var itemCount int
@@ -72,28 +72,47 @@ func HandleGenericAutocomplete(
 		return event.AutocompleteResult(nil)
 	}
 
-	matches := fuzzy.RankFindNormalizedFold(query, searchStrings)
-	sort.Sort(matches)
-
 	var choices []discord.AutocompleteChoice
-	for _, match := range matches {
-		if len(choices) >= 25 {
-			break
-		}
 
-		var name, value string
-		switch v := items.(type) {
-		case []string:
-			name, value = formatter(v[match.OriginalIndex], match.OriginalIndex)
-		default:
-			val := reflect.ValueOf(items)
-			name, value = formatter(val.Index(match.OriginalIndex).Interface(), match.OriginalIndex)
-		}
+	if query == "" {
+		for i := range min(itemCount, 25) {
+			var name, value string
+			switch v := items.(type) {
+			case []string:
+				name, value = formatter(v[i], i)
+			default:
+				val := reflect.ValueOf(items)
+				name, value = formatter(val.Index(i).Interface(), i)
+			}
 
-		choices = append(choices, discord.AutocompleteChoiceString{
-			Name:  ellipsisTrim(name, 100),
-			Value: value,
-		})
+			choices = append(choices, discord.AutocompleteChoiceString{
+				Name:  ellipsisTrim(name, 100),
+				Value: value,
+			})
+		}
+	} else {
+		matches := fuzzy.RankFindNormalizedFold(query, searchStrings)
+		sort.Sort(matches)
+
+		for _, match := range matches {
+			if len(choices) >= 25 {
+				break
+			}
+
+			var name, value string
+			switch v := items.(type) {
+			case []string:
+				name, value = formatter(v[match.OriginalIndex], match.OriginalIndex)
+			default:
+				val := reflect.ValueOf(items)
+				name, value = formatter(val.Index(match.OriginalIndex).Interface(), match.OriginalIndex)
+			}
+
+			choices = append(choices, discord.AutocompleteChoiceString{
+				Name:  ellipsisTrim(name, 100),
+				Value: value,
+			})
+		}
 	}
 
 	return event.AutocompleteResult(choices)
