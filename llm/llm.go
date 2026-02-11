@@ -5,6 +5,7 @@ import (
 	"embed"
 	"errors"
 	"fmt"
+	"html"
 	"io"
 	"log/slog"
 	"regexp"
@@ -492,7 +493,8 @@ func (l *Llmer) requestCompletionInternal2(
 	in := time.Since(firstTokenTime)
 	slog.Info("stream closed", "sinceFirst", in, "sinceStart", time.Since(completionStart), "tok/s", float64(usage.ResponseTokens)/in.Seconds())
 
-	unescaped := strings.TrimSpace(text.String())
+	unescaped := html.UnescapeString(text.String())
+	unescaped = strings.TrimSpace(unescaped)
 	unescaped = weirdEndRegexp.ReplaceAllString(unescaped, "$1<")
 
 	if searchDepth < 4 {
