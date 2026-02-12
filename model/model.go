@@ -63,6 +63,7 @@ const (
 	routewayBaseURL     = "https://api.routeway.ai/v1"
 	minimaxBaseURL      = "https://api.minimax.io/v1"
 	ollamaBaseURL       = "https://ollama.com/v1"
+	vercelBaseURL       = "https://ai-gateway.vercel.sh/v1"
 )
 
 const (
@@ -96,6 +97,7 @@ const (
 	ProviderRouteway     = "routeway"
 	ProviderMinimax      = "minimax"
 	ProviderOllama       = "ollama"
+	ProviderVercel       = "vercel"
 )
 
 type ModelProvider struct {
@@ -165,6 +167,7 @@ var (
 		{Name: ProviderNavy},
 		{Name: ProviderPerplexity},
 		{Name: ProviderMinimax},
+		{Name: ProviderVercel},
 		//{Name: ProviderG4F},
 	}
 
@@ -360,6 +363,8 @@ func (m Model) Client(provider string) (baseUrls []string, tokens []string, code
 		tokenEnvKey, apiVar = "X3_MINIMAX_TOKEN", minimaxBaseURL
 	case ProviderOllama:
 		tokenEnvKey, apiVar = "X3_OLLAMA_TOKEN", ollamaBaseURL
+	case ProviderVercel:
+		tokenEnvKey, apiVar = "X3_VERCEL_TOKEN", vercelBaseURL
 	default:
 		return nil, nil, nil
 	}
