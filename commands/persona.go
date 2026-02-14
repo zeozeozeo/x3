@@ -62,10 +62,10 @@ var PersonaCommand = discord.SlashCommandCreate{
 	},
 	Options: []discord.ApplicationCommandOption{
 		discord.ApplicationCommandOptionString{
-			Name:        "persona",
-			Description: "Choose a pre-made persona for this chat",
-			Choices:     makePersonaOptionChoices(),
-			Required:    false,
+			Name:         "persona",
+			Description:  "Choose a persona for this chat",
+			Autocomplete: true,
+			Required:     false,
 		},
 		discord.ApplicationCommandOptionString{
 			Name:        "system",
@@ -249,6 +249,35 @@ func HandlePersona(event *handler.CommandEvent) error {
 
 	personaMeta, err := persona.GetMetaByName(dataPersona)
 	if err != nil {
+		userCache := db.GetUserCache(event.User().ID)
+		var foundCustom *persona.TavernCardV1
+		for i := range userCache.Personas {
+			pName := userCache.Personas[i].PersonaName
+			if pName == "" {
+				pName = userCache.Personas[i].Name
+			}
+			if pName == dataPersona {
+				foundCustom = &userCache.Personas[i]
+				break
+			}
+		}
+		if foundCustom != nil {
+			personaName := foundCustom.PersonaName
+			if personaName == "" {
+				personaName = foundCustom.Name
+			}
+			cache.PersonaMeta = persona.PersonaMeta{
+				Name:          personaName,
+				TavernCard:    v1ToV2(*foundCustom),
+				Models:        persona.PersonaProto.Models,
+				Settings:      persona.PersonaProto.Settings,
+				NeedSummaries: true,
+			}
+			if err := cache.Write(event.Channel().ID()); err != nil {
+				return sendInteractionError(event, err.Error(), true)
+			}
+			return sendInteractionOk(event, "Persona set", fmt.Sprintf("Applied custom persona `%s` (character: `%s`)", personaName, foundCustom.Name), ephemeral)
+		}
 		slog.Warn("failed to get persona", "dataPersona", dataPersona, "err", err)
 		personaMeta = cache.PersonaMeta
 	}
@@ -470,6 +499,19 @@ func HandlePersona(event *handler.CommandEvent) error {
 	}
 }
 
+// HandlePersonaAutocomplete handles autocomplete for the /persona command (model and persona options).
+func HandlePersonaAutocomplete(event *handler.AutocompleteEvent) error {
+	focused := event.Data.Focused()
+	switch focused.Name {
+	case "model":
+		return HandlePersonaModelAutocomplete(event)
+	case "persona":
+		return HandlePersonaPersonaAutocomplete(event)
+	default:
+		return event.AutocompleteResult(nil)
+	}
+}
+
 // HandlePersonaModelAutocomplete handles the autocomplete for the model option in the /persona command.
 func HandlePersonaModelAutocomplete(event *handler.AutocompleteEvent) error {
 	var availableModels []model.Model
@@ -487,4 +529,44 @@ func HandlePersonaModelAutocomplete(event *handler.AutocompleteEvent) error {
 		value := m.Name
 		return name, value
 	})
+}
+
+// HandlePersonaPersonaAutocomplete handles the autocomplete for the persona option in the /persona command.
+func HandlePersonaPersonaAutocomplete(event *handler.AutocompleteEvent) error {
+	query := strings.TrimSpace(event.Data.String("persona"))
+
+	var choices []discord.AutocompleteChoice
+
+	for _, p := range persona.AllPersonas {
+		if len(choices) >= 25 {
+			break
+		}
+		name := p.String()
+		if query == "" || strings.Contains(strings.ToLower(name), strings.ToLower(query)) {
+			choices = append(choices, discord.AutocompleteChoiceString{
+				Name:  name,
+				Value: p.Name,
+			})
+		}
+	}
+
+	userCache := db.GetUserCache(event.User().ID)
+	for _, card := range userCache.Personas {
+		if len(choices) >= 25 {
+			break
+		}
+		displayName := card.PersonaName
+		if displayName == "" {
+			displayName = card.Name
+		}
+		name := displayName + " (Custom)"
+		if query == "" || strings.Contains(strings.ToLower(displayName), strings.ToLower(query)) {
+			choices = append(choices, discord.AutocompleteChoiceString{
+				Name:  name,
+				Value: displayName,
+			})
+		}
+	}
+
+	return event.AutocompleteResult(choices)
 }

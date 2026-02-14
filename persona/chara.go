@@ -24,6 +24,7 @@ import (
 
 type TavernCardV1 struct {
 	Name               string   `json:"name,omitempty"`
+	PersonaName        string   `json:"persona_name,omitempty"` // Unique identifier for user's custom personas (not used in templates)
 	Description        string   `json:"description,omitempty"`
 	Personality        string   `json:"personality,omitempty"`
 	FirstMes           string   `json:"first_mes,omitempty"`
@@ -75,39 +76,60 @@ type TavernCardV2 struct {
 	Data        *TavernCardV1 `json:"data"`
 }
 
-func (c TavernCardV2) formatField(field string, user string) string {
+func (c TavernCardV2) FormatField(field string, user string) string {
+	if c.Data == nil {
+		return field
+	}
+	charName := c.Data.Name
 	field = strings.NewReplacer(
 		"\r\n", "\n",
-		"{{char}}", c.Data.Name,
-		"{{bot}}", c.Data.Name, // bad
+		"{{char}}", charName,
+		"{{ char }}", charName,
+		"{{ char}}", charName,
+		"{{char }}", charName,
+		"{{bot}}", charName,
+		"{{ bot }}", charName,
+		"{{ bot}}", charName,
+		"{{bot }}", charName,
 		"{{user}}", user,
-		"(char)", c.Data.Name, // bad
-		"(bot)", c.Data.Name, // bad
-		"(user)", user, // bad
-		"<char>", c.Data.Name, // bad
-		"<bot>", c.Data.Name, // bad
-		"<user>", user, // bad
-		"[char]", c.Data.Name, // bad
-		"[bot]", c.Data.Name, // bad
-		"[user]", user, // bad
-		"{char}", c.Data.Name, // bad
-		"{bot}", c.Data.Name, // bad
-		"{user}", user, // bad
-		// all bad
-		"{{Char}}", c.Data.Name,
-		"{{Bot}}", c.Data.Name,
+		"{{ user }}", user,
+		"{{ user}}", user,
+		"{{user }}", user,
+		"(char)", charName,
+		"(bot)", charName,
+		"(user)", user,
+		"<char>", charName,
+		"<bot>", charName,
+		"<user>", user,
+		"[char]", charName,
+		"[bot]", charName,
+		"[user]", user,
+		"{char}", charName,
+		"{bot}", charName,
+		"{user}", user,
+		"{{Char}}", charName,
+		"{{ Char }}", charName,
+		"{{ Char}}", charName,
+		"{{Char }}", charName,
+		"{{Bot}}", charName,
+		"{{ Bot }}", charName,
+		"{{ Bot}}", charName,
+		"{{Bot }}", charName,
 		"{{User}}", user,
-		"(Char)", c.Data.Name,
-		"(Bot)", c.Data.Name,
+		"{{ User }}", user,
+		"{{ User}}", user,
+		"{{User }}", user,
+		"(Char)", charName,
+		"(Bot)", charName,
 		"(User)", user,
-		"<Char>", c.Data.Name,
-		"<Bot>", c.Data.Name,
+		"<Char>", charName,
+		"<Bot>", charName,
 		"<User>", user,
-		"[Char]", c.Data.Name,
-		"[Bot]", c.Data.Name,
+		"[Char]", charName,
+		"[Bot]", charName,
 		"[User]", user,
-		"{Char}", c.Data.Name,
-		"{Bot}", c.Data.Name,
+		"{Char}", charName,
+		"{Bot}", charName,
 		"{User}", user,
 	).Replace(field)
 	return field
@@ -147,7 +169,7 @@ func (c TavernCardV2) formatExamples(user string) string {
 	var sb strings.Builder
 	i := 0
 	for example := range strings.SplitSeq(c.Data.MesExample, "<START>") {
-		example = strings.TrimSpace(c.formatField(example, user))
+		example = strings.TrimSpace(c.FormatField(example, user))
 		if example == "" {
 			continue
 		}
@@ -211,9 +233,9 @@ func newCharaTemplateData(card *TavernCardV2, user string, summaries []Summary, 
 	return charaTemplateData{
 		Char:               card.Data.Name,
 		User:               user,
-		Description:        card.formatField(card.Data.Description, user),
-		Personality:        card.formatField(card.Data.Personality, user),
-		Scenario:           card.formatField(card.Data.Scenario, user),
+		Description:        card.FormatField(card.Data.Description, user),
+		Personality:        card.FormatField(card.Data.Personality, user),
+		Scenario:           card.FormatField(card.Data.Scenario, user),
 		Examples:           card.formatExamples(user),
 		Summaries:          summaries,
 		Context:            context,
@@ -266,7 +288,7 @@ func (meta *PersonaMeta) ApplyJsonChara(data []byte, user string, context []stri
 
 	firstMessagesArr := make([]string, 0, len(firstMessages))
 	for greeting := range firstMessages {
-		firstMessagesArr = append(firstMessagesArr, card.formatField(greeting, user))
+		firstMessagesArr = append(firstMessagesArr, card.FormatField(greeting, user))
 	}
 
 	meta.Name = "<character card>"

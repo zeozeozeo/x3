@@ -7,6 +7,7 @@ import (
 	"sort"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/disgoorg/disgo/bot"
 	"github.com/disgoorg/disgo/discord"
@@ -14,24 +15,53 @@ import (
 	"github.com/disgoorg/disgo/handler"
 	"github.com/disgoorg/snowflake/v2"
 	"github.com/zeozeozeo/x3/db"
+	"github.com/zeozeozeo/x3/persona"
 )
 
 var PersonaMakerCommand = discord.SlashCommandCreate{
 	Name:        "personamaker",
-	Description: "Create a new persona (in DMs only)",
+	Description: "Create, edit, or delete custom personas (in DMs only)",
+	IntegrationTypes: []discord.ApplicationIntegrationType{
+		discord.ApplicationIntegrationTypeGuildInstall,
+		discord.ApplicationIntegrationTypeUserInstall,
+	},
+	Options: []discord.ApplicationCommandOption{
+		discord.ApplicationCommandOptionSubCommand{
+			Name:        "new",
+			Description: "Create a new custom persona",
+		},
+		discord.ApplicationCommandOptionSubCommand{
+			Name:        "edit",
+			Description: "Edit your current persona",
+		},
+		discord.ApplicationCommandOptionSubCommand{
+			Name:        "delete",
+			Description: "Delete a custom persona you created",
+			Options: []discord.ApplicationCommandOption{
+				discord.ApplicationCommandOptionString{
+					Name:         "name",
+					Description:  "Name of the persona to delete",
+					Required:     true,
+					Autocomplete: true,
+				},
+			},
+		},
+	},
 }
 
 func formatCardField(s string) string {
 	if s == "" {
 		return "`<unset>`"
 	}
+	s = strings.NewReplacer("{{user}}", "`{{user}}`", "{{char}}", "`{{char}}`").Replace(s)
 	return ellipsisTrim(s, 1024)
 }
 
 type SettingWhatId string
 
 const (
-	SettingName         SettingWhatId = "setname"
+	SettingPersonaName  SettingWhatId = "setpersonaname"
+	SettingCharName     SettingWhatId = "setcharname"
 	SettingPersonality  SettingWhatId = "setpersonality"
 	SettingScenario     SettingWhatId = "setscenario"
 	SettingCreatorNotes SettingWhatId = "setcreatornotes"
@@ -84,8 +114,11 @@ func formatRequired(s string, length int) string {
 
 func sendOrReplyWithFlowEmbed(event *handler.CommandEvent, channelID snowflake.ID, client bot.Client, flow *db.PersonaNewFlow) (snowflake.ID, error) {
 	requiredFieldsLeft := []string{}
+	if flow.Card.PersonaName == "" {
+		requiredFieldsLeft = append(requiredFieldsLeft, "Persona name (unique identifier for this persona)")
+	}
 	if flow.Card.Name == "" {
-		requiredFieldsLeft = append(requiredFieldsLeft, "Name (display name of your character)")
+		requiredFieldsLeft = append(requiredFieldsLeft, "Character name (the character's name, used in `{{char}}`)")
 	}
 	if flow.Card.Personality == "" {
 		requiredFieldsLeft = append(requiredFieldsLeft, "Personality (detailed description of your character)")
@@ -107,10 +140,14 @@ func sendOrReplyWithFlowEmbed(event *handler.CommandEvent, channelID snowflake.I
 
 	builder := discord.NewEmbedBuilder().
 		SetTitle("Persona maker").
-		SetDescriptionf("Suggestions:\n%s", adviceStr).
+		SetDescriptionf("Suggestions:\n%s\n\nUse `{{char}}` for character name and `{{user}}` for user name.", adviceStr).
 		AddFields(
 			discord.EmbedField{
-				Name:  "Name (required)",
+				Name:  "Persona name (required, unique)",
+				Value: formatCardField(flow.Card.PersonaName),
+			},
+			discord.EmbedField{
+				Name:  "Character name (required)",
 				Value: formatCardField(flow.Card.Name),
 			},
 			discord.EmbedField{
@@ -147,7 +184,8 @@ func sendOrReplyWithFlowEmbed(event *handler.CommandEvent, channelID snowflake.I
 	}
 
 	buttons := []discord.InteractiveComponent{
-		dynamicButton(formatRequired("Name", len(flow.Card.Name)), "/personamaker/setname", len(flow.Card.Name)),
+		dynamicButton(formatRequired("Persona name", len(flow.Card.PersonaName)), "/personamaker/setpersonaname", len(flow.Card.PersonaName)),
+		dynamicButton(formatRequired("Character name", len(flow.Card.Name)), "/personamaker/setcharname", len(flow.Card.Name)),
 		dynamicButton(formatRequired("Personality", len(flow.Card.Personality)), "/personamaker/setpersonality", len(flow.Card.Personality)),
 		dynamicButton("Scenario", "/personamaker/setscenario", len(flow.Card.Scenario)),
 		dynamicButton("System prompt", "/personamaker/setsystemprompt", len(flow.Card.SystemPrompt)),
@@ -188,11 +226,26 @@ func sendOrReplyWithFlowEmbed(event *handler.CommandEvent, channelID snowflake.I
 	return 0, event.CreateMessage(messageCreate)
 }
 
-func HandlePersonaNew(event *handler.CommandEvent) error {
+func HandlePersonaMaker(event *handler.CommandEvent) error {
 	if event.GuildID() != nil || event.Context() != discord.InteractionContextTypeBotDM {
 		return sendInteractionError(event, "Persona maker can only be used in a DM with me", true)
 	}
 
+	subcommand := *event.SlashCommandInteractionData().SubCommandName
+
+	switch subcommand {
+	case "new":
+		return handlePersonaMakerNew(event)
+	case "edit":
+		return handlePersonaMakerEdit(event)
+	case "delete":
+		return handlePersonaMakerDelete(event)
+	default:
+		return sendInteractionError(event, "Unknown subcommand", true)
+	}
+}
+
+func handlePersonaMakerNew(event *handler.CommandEvent) error {
 	cache := db.GetChannelCache(event.Channel().ID())
 	if cache.PersonaNewFlow != nil && cache.PersonaNewFlow.FlowMessageID != 0 {
 		event.Client().Rest().DeleteMessage(event.Channel().ID(), cache.PersonaNewFlow.FlowMessageID)
@@ -202,6 +255,109 @@ func HandlePersonaNew(event *handler.CommandEvent) error {
 
 	_, err := sendOrReplyWithFlowEmbed(event, 0, nil, cache.PersonaNewFlow)
 	return err
+}
+
+func handlePersonaMakerEdit(event *handler.CommandEvent) error {
+	cache := db.GetChannelCache(event.Channel().ID())
+	userID := event.User().ID
+
+	if cache.PersonaMeta.TavernCard != nil {
+		card := *cache.PersonaMeta.TavernCard.Data
+		card.PersonaName = cache.PersonaMeta.Name
+		cache.PersonaNewFlow = &db.PersonaNewFlow{
+			Card:          card,
+			EditingCardID: cache.PersonaMeta.Name,
+		}
+	} else if cache.PersonaMeta.System != "" {
+		cache.PersonaNewFlow = &db.PersonaNewFlow{
+			Card: persona.TavernCardV1{
+				PersonaName:  cache.PersonaMeta.Name,
+				Name:         cache.PersonaMeta.Name,
+				Personality:  cache.PersonaMeta.System,
+				SystemPrompt: cache.PersonaMeta.System,
+			},
+		}
+	} else {
+		userCache := db.GetUserCache(userID)
+		var foundCard *persona.TavernCardV1
+		for i := range userCache.Personas {
+			if userCache.Personas[i].PersonaName == cache.PersonaMeta.Name {
+				foundCard = &userCache.Personas[i]
+				break
+			}
+		}
+		if foundCard == nil {
+			return sendInteractionError(event, "No custom persona is currently active. Use `/personamaker new` to create one.", true)
+		}
+		cache.PersonaNewFlow = &db.PersonaNewFlow{
+			Card:          *foundCard,
+			EditingCardID: foundCard.PersonaName,
+		}
+	}
+
+	if cache.PersonaNewFlow.FlowMessageID != 0 {
+		event.Client().Rest().DeleteMessage(event.Channel().ID(), cache.PersonaNewFlow.FlowMessageID)
+	}
+	cache.Write(event.Channel().ID())
+
+	_, err := sendOrReplyWithFlowEmbed(event, 0, nil, cache.PersonaNewFlow)
+	return err
+}
+
+func handlePersonaMakerDelete(event *handler.CommandEvent) error {
+	name := event.SlashCommandInteractionData().String("name")
+	userID := event.User().ID
+	userCache := db.GetUserCache(userID)
+
+	foundIdx := -1
+	for i := range userCache.Personas {
+		if userCache.Personas[i].PersonaName == name {
+			foundIdx = i
+			break
+		}
+	}
+
+	if foundIdx == -1 {
+		return sendInteractionError(event, fmt.Sprintf("Persona `%s` not found in your custom personas.", name), true)
+	}
+
+	userCache.Personas = append(userCache.Personas[:foundIdx], userCache.Personas[foundIdx+1:]...)
+	if err := userCache.Write(userID); err != nil {
+		return sendInteractionError(event, "Failed to delete persona: "+err.Error(), true)
+	}
+
+	return sendInteractionOk(event, "Persona deleted", fmt.Sprintf("Deleted custom persona `%s`", name), false)
+}
+
+func HandlePersonaMakerDeleteAutocomplete(event *handler.AutocompleteEvent) error {
+	userID := event.User().ID
+	userCache := db.GetUserCache(userID)
+	return HandleGenericAutocomplete(event, "name", userCache.Personas, func(item any, index int) (string, string) {
+		card := item.(persona.TavernCardV1)
+		displayName := card.PersonaName
+		if displayName == "" {
+			displayName = card.Name
+		}
+		return displayName, displayName
+	})
+}
+
+func v1ToV2(card persona.TavernCardV1) *persona.TavernCardV2 {
+	return &persona.TavernCardV2{
+		Spec:        "chara_card_v2",
+		SpecVersion: "2.0",
+		Data: &persona.TavernCardV1{
+			Name:               card.Name,
+			Description:        card.Description,
+			Personality:        card.Personality,
+			Scenario:           card.Scenario,
+			FirstMes:           card.FirstMes,
+			AlternateGreetings: card.AlternateGreetings,
+			Tags:               card.Tags,
+			SystemPrompt:       card.SystemPrompt,
+			CreatorNotes:       card.CreatorNotes,
+		},
+	}
 }
 
 func HandlePersonaNewSetButton(data discord.ButtonInteractionData, event *handler.ComponentEvent) error {
@@ -224,8 +380,11 @@ func HandlePersonaNewSetButton(data discord.ButtonInteractionData, event *handle
 			return sendInteractionErrorComponent(event, "Persona maker not running", true)
 		}
 		var missingFields []string
+		if cache.PersonaNewFlow.Card.PersonaName == "" {
+			missingFields = append(missingFields, "Persona name")
+		}
 		if cache.PersonaNewFlow.Card.Name == "" {
-			missingFields = append(missingFields, "Name")
+			missingFields = append(missingFields, "Character name")
 		}
 		if cache.PersonaNewFlow.Card.Personality == "" {
 			missingFields = append(missingFields, "Personality")
@@ -233,7 +392,63 @@ func HandlePersonaNewSetButton(data discord.ButtonInteractionData, event *handle
 		if len(missingFields) > 0 {
 			return sendInteractionErrorComponent(event, fmt.Sprintf("Missing required fields: %s", strings.Join(missingFields, ", ")), true)
 		}
-		return purgeBotMessagesAfter(event.Client(), cache.PersonaNewFlow.FlowMessageID, event.Channel().ID(), true /* inclusive */, true)
+
+		userID := event.User().ID
+		userCache := db.GetUserCache(userID)
+
+		if cache.PersonaNewFlow.EditingCardID != "" {
+			for i := range userCache.Personas {
+				if userCache.Personas[i].PersonaName == cache.PersonaNewFlow.EditingCardID {
+					userCache.Personas = append(userCache.Personas[:i], userCache.Personas[i+1:]...)
+					break
+				}
+			}
+		}
+
+		for i := range userCache.Personas {
+			if userCache.Personas[i].PersonaName == cache.PersonaNewFlow.Card.PersonaName {
+				return sendInteractionErrorComponent(event, fmt.Sprintf("A persona named `%s` already exists. Choose a different persona name.", cache.PersonaNewFlow.Card.PersonaName), true)
+			}
+		}
+
+		userCache.Personas = append(userCache.Personas, cache.PersonaNewFlow.Card)
+		if err := userCache.Write(userID); err != nil {
+			return sendInteractionErrorComponent(event, "Failed to save persona: "+err.Error(), true)
+		}
+
+		personaName := cache.PersonaNewFlow.Card.PersonaName
+		cache.PersonaMeta = persona.PersonaMeta{
+			Name:          personaName,
+			TavernCard:    v1ToV2(cache.PersonaNewFlow.Card),
+			Models:        persona.PersonaProto.Models,
+			Settings:      persona.PersonaProto.Settings,
+			NeedSummaries: true,
+		}
+		flowMsgID := cache.PersonaNewFlow.FlowMessageID
+		cache.PersonaNewFlow = nil
+		if err := cache.Write(event.Channel().ID()); err != nil {
+			return sendInteractionErrorComponent(event, "Failed to apply persona: "+err.Error(), true)
+		}
+
+		if flowMsgID != 0 {
+			if err := purgeBotMessagesAfter(event.Client(), flowMsgID, event.Channel().ID(), true, true); err != nil {
+				slog.Error("purgeBotMessagesAfter failed", "err", err)
+			}
+		}
+
+		return event.CreateMessage(
+			discord.NewMessageCreateBuilder().
+				AddEmbeds(
+					discord.NewEmbedBuilder().
+						SetColor(0x0085ff).
+						SetTitle("Persona created").
+						SetDescriptionf("Created and applied custom persona `%s` (character: `%s`)\n\nUse `/persona persona:<name>` to apply the persona, `/personamaker delete name:<name>` to delete it. **This is only visible for you!**", personaName, cache.PersonaMeta.TavernCard.Data.Name).
+						SetFooter("x3", x3Icon).
+						SetTimestamp(time.Now()).
+						Build(),
+				).
+				Build(),
+		)
 	}
 
 	if cache.PersonaNewFlow == nil {
@@ -243,8 +458,11 @@ func HandlePersonaNewSetButton(data discord.ButtonInteractionData, event *handle
 	var settingWhat string
 	var field string
 	switch SettingWhatId(customID) {
-	case SettingName:
-		settingWhat = "name"
+	case SettingPersonaName:
+		settingWhat = "persona name (unique identifier)"
+		field = cache.PersonaNewFlow.Card.PersonaName
+	case SettingCharName:
+		settingWhat = "character name (used in {{char}})"
 		field = cache.PersonaNewFlow.Card.Name
 	case SettingPersonality:
 		settingWhat = "personality"
@@ -278,6 +496,14 @@ func HandlePersonaNewSetButton(data discord.ButtonInteractionData, event *handle
 		return err
 	}
 
+	var files []*discord.File
+	if utf8.RuneCountInString(field) > 1024 {
+		files = append(files, &discord.File{
+			Name:   "full.txt",
+			Reader: strings.NewReader(field),
+		})
+	}
+
 	return event.CreateMessage(
 		discord.NewMessageCreateBuilder().
 			SetAllowedMentions(&discord.AllowedMentions{
@@ -292,6 +518,7 @@ func HandlePersonaNewSetButton(data discord.ButtonInteractionData, event *handle
 					SetDescription(formatCardField(field)).
 					Build(),
 			).
+			AddFiles(files...).
 			Build(),
 	)
 }
@@ -309,7 +536,9 @@ func maybeHandlePersonaNewFlowMessage(event *events.MessageCreate) bool {
 	content := event.Message.Content
 	flow := cache.PersonaNewFlow
 	switch SettingWhatId(flow.SettingWhat) {
-	case SettingName:
+	case SettingPersonaName:
+		flow.Card.PersonaName = content
+	case SettingCharName:
 		flow.Card.Name = content
 	case SettingPersonality:
 		flow.Card.Personality = content
@@ -335,7 +564,7 @@ func maybeHandlePersonaNewFlowMessage(event *events.MessageCreate) bool {
 
 	flow.SettingWhat = ""
 
-	if err := purgeBotMessagesAfter(event.Client(), flow.FlowMessageID, event.ChannelID, true /* inclusive */, true); err != nil {
+	if err := purgeBotMessagesAfter(event.Client(), flow.FlowMessageID, event.ChannelID, true, true); err != nil {
 		slog.Error("purgeBotMessagesAfter failed", "err", err)
 	}
 

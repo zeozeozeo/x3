@@ -23,6 +23,7 @@ type PersonaNewFlow struct {
 	Card          persona.TavernCardV1 `json:"card"`
 	SettingWhat   string               `json:"setting_what,omitempty"`
 	FlowMessageID snowflake.ID         `json:"flow_message_id,omitempty"`
+	EditingCardID string               `json:"editing_card_id,omitempty"` // Name of the card being edited (for updates)
 }
 
 // ChannelCache holds per-channel settings and temporary state.
