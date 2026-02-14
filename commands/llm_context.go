@@ -36,7 +36,7 @@ func getLobotomyAmountFromMessage(msg discord.Message) int {
 
 func isLobotomyMessage(msg discord.Message) bool {
 	return msg.Interaction != nil &&
-		(msg.Interaction.Name == "lobotomy" || msg.Interaction.Name == "persona" || msg.Interaction.Name == "random_dms")
+		(msg.Interaction.Name == "lobotomy" || msg.Interaction.Name == "random_dms")
 }
 
 func formatMsg(msg, username string, reference *discord.Message) string {
