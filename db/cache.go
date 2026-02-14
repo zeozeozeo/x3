@@ -16,7 +16,7 @@ import (
 
 const (
 	// DefaultContextMessages is the default number of surrounding messages used for LLM context.
-	DefaultContextMessages = 60
+	DefaultContextMessages = 100
 )
 
 type PersonaNewFlow struct {
