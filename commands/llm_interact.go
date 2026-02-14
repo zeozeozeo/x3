@@ -301,7 +301,7 @@ func handleLlmInteraction2(
 
 	cache.MessagesSinceSummary++
 	if cache.MessagesSinceSummary >= 30 {
-		if !models[0].IsVeryDumb() {
+		if !models[0].IsVeryDumb() && cache.PersonaMeta.NeedSummaries {
 			// trigger summary generation
 			GetNarrator().QueueSummaryGeneration(channelID, *llmer)
 		}

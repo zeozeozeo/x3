@@ -510,6 +510,7 @@ type PersonaMeta struct {
 	ExcessiveSplit bool              `json:"excessive_split,omitempty"` // model produces too much <new_message> tags, punish it
 	ThinkingTraces bool              `json:"thinking_traces,omitempty"` // Whether reasoning.txt should be attached
 	Version        int               `json:"version,omitempty"`
+	NeedSummaries  bool              `json:"need_summaries,omitempty"` // Whether summaries should be generated
 }
 
 // this is kinda hacky, but this is just so i can update the default models
@@ -562,14 +563,16 @@ var (
 		Desc: "Use the default system prompt of a model",
 	}
 	PersonaProto = PersonaMeta{
-		Name:   "Protogen (Default)",
-		Desc:   "Freaking clanker",
-		Models: clone(model.DefaultModels),
+		Name:          "Protogen (Default)",
+		Desc:          "Freaking clanker",
+		Models:        clone(model.DefaultModels),
+		NeedSummaries: true,
 	}
 	PersonaYapper = PersonaMeta{
-		Name:   "Yapper",
-		Desc:   "Brainrotted blud",
-		Models: clone(model.DefaultModels),
+		Name:          "Yapper",
+		Desc:          "Brainrotted blud",
+		Models:        clone(model.DefaultModels),
+		NeedSummaries: true,
 	}
 	PersonaStableNarrator = PersonaMeta{
 		Name:   "Stable Narrator",
