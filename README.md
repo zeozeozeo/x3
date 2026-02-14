@@ -2,7 +2,7 @@
 
 Peak Intelligence
 
-A Discord utility bot with LLM intergration
+A Discord LLM roleplay and utility bot
 
 > [!NOTE]
 > This is not meant to be selfhosted, please add the bot instead: https://discord.com/oauth2/authorize?client_id=1307635432632094740
