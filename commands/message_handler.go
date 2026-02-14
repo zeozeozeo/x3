@@ -4,12 +4,13 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"time"
-
+	"io"
 	"log/slog"
+	"net/http"
 	"regexp"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/disgoorg/disgo/bot"
 	"github.com/disgoorg/disgo/discord"
@@ -26,6 +27,66 @@ var (
 	cdnLinkRegex                 = regexp.MustCompile(`https?://(?:cdn|media)\.discordapp\.com/[^\s]+\.(?:png|jpg|jpeg|webp)(?:\?[^\s]*)?`)
 	antiscamNotificationDebounce sync.Map // guildID -> time.Time
 )
+
+func handleCharacterCardImage(event *events.MessageCreate) bool {
+	if event.GuildID != nil {
+		return false
+	}
+	for _, attachment := range event.Message.Attachments {
+		if !strings.HasSuffix(strings.ToLower(attachment.Filename), ".card.png") {
+			continue
+		}
+		if attachment.ContentType == nil || !strings.HasPrefix(*attachment.ContentType, "image/") {
+			continue
+		}
+
+		slog.Debug("fetching character card from attachment", "url", attachment.URL)
+		resp, err := http.Get(attachment.URL)
+		if err != nil {
+			slog.Error("failed to fetch character card image", "err", err)
+			continue
+		}
+		defer resp.Body.Close()
+
+		const maxLimit = 10 * 1024 * 1024
+		if resp.ContentLength > maxLimit {
+			sendPrettyEmbed(event.Client(), event.ChannelID, "Character card too large", "The character card image exceeds 10MB limit.")
+			continue
+		}
+
+		lr := io.LimitReader(resp.Body, maxLimit+1)
+		body, err := io.ReadAll(lr)
+		if err != nil {
+			slog.Error("failed to read character card image", "err", err)
+			continue
+		}
+		if len(body) > maxLimit {
+			sendPrettyEmbed(event.Client(), event.ChannelID, "Character card too large", "The character card image exceeds 10MB limit.")
+			continue
+		}
+
+		cache := db.GetChannelCache(event.ChannelID)
+		card, err := cache.PersonaMeta.ApplyChara(body, event.Message.Author.EffectiveName(), cache.Context)
+		if err != nil {
+			slog.Error("failed to apply character card", "err", err)
+			sendPrettyEmbed(event.Client(), event.ChannelID, "Failed to apply character card", err.Error())
+			continue
+		}
+
+		if err := cache.Write(event.ChannelID); err != nil {
+			slog.Error("failed to write cache after applying chara card", "err", err)
+			continue
+		}
+
+		charName := "<character card>"
+		if card.Data != nil && card.Data.Name != "" {
+			charName = card.Data.Name
+		}
+		sendPrettyEmbedReply(event.Client(), event.ChannelID, event.MessageID, "Character card applied", fmt.Sprintf("Applied character card: **%s**\n\n**Note:** you likely want to run `/lobotomy` and/or `/context clear` to clear previous context", charName))
+		return true
+	}
+	return false
+}
 
 func handleLlmInteraction(event *events.MessageCreate) error {
 	ctx, cancel := context.WithCancel(context.Background())
@@ -138,6 +199,11 @@ func OnMessageCreate(event *events.MessageCreate) {
 			}
 			return
 		}
+	}
+
+	// auto-apply character cards from .card.png images in DMs
+	if handleCharacterCardImage(event) {
+		return
 	}
 
 	// trigger commands (e.g. "x3 say" "x3 quote"), available when blacklisted

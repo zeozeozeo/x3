@@ -171,7 +171,7 @@ func sendInteractionOk(event *handler.CommandEvent, title, msg string, ephemeral
 					SetColor(0x0085ff).
 					SetTitle(title).
 					SetFooter("x3", x3Icon).
-					SetDescription(msg).
+					SetDescription(ellipsisTrim(msg, 1024)).
 					Build(),
 			).
 			Build(),
@@ -204,7 +204,27 @@ func sendPrettyEmbed(client bot.Client, channelID snowflake.ID, title, text stri
 				discord.NewEmbedBuilder().
 					SetColor(0xFFD700).
 					SetTitle(title).
-					SetDescription(text).
+					SetDescription(ellipsisTrim(text, 1024)).
+					SetFooter("x3", x3Icon).
+					SetTimestamp(time.Now()).
+					Build(),
+			).
+			Build(),
+	)
+	return err
+}
+
+func sendPrettyEmbedReply(client bot.Client, channelID snowflake.ID, replyMessageID snowflake.ID, title, text string) error {
+	_, err := client.Rest().CreateMessage(
+		channelID,
+		discord.NewMessageCreateBuilder().
+			SetMessageReferenceByID(replyMessageID).
+			SetAllowedMentions(&discord.AllowedMentions{RepliedUser: false}).
+			AddEmbeds(
+				discord.NewEmbedBuilder().
+					SetColor(0xFFD700).
+					SetTitle(title).
+					SetDescription(ellipsisTrim(text, 1024)).
 					SetFooter("x3", x3Icon).
 					SetTimestamp(time.Now()).
 					Build(),

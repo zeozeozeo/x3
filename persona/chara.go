@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"html"
 	"html/template"
 	"log/slog"
 	"os"
@@ -232,7 +233,7 @@ func BuildCharaSystemPrompt(card *TavernCardV2, user string, summaries []Summary
 		slog.Error("BuildCharaSystemPrompt: template execution failed", "err", err)
 		return ""
 	}
-	return b.String()
+	return html.UnescapeString(b.String())
 }
 
 func (meta *PersonaMeta) ApplyJsonChara(data []byte, user string, context []string) (TavernCardV2, error) {
