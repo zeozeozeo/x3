@@ -26,6 +26,9 @@ A Discord LLM roleplay and utility bot
 - Extensive LLM model selection (GLM-5, Minimax, DeepSeek V3.2, GPT-5, Llama, Kimi K2.5, etcetc)
 - Supports vision models
 - Subpar $\LaTeX$ rendering
+- Websearch (grounding)
+- `/antiscam` to patch up Discord's incompetent spammer problem (if you're a mod)
+- Automatically preserves longer context history by summarizing previous messages
 - Free and Discord based, [add it](https://discord.com/oauth2/authorize?client_id=1307635432632094740)
 
 ## Run in Docker (or Podman)
