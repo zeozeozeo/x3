@@ -180,9 +180,17 @@ func handlePersonaInfo(event *handler.CommandEvent, ephemeral bool) error {
 	}
 
 	var files []*discord.File
-	if cache.PersonaMeta.System != "" {
+	if cache.PersonaMeta.TavernCard != nil {
+		systemPrompt := persona.BuildCharaSystemPrompt(cache.PersonaMeta.TavernCard, "user", cache.Summaries, cache.Context, db.GetInteractionTime(event.User().ID))
+		builder.AddField("System prompt", ellipsisTrim(systemPrompt, 1024), false)
+		if utf8.RuneCountInString(systemPrompt) > 1024 {
+			files = append(files, &discord.File{
+				Name:   "system-prompt-full.txt",
+				Reader: strings.NewReader(systemPrompt),
+			})
+		}
+	} else if cache.PersonaMeta.System != "" {
 		builder.AddField("System prompt", ellipsisTrim(cache.PersonaMeta.System, 1024), false)
-		// if the system prompt is > 1024 chars, attach it as a file
 		if utf8.RuneCountInString(cache.PersonaMeta.System) > 1024 {
 			files = append(files, &discord.File{
 				Name:   "system-prompt-full.txt",
@@ -247,15 +255,14 @@ func HandlePersona(event *handler.CommandEvent) error {
 	slog.Info("persona meta models", "dataPersona", dataPersona, "models", personaMeta.Models)
 
 	// update persona meta in channel cache
-	prevMeta := cache.PersonaMeta
-	if prevMeta.System == "" {
-		prevMeta.System = persona.GetPersonaByMeta(cache.PersonaMeta, cache.Summaries, "", event.Channel().Type() == discord.ChannelTypeDM, db.GetInteractionTime(event.User().ID), cache.Context).System
-	}
+	prevMeta := cache.PersonaMeta.DeepCopy()
 	if dataPersona != "" {
 		cache.PersonaMeta = personaMeta
+		cache.PersonaMeta.TavernCard = nil
 	}
 	if dataSystem != "" {
 		cache.PersonaMeta.System = strings.ReplaceAll(dataSystem, "\\n", "\n") // let user input newlines
+		cache.PersonaMeta.TavernCard = nil
 	}
 	if dataModel != "" {
 		cache.PersonaMeta.Models = []string{dataModel}
@@ -366,6 +373,13 @@ func HandlePersona(event *handler.CommandEvent) error {
 	}
 	if cache.PersonaMeta.System != prevMeta.System && cache.PersonaMeta.System != "" {
 		didWhat = append(didWhat, "updated the system prompt")
+	}
+	if cache.PersonaMeta.TavernCard != nil && prevMeta.TavernCard == nil {
+		didWhat = append(didWhat, "loaded character card")
+	} else if cache.PersonaMeta.TavernCard == nil && prevMeta.TavernCard != nil {
+		didWhat = append(didWhat, "unloaded character card")
+	} else if cache.PersonaMeta.TavernCard != nil && prevMeta.TavernCard != nil && cache.PersonaMeta.TavernCard.Data.Name != prevMeta.TavernCard.Data.Name {
+		didWhat = append(didWhat, fmt.Sprintf("switched character card to `%s`", cache.PersonaMeta.TavernCard.Data.Name))
 	}
 	if cache.ContextLength != prevContextLen {
 		didWhat = append(didWhat, fmt.Sprintf("updated context length %d → %d", prevContextLen, cache.ContextLength))

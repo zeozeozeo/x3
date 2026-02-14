@@ -511,6 +511,7 @@ type PersonaMeta struct {
 	ThinkingTraces bool              `json:"thinking_traces,omitempty"` // Whether reasoning.txt should be attached
 	Version        int               `json:"version,omitempty"`
 	NeedSummaries  bool              `json:"need_summaries,omitempty"` // Whether summaries should be generated
+	TavernCard     *TavernCardV2     `json:"tavern_card,omitempty"`    // Current SillyTavern character card
 }
 
 // this is kinda hacky, but this is just so i can update the default models
@@ -545,7 +546,6 @@ func clone[T any](arr []T) []T {
 	return cloned
 }
 
-// DeepCopy creates a deep copy of PersonaMeta
 func (meta PersonaMeta) DeepCopy() PersonaMeta {
 	copied := meta
 	if meta.Models != nil {
@@ -553,6 +553,9 @@ func (meta PersonaMeta) DeepCopy() PersonaMeta {
 	}
 	if meta.FirstMes != nil {
 		copied.FirstMes = clone(meta.FirstMes)
+	}
+	if meta.TavernCard != nil {
+		copied.TavernCard = meta.TavernCard.DeepCopy()
 	}
 	return copied
 }
@@ -636,6 +639,12 @@ func GetPersonaByMeta(meta PersonaMeta, summaries []Summary, username string, dm
 	if username == "" {
 		username = "this user"
 	}
+
+	if meta.TavernCard != nil {
+		system := BuildCharaSystemPrompt(meta.TavernCard, username, summaries, context, interactedAt)
+		return Persona{System: system}
+	}
+
 	if s, ok := personaGetters[meta.Name]; ok {
 		persona := s.getter(s.tmpl, summaries, username, dm, interactedAt, context)
 		if len(meta.System) != 0 {

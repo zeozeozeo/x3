@@ -7,15 +7,17 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"html/template"
 	"log/slog"
 	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
-	"text/template"
+	"time"
 
 	"github.com/barasher/go-exiftool"
 	"github.com/cloudflare/ahocorasick"
+	"github.com/dustin/go-humanize"
 	"github.com/google/uuid"
 )
 
@@ -31,6 +33,30 @@ type TavernCardV1 struct {
 	SystemPrompt       string   `json:"system_prompt,omitempty"`
 	Tags               []string `json:"tags,omitempty"`
 	AlternateGreetings []string `json:"alternate_greetings,omitempty"`
+}
+
+func (c TavernCardV2) DeepCopy() *TavernCardV2 {
+	if c.Data == nil {
+		return &TavernCardV2{Spec: c.Spec, SpecVersion: c.SpecVersion}
+	}
+	copied := TavernCardV2{
+		Spec:        c.Spec,
+		SpecVersion: c.SpecVersion,
+		Data: &TavernCardV1{
+			Name:               c.Data.Name,
+			Description:        c.Data.Description,
+			Personality:        c.Data.Personality,
+			FirstMes:           c.Data.FirstMes,
+			Avatar:             c.Data.Avatar,
+			MesExample:         c.Data.MesExample,
+			Scenario:           c.Data.Scenario,
+			CreatorNotes:       c.Data.CreatorNotes,
+			SystemPrompt:       c.Data.SystemPrompt,
+			Tags:               clone(c.Data.Tags),
+			AlternateGreetings: clone(c.Data.AlternateGreetings),
+		},
+	}
+	return &copied
 }
 
 func (card TavernCardV1) AllGreetings() []string {
@@ -136,7 +162,7 @@ func (c TavernCardV2) formatExamples(user string) string {
 }
 
 var (
-	systemPromptTemplate = template.Must(template.New("").Parse(`You are roleplaying as {{ .Char }}, a character with the following attributes:
+	charaTemplate = template.Must(template.New("").Parse(`You are roleplaying as {{ .Char }}, a character with the following attributes:
 {{ if .Description }}- Description: {{ .Description }}{{ end }}
 {{ if .Personality }}- Personality: {{ .Personality }}{{ end }}
 {{ if .Scenario }}- Scenario: {{ .Scenario }}{{ end }}
@@ -145,13 +171,70 @@ var (
 """
 {{ .Examples }}
 """{{ end }}
+{{ if .Summaries }}
+**Past chat summaries:**
+{{ range .Summaries }}
+- {{ .Str }} (updated {{ .Age }} messages ago)
+{{ end }}
+{{ end }}
+{{ if .Context }}
+**IMPORTANT:** Additional instructions for {{ .Char }}'s behavior:
+{{ range .Context }}
+- {{ . }}
+{{ end }}
+{{ end }}
 
 Write {{ .Char }}'s next replies in a fictional chat between {{ .Char }} and {{ .User }}.`))
 
 	errCharaExifNotFound = errors.New("character card not found in image exif")
 )
 
-// Apply json character card
+type charaTemplateData struct {
+	Char               string
+	User               string
+	Description        string
+	Personality        string
+	Scenario           string
+	Examples           string
+	Summaries          []Summary
+	Context            []string
+	InteractionElapsed string
+}
+
+func newCharaTemplateData(card *TavernCardV2, user string, summaries []Summary, context []string, interactedAt time.Time) charaTemplateData {
+	now := time.Now().UTC()
+	var elapsed string
+	if !interactedAt.IsZero() && now.Sub(interactedAt) >= 5*time.Minute {
+		elapsed = strings.TrimSpace(humanize.RelTime(interactedAt, now, "", ""))
+	}
+	return charaTemplateData{
+		Char:               card.Data.Name,
+		User:               user,
+		Description:        card.formatField(card.Data.Description, user),
+		Personality:        card.formatField(card.Data.Personality, user),
+		Scenario:           card.formatField(card.Data.Scenario, user),
+		Examples:           card.formatExamples(user),
+		Summaries:          summaries,
+		Context:            context,
+		InteractionElapsed: elapsed,
+		//Date:               fmt.Sprint(now.Date()),
+		//Time:               now.Format(time.TimeOnly),
+	}
+}
+
+func BuildCharaSystemPrompt(card *TavernCardV2, user string, summaries []Summary, context []string, interactedAt time.Time) string {
+	if card == nil || card.Data == nil {
+		return ""
+	}
+	var b bytes.Buffer
+	data := newCharaTemplateData(card, user, summaries, context, interactedAt)
+	if err := charaTemplate.Execute(&b, data); err != nil {
+		slog.Error("BuildCharaSystemPrompt: template execution failed", "err", err)
+		return ""
+	}
+	return b.String()
+}
+
 func (meta *PersonaMeta) ApplyJsonChara(data []byte, user string, context []string) (TavernCardV2, error) {
 	slog.Debug("ApplyChara: chara", slog.Int("len", len(data)))
 
@@ -173,29 +256,6 @@ func (meta *PersonaMeta) ApplyJsonChara(data []byte, user string, context []stri
 
 	card.maybeSwapWeirdPersonalityFieldWithCreatorNotesIfTheCardAuthorDoesntKnowHowToUseThePersonalityFieldCorrectly()
 
-	// execute template
-	var b bytes.Buffer
-	err = systemPromptTemplate.Execute(&b, struct {
-		Char        string
-		User        string
-		Description string
-		Personality string
-		Scenario    string
-		Examples    string
-		Context     []string
-	}{
-		Char:        card.Data.Name,
-		User:        user,
-		Description: card.formatField(card.Data.Description, user),
-		Personality: card.formatField(card.Data.Personality, user),
-		Scenario:    card.formatField(card.Data.Scenario, user),
-		Examples:    card.formatExamples(user),
-		Context:     context,
-	})
-	if err != nil {
-		return card, err
-	}
-
 	firstMessages := map[string]struct{}{
 		card.Data.FirstMes: {},
 	}
@@ -213,11 +273,10 @@ func (meta *PersonaMeta) ApplyJsonChara(data []byte, user string, context []stri
 		meta.Name = card.Data.Name
 	}
 	meta.Desc = "<none>"
-	meta.System = b.String()
 	meta.FirstMes = firstMessagesArr
 	meta.IsFirstMes = len(firstMessagesArr) > 0
 	meta.EnableImages = true
-	slog.Info("ApplyChara: generated system prompt", "system", len(meta.System))
+	meta.TavernCard = &card
 	return card, nil
 }
 
