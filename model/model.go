@@ -64,6 +64,7 @@ const (
 	minimaxBaseURL      = "https://api.minimax.io/v1"
 	ollamaBaseURL       = "https://ollama.com/v1"
 	vercelBaseURL       = "https://ai-gateway.vercel.sh/v1"
+	kivestBaseURL       = "https://ai.ezif.in/v1"
 )
 
 const (
@@ -98,6 +99,7 @@ const (
 	ProviderMinimax      = "minimax"
 	ProviderOllama       = "ollama"
 	ProviderVercel       = "vercel"
+	ProviderKivest       = "kivest"
 )
 
 type ModelProvider struct {
@@ -168,6 +170,7 @@ var (
 		{Name: ProviderPerplexity},
 		{Name: ProviderMinimax},
 		{Name: ProviderVercel},
+		{Name: ProviderKivest},
 		//{Name: ProviderG4F},
 	}
 
@@ -365,6 +368,8 @@ func (m Model) Client(provider string) (baseUrls []string, tokens []string, code
 		tokenEnvKey, apiVar = "X3_OLLAMA_TOKEN", ollamaBaseURL
 	case ProviderVercel:
 		tokenEnvKey, apiVar = "X3_VERCEL_TOKEN", vercelBaseURL
+	case ProviderKivest:
+		tokenEnvKey, apiVar = "X3_KIVEST_TOKEN", kivestBaseURL
 	default:
 		return nil, nil, nil
 	}

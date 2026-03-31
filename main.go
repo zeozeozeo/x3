@@ -111,8 +111,8 @@ func main() {
 		),
 		bot.WithEventListenerFunc(commands.OnMessageCreate),
 		bot.WithEventListenerFunc(commands.OnMessageUpdate),
-		bot.WithEventListenerFunc(commands.OnDMMessageReactionAdd),
-		bot.WithEventListenerFunc(commands.OnGuildMessageReactionAdd),
+		//bot.WithEventListenerFunc(commands.OnDMMessageReactionAdd),
+		//bot.WithEventListenerFunc(commands.OnGuildMessageReactionAdd),
 	)
 	if err != nil {
 		slog.Error("error while building disgo instance", "err", err)
