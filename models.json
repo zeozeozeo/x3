@@ -1,8 +1,52 @@
 {
   "models": [
     {
-      "name": "GLM 4.5 Air",
+      "name": "GLM 5.1",
       "command": "glm",
+      "reasoning": true,
+      "providers": {
+        "kivest": {
+          "codenames": [
+            "z-ai/glm-5.1"
+          ]
+        },
+        "ollama": {
+          "codenames": [
+            "glm-5.1:cloud"
+          ]
+        }
+      }
+    },
+    {
+      "name": "GLM 5",
+      "command": "glm5",
+      "reasoning": true,
+      "providers": {
+        "electronhub": {
+          "codenames": [
+            "glm-5:free"
+          ]
+        },
+        "kivest": {
+          "codenames": [
+            "glm-5"
+          ]
+        },
+        "ollama": {
+          "codenames": [
+            "glm-5"
+          ]
+        },
+        "vercel": {
+          "codenames": [
+            "zai/glm-5"
+          ]
+        }
+      }
+    },
+    {
+      "name": "GLM 4.5 Air",
+      "command": "glmair",
       "providers": {
         "openrouter": {
           "codenames": [
@@ -17,41 +61,35 @@
       }
     },
     {
-      "name": "DeepSeek V3.2 Exp",
+      "name": "DeepSeek V3.2",
       "command": "deepseek",
       "reasoning": true,
       "providers": {
-        "atlas": {
+        "ollama": {
           "codenames": [
-            "deepseek-ai/DeepSeek-V3.2-Exp"
-          ]
-        },
-        "crof": {
-          "codenames": [
-            "deepseek-v3.2-exp"
-          ]
-        },
-        "electronhub": {
-          "codenames": [
-            "deepseek-v3.2-exp",
-            "deepseek-v3.2-exp:free"
-          ]
-        },
-        "mnn": {
-          "codenames": [
-            "deepseek-v3.2-exp"
+            "deepseek-v3.2:cloud"
           ]
         }
       }
     },
     {
-      "name": "DeepSeek R1T2-Chimera",
-      "command": "chimera",
+      "name": "GLM 4.7",
+      "command": "glm47",
       "reasoning": true,
       "providers": {
-        "openrouter": {
+        "cerebras": {
           "codenames": [
-            "tngtech/deepseek-r1t2-chimera:free"
+            "zai-glm-4.7"
+          ]
+        },
+        "electronhub": {
+          "codenames": [
+            "glm-4.7:free"
+          ]
+        },
+        "ollama": {
+          "codenames": [
+            "glm-4.7"
           ]
         }
       }
@@ -69,48 +107,6 @@
       }
     },
     {
-      "name": "MiniMax M2.1",
-      "command": "minimax",
-      "reasoning": true,
-      "providers": {
-        "minimax": {
-          "codenames": [
-            "MiniMax-M2.1"
-          ]
-        },
-        "ollama": {
-          "codenames": [
-            "minimax-m2.1"
-          ]
-        }
-      }
-    },
-    {
-      "name": "GLM 4.7",
-      "command": "glm47",
-      "reasoning": true,
-      "providers": {
-        "ollama": {
-          "codenames": [
-            "glm-4.7"
-          ]
-        }
-      }
-    },
-    {
-      "name": "MoonshotAI Kimi K2.5",
-      "command": "kimi",
-      "vision": true,
-      "reasoning": true,
-      "providers": {
-        "ollama": {
-          "codenames": [
-            "kimi-k2.5"
-          ]
-        }
-      }
-    },
-    {
       "name": "Venice Uncensored",
       "command": "venice",
       "providers": {
@@ -122,44 +118,72 @@
       }
     },
     {
-      "name": "OpenAI GPT-5",
+      "name": "Gemma 4 31B",
+      "command": "gemma",
+      "providers": {
+        "ollama": {
+          "codenames": [
+            "gemma4:31b-cloud"
+          ]
+        },
+        "openrouter": {
+          "codenames": [
+            "google/gemma-4-31b-it:free"
+          ]
+        }
+      }
+    },
+    {
+      "name": "Step 3.5 Flash",
+      "command": "step",
+      "reasoning": true,
+      "providers": {
+        "openrouter": {
+          "codenames": [
+            "stepfun/step-3.5-flash:free"
+          ]
+        }
+      }
+    },
+    {
+      "name": "OpenAI GPT-5.2",
       "command": "gpt",
       "vision": true,
       "encoding": "o200k_base",
       "providers": {
         "electronhub": {
           "codenames": [
-            "gpt-5"
+            "gpt-5.2-chat"
           ]
         },
         "g4f": {
           "codenames": [
-            "gpt-5"
+            "gpt-5.2-chat"
           ]
         },
         "github": {
           "codenames": [
-            "openai/gpt-5"
+            "openai/gpt-5.2-chat"
           ]
         },
         "hcap": {
           "codenames": [
-            "gpt-5"
+            "gpt-5.2-chat"
           ]
         },
         "helixmind": {
           "codenames": [
-            "gpt-5"
+            "gpt-5.2-chat"
           ]
         },
         "mnn": {
           "codenames": [
-            "gpt-5"
+            "gpt-5.2-chat"
           ]
         },
         "zukijourney": {
           "codenames": [
-            "gpt-5"
+            "gpt-5.2-chat"
           ]
         }
       }
@@ -333,49 +357,13 @@
       }
     },
     {
-      "name": "DeepSeek V3.1 671B",
-      "command": "deepseekv31",
+      "name": "NVIDIA Nemotron 3 Super",
+      "command": "nemotron",
       "reasoning": true,
       "providers": {
-        "akash": {
-          "codenames": [
-            "DeepSeek-V3-1"
-          ]
-        },
-        "atlas": {
-          "codenames": [
-            "deepseek-ai/DeepSeek-V3.1"
-          ]
-        },
-        "crof": {
-          "codenames": [
-            "deepseek-v3.1"
-          ]
-        },
-        "electronhub": {
-          "codenames": [
-            "deepseek-v3.1",
-            "deepseek-v3.1:free"
-          ]
-        },
-        "hcap": {
-          "codenames": [
-            "deepseek-v3.1"
-          ]
-        },
-        "llm7": {
-          "codenames": [
-            "deepseek-v3.1"
-          ]
-        },
-        "mnn": {
-          "codenames": [
-            "deepseek-v3.1"
-          ]
-        },
         "openrouter": {
           "codenames": [
-            "deepseek/deepseek-chat-v3.1:free"
+            "nvidia/nemotron-3-super-120b-a12b:free"
           ]
         }
       }
@@ -402,7 +390,41 @@
       }
     },
     {
-      "name": "Perplexity Sonar (🌐 Web Search)",
+      "name": "Nemotron Nano 12B 2 VL",
+      "command": "nemotronvl",
+      "vision": true,
+      "providers": {
+        "openrouter": {
+          "codenames": [
+            "nvidia/nemotron-nano-12b-v2-vl:free"
+          ]
+        }
+      }
+    },
+    {
+      "name": "Nous Hermes 3 405B",
+      "command": "hermes",
+      "providers": {
+        "openrouter": {
+          "codenames": [
+            "nousresearch/hermes-3-llama-3.1-405b:free"
+          ]
+        }
+      }
+    },
+    {
+      "name": "Ling 2.6 Flash",
+      "command": "ling",
+      "providers": {
+        "openrouter": {
+          "codenames": [
+            "inclusionai/ling-2.6-flash:free"
+          ]
+        }
+      }
+    },
+    {
+      "name": "Perplexity Sonar (ðŸŒ Web Search)",
       "command": "sonar",
       "providers": {
         "perplexity": {
@@ -429,31 +451,29 @@
     }
   ],
   "default_models": [
+    "GLM 5.1",
     "GLM 4.5 Air",
-    "GLM 4.7 Flash",
-    "MiniMax M2.1",
-    "DeepSeek V3.2 Exp",
-    "Venice Uncensored",
-    "Meta Llama 3.3 70B",
-    "Meta Llama 4 Maverick 400B/17A",
-    "Meta Llama 4 Scout 109B/17A"
+    "GLM 4.7 Flash"
   ],
   "narrator_models": [
+    "GLM 4.5 Air",
+    "GLM 4.7 Flash",
     "Meta Llama 3.3 70B",
     "Meta Llama 4 Scout 109B/17A",
     "Meta Llama 4 Maverick 400B/17A"
   ],
   "default_vision_models": [
+    "Nemotron Nano 12B 2 VL",
     "Meta Llama 4 Maverick 400B/17A",
     "Meta Llama 4 Scout 109B/17A"
   ],
   "providers_order": [
     "openrouter",
-    "minimax",
     "ollama",
+    "cerebras",
+    "minimax",
     "routeway",
     "groq",
-    "cerebras",
     "zhipu",
     "together",
     "nineteen",
@@ -476,5 +496,5 @@
     "perplexity",
     "atlas"
   ],
-  "current_version": 15
+  "current_version": 21
 }
