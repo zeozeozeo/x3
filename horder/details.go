@@ -7,7 +7,12 @@ import (
 	"log/slog"
 	"net/http"
 	"time"
+	
+	_ "embed"
 )
+
+//go:embed stable_diffusion.json
+var sdiffModelDetailsStatic string
 
 const sdiffModelDetailsUrl = "https://raw.githubusercontent.com/Haidra-Org/AI-Horde-image-model-reference/refs/heads/main/stable_diffusion.json"
 
@@ -103,7 +108,14 @@ func FetchModelDetails() (ModelsData, error) {
 func MustFetchModelDetails() ModelsData {
 	models, err := FetchModelDetails()
 	if err != nil {
-		panic(err)
+	    var models ModelsData
+	    err := json.Unmarshal([]byte(sdiffModelDetailsStatic), &models)
+        if err != nil {
+            slog.Error("MustFetchModelDetails: failed to unmarshal embedded JSON", "err", err)
+            return nil
+        }
+        slog.Warn("MustFetchModelDetails: using embedded model details due to fetch error", "err", err)
+        return models
 	}
 	return models
 }
