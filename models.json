@@ -5,18 +5,11 @@
       "command": "deepseek",
       "reasoning": true,
       "providers": {
+        "mnn": {
+          "codenames": ["deepseek-v4-flash"]
+        },
         "zenmux": {
           "codenames": ["deepseek/deepseek-v4-flash-free"]
-        }
-      }
-    },
-    {
-      "name": "DeepSeek V4 Pro",
-      "command": "deepseekpro",
-      "reasoning": true,
-      "providers": {
-        "zenmux": {
-          "codenames": ["deepseek/deepseek-v4-pro-free"]
         }
       }
     },
@@ -176,16 +169,6 @@
       }
     },
     {
-      "name": "NVIDIA Nemotron 3 Super",
-      "command": "nemotron",
-      "reasoning": true,
-      "providers": {
-        "openrouter": {
-          "codenames": ["nvidia/nemotron-3-super-120b-a12b:free"]
-        }
-      }
-    },
-    {
       "name": "Meta Llama 4 Maverick 400B/17A",
       "command": "maverick",
       "vision": true,
@@ -232,21 +215,33 @@
       }
     },
     {
-      "name": "Nemotron Nano 12B 2 VL",
-      "command": "nemotronvl",
+      "name": "NVIDIA Nemotron 3 Nano Omni 30B/A3B",
+      "command": "nemotron",
       "vision": true,
+      "reasoning": true,
       "providers": {
         "openrouter": {
-          "codenames": ["nvidia/nemotron-nano-12b-v2-vl:free"]
+          "codenames": ["nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free"]
         }
       }
     },
     {
-      "name": "Nous Hermes 3 405B",
-      "command": "hermes",
+      "name": "GLM 4.6V Flash",
+      "command": "glmv",
+      "vision": true,
+      "providers": {
+        "zenmux": {
+          "codenames": ["z-ai/glm-4.6v-flash-free"]
+        }
+      }
+    },
+    {
+      "name": "Owl Alpha",
+      "command": "stealth",
+      "reasoning": true,
       "providers": {
         "openrouter": {
-          "codenames": ["nousresearch/hermes-3-llama-3.1-405b:free"]
+          "codenames": ["openrouter/owl-alpha"]
         }
       }
     },
@@ -280,13 +275,13 @@
     "Meta Llama 4 Maverick 400B/17A"
   ],
   "default_vision_models": [
-    "Nemotron Nano 12B 2 VL",
+    "GLM 4.6V Flash",
+    "NVIDIA Nemotron 3 Nano Omni 30B/A3B",
     "Meta Llama 4 Maverick 400B/17A",
     "Meta Llama 4 Scout 109B/17A"
   ],
   "providers_order": [
     "openrouter",
-    "zenmux",
     "ollama",
     "cerebras",
     "minimax",
@@ -299,6 +294,7 @@
     "llm7",
     "cloudflare",
     "mnn",
+    "zenmux",
     "crof",
     "longcat",
     "hcap",
@@ -314,5 +310,5 @@
     "perplexity",
     "atlas"
   ],
-  "current_version": 31
+  "current_version": 32
 }
