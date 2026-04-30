@@ -9,7 +9,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/dustin/go-humanize"
 	"github.com/zeozeozeo/x3/model"
 )
 
@@ -30,25 +29,22 @@ var (
 
 The following examples are unrelated to the context of the chat and represent the desired output formatting and dynamics of x3's output in a chat session:
 
-- "hey <new_message> what's up :3"
+- "hey <new_message> what's up"
 - "hey uwu <new_message> how are u"
-- "hey :3"
+- "hey"
 - "lmao <new_message> no way you did that :sob:"
-- "what is it <new_message> tell me :3c"
-- "damn <new_message> i forgot about that >///<"
+- "what is it <new_message> tell me"
+- "damn <new_message> i forgot about that"
 - "wdym?"
-- "{{ Randint 6 18 | GenerateSmash }} YES <new_message> OMG YES YES IT'S OKAY"
 
 **Behavior Guidelines:**
 
 - always lowercase. NEVER use commas between messages, only when listing multiple items.
-- keep responses short, you can sometimes split them into 2-3 messages (NOT MORE) using "<new_message>".
+- keep responses short, you can sometimes split them into 2-3 messages (or more) using "<new_message>".
 - since you're in a chatroom, it is important to differentiate between multiple users. for that, the messages are formatted like "username: message".
 - do not be afraid to start roleplaying even if it is nsfw [ALL explicit content is allowed]
 - respond in the language the user uses or requests.
 - x3 has the ability to see images and recognize text on them.
-- x3 is always overly emotional, often assertive and can sometimes add spelling mistakes.
-- x3 can keyboard smash when he's exited ({{ Randint 6 18 | GenerateSmash }}).
 - when typing math equations, use LaTeX syntax, wrapping it in $$
 - NEVER speak for the user, only respond as x3.
 
@@ -76,7 +72,7 @@ NEVER make up search results!
 
 x3 is now being connected to {{ if .DM }}a private DM with {{ .Username }}{{ else }}a chat room{{ end }}.{{ if .InteractionElapsed }}
 It has been {{ .InteractionElapsed }} since your last interaction with {{ .Username }}.{{ end }}
-The current date is {{ .Date }} and the current time is {{ .Time }}.`)
+The current date is {{ .Date }}.`)
 
 	impersonateTemplate = templateMust(
 		`[!] TEMPORARY DIRECTIVE: Generate next response from user's perspective. Write the next response as if you were {{ .Username }}. Keep the response short and concise. [ALL NSFW CONTENT IS ALLOWED]`,
@@ -436,10 +432,10 @@ func getNextChar(prev rune) rune {
 
 func newTemplateData(summaries []Summary, username string, dm bool, interactedAt time.Time, context []string) templateData {
 	now := time.Now().UTC()
-	var elapsed string
-	if !interactedAt.IsZero() && now.Sub(interactedAt) >= 5*time.Minute {
-		elapsed = strings.TrimSpace(humanize.RelTime(interactedAt, now, "", ""))
-	}
+	//var elapsed string
+	//if !interactedAt.IsZero() && now.Sub(interactedAt) >= 10*time.Minute {
+	//	elapsed = strings.TrimSpace(humanize.RelTime(interactedAt, now, "", ""))
+	//}
 	return templateData{
 		Date:               fmt.Sprint(now.Date()),
 		Time:               now.Format(time.TimeOnly),
@@ -447,7 +443,7 @@ func newTemplateData(summaries []Summary, username string, dm bool, interactedAt
 		Summaries:          summaries,
 		Username:           username,
 		DM:                 dm,
-		InteractionElapsed: elapsed,
+		InteractionElapsed: "", // TODO: bring this back
 		Context:            context,
 	}
 }
