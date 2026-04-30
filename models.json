@@ -1,46 +1,22 @@
 {
   "models": [
     {
-      "name": "GLM 5.1",
-      "command": "glm",
+      "name": "DeepSeek V4 Flash",
+      "command": "deepseek",
       "reasoning": true,
       "providers": {
-        "kivest": {
-          "codenames": [
-            "z-ai/glm-5.1"
-          ]
-        },
-        "ollama": {
-          "codenames": [
-            "glm-5.1:cloud"
-          ]
+        "zenmux": {
+          "codenames": ["deepseek/deepseek-v4-flash-free"]
         }
       }
     },
     {
-      "name": "GLM 5",
-      "command": "glm5",
+      "name": "DeepSeek V4 Pro",
+      "command": "deepseekpro",
       "reasoning": true,
       "providers": {
-        "electronhub": {
-          "codenames": [
-            "glm-5:free"
-          ]
-        },
-        "kivest": {
-          "codenames": [
-            "glm-5"
-          ]
-        },
-        "ollama": {
-          "codenames": [
-            "glm-5"
-          ]
-        },
-        "vercel": {
-          "codenames": [
-            "zai/glm-5"
-          ]
+        "zenmux": {
+          "codenames": ["deepseek/deepseek-v4-pro-free"]
         }
       }
     },
@@ -49,48 +25,20 @@
       "command": "glmair",
       "providers": {
         "openrouter": {
-          "codenames": [
-            "z-ai/glm-4.5-air:free"
-          ]
+          "codenames": ["z-ai/glm-4.5-air:free"]
         },
         "routeway": {
-          "codenames": [
-            "glm-4.5-air:free"
-          ]
+          "codenames": ["glm-4.5-air:free"]
         }
       }
     },
     {
       "name": "DeepSeek V3.2",
-      "command": "deepseek",
+      "command": "deepseek32",
       "reasoning": true,
       "providers": {
         "ollama": {
-          "codenames": [
-            "deepseek-v3.2:cloud"
-          ]
-        }
-      }
-    },
-    {
-      "name": "GLM 4.7",
-      "command": "glm47",
-      "reasoning": true,
-      "providers": {
-        "cerebras": {
-          "codenames": [
-            "zai-glm-4.7"
-          ]
-        },
-        "electronhub": {
-          "codenames": [
-            "glm-4.7:free"
-          ]
-        },
-        "ollama": {
-          "codenames": [
-            "glm-4.7"
-          ]
+          "codenames": ["deepseek-v3.2:cloud"]
         }
       }
     },
@@ -100,20 +48,7 @@
       "reasoning": true,
       "providers": {
         "zhipu": {
-          "codenames": [
-            "glm-4.7-flash"
-          ]
-        }
-      }
-    },
-    {
-      "name": "Venice Uncensored",
-      "command": "venice",
-      "providers": {
-        "openrouter": {
-          "codenames": [
-            "cognitivecomputations/dolphin-mistral-24b-venice-edition:free"
-          ]
+          "codenames": ["glm-4.7-flash"]
         }
       }
     },
@@ -122,26 +57,10 @@
       "command": "gemma",
       "providers": {
         "ollama": {
-          "codenames": [
-            "gemma4:31b-cloud"
-          ]
+          "codenames": ["gemma4:31b-cloud"]
         },
         "openrouter": {
-          "codenames": [
-            "google/gemma-4-31b-it:free"
-          ]
-        }
-      }
-    },
-    {
-      "name": "Step 3.5 Flash",
-      "command": "step",
-      "reasoning": true,
-      "providers": {
-        "openrouter": {
-          "codenames": [
-            "stepfun/step-3.5-flash:free"
-          ]
+          "codenames": ["google/gemma-4-31b-it:free"]
         }
       }
     },
@@ -152,39 +71,25 @@
       "encoding": "o200k_base",
       "providers": {
         "electronhub": {
-          "codenames": [
-            "gpt-5.2-chat"
-          ]
+          "codenames": ["gpt-5.2-chat"]
         },
         "g4f": {
-          "codenames": [
-            "gpt-5.2-chat"
-          ]
+          "codenames": ["gpt-5.2-chat"]
         },
         "github": {
-          "codenames": [
-            "openai/gpt-5.2-chat"
-          ]
+          "codenames": ["openai/gpt-5.2-chat"]
         },
         "hcap": {
-          "codenames": [
-            "gpt-5.2-chat"
-          ]
+          "codenames": ["gpt-5.2-chat"]
         },
         "helixmind": {
-          "codenames": [
-            "gpt-5.2-chat"
-          ]
+          "codenames": ["gpt-5.2-chat"]
         },
         "mnn": {
-          "codenames": [
-            "gpt-5.2-chat"
-          ]
+          "codenames": ["gpt-5.2-chat"]
         },
         "zukijourney": {
-          "codenames": [
-            "gpt-5.2-chat"
-          ]
+          "codenames": ["gpt-5.2-chat"]
         }
       }
     },
@@ -193,55 +98,34 @@
       "command": "llama",
       "providers": {
         "akash": {
-          "codenames": [
-            "Meta-Llama-3-3-70B-Instruct"
-          ]
+          "codenames": ["Meta-Llama-3-3-70B-Instruct"]
         },
         "cerebras": {
-          "codenames": [
-            "llama-3.3-70b"
-          ]
+          "codenames": ["llama-3.3-70b"]
         },
         "cloudflare": {
-          "codenames": [
-            "@cf/meta/llama-3.3-70b-instruct-fp8-fast"
-          ]
+          "codenames": ["@cf/meta/llama-3.3-70b-instruct-fp8-fast"]
         },
         "crof": {
-          "codenames": [
-            "llama3.3-70b"
-          ]
+          "codenames": ["llama3.3-70b"]
         },
         "electronhub": {
-          "codenames": [
-            "llama-3.3-70b-instruct",
-            "llama-3.3-70b-instruct:free"
-          ]
+          "codenames": ["llama-3.3-70b-instruct", "llama-3.3-70b-instruct:free"]
         },
         "groq": {
-          "codenames": [
-            "llama-3.3-70b-versatile"
-          ]
+          "codenames": ["llama-3.3-70b-versatile"]
         },
         "mnn": {
-          "codenames": [
-            "llama-3.3-70b"
-          ]
+          "codenames": ["llama-3.3-70b"]
         },
         "openrouter": {
-          "codenames": [
-            "meta-llama/llama-3.3-70b-instruct:free"
-          ]
+          "codenames": ["meta-llama/llama-3.3-70b-instruct:free"]
         },
         "together": {
-          "codenames": [
-            "meta-llama/Llama-3.3-70B-Instruct-Turbo-Free"
-          ]
+          "codenames": ["meta-llama/Llama-3.3-70B-Instruct-Turbo-Free"]
         },
         "zukijourney": {
-          "codenames": [
-            "llama-3.3-70b-instruct"
-          ]
+          "codenames": ["llama-3.3-70b-instruct"]
         }
       }
     },
@@ -251,29 +135,19 @@
       "vision": true,
       "providers": {
         "atlas": {
-          "codenames": [
-            "meta-llama/Llama-4-Scout-17B-16E-Instruct"
-          ]
+          "codenames": ["meta-llama/Llama-4-Scout-17B-16E-Instruct"]
         },
         "cerebras": {
-          "codenames": [
-            "llama-4-scout-17b-16e-instruct"
-          ]
+          "codenames": ["llama-4-scout-17b-16e-instruct"]
         },
         "chutes": {
-          "codenames": [
-            "chutesai/Llama-4-Scout-17B-16E-Instruct"
-          ]
+          "codenames": ["chutesai/Llama-4-Scout-17B-16E-Instruct"]
         },
         "cloudflare": {
-          "codenames": [
-            "@cf/meta/llama-4-scout-17b-16e-instruct"
-          ]
+          "codenames": ["@cf/meta/llama-4-scout-17b-16e-instruct"]
         },
         "crof": {
-          "codenames": [
-            "llama-4-scout-131k"
-          ]
+          "codenames": ["llama-4-scout-131k"]
         },
         "electronhub": {
           "codenames": [
@@ -282,77 +156,22 @@
           ]
         },
         "github": {
-          "codenames": [
-            "meta/Llama-4-Scout-17B-16E-Instruct"
-          ]
+          "codenames": ["meta/Llama-4-Scout-17B-16E-Instruct"]
         },
         "groq": {
-          "codenames": [
-            "meta-llama/llama-4-scout-17b-16e-instruct"
-          ]
+          "codenames": ["meta-llama/llama-4-scout-17b-16e-instruct"]
         },
         "mnn": {
-          "codenames": [
-            "llama-4-scout"
-          ]
+          "codenames": ["llama-4-scout"]
         },
         "openrouter": {
-          "codenames": [
-            "meta-llama/llama-4-scout:free"
-          ]
+          "codenames": ["meta-llama/llama-4-scout:free"]
         },
         "pollinations": {
-          "codenames": [
-            "llama-4-scout-17b-16e-instruct"
-          ]
+          "codenames": ["llama-4-scout-17b-16e-instruct"]
         },
         "zukijourney": {
-          "codenames": [
-            "llama-4-scout-17b-instruct"
-          ]
-        }
-      }
-    },
-    {
-      "name": "Meta Llama 4 Maverick 400B/17A",
-      "command": "maverick",
-      "vision": true,
-      "providers": {
-        "akash": {
-          "codenames": [
-            "Meta-Llama-4-Maverick-17B-128E-Instruct-FP8"
-          ]
-        },
-        "chutes": {
-          "codenames": [
-            "chutesai/Llama-4-Maverick-17B-128E-Instruct-FP8"
-          ]
-        },
-        "electronhub": {
-          "codenames": [
-            "llama-4-maverick-17b-128e-instruct",
-            "llama-4-maverick-17b-128e-instruct:free"
-          ]
-        },
-        "github": {
-          "codenames": [
-            "meta/Llama-4-Maverick-17B-128E-Instruct-FP8"
-          ]
-        },
-        "groq": {
-          "codenames": [
-            "meta-llama/llama-4-maverick-17b-128e-instruct"
-          ]
-        },
-        "mnn": {
-          "codenames": [
-            "llama-4-maverick"
-          ]
-        },
-        "zukijourney": {
-          "codenames": [
-            "llama-4-maverick-17b-instruct"
-          ]
+          "codenames": ["llama-4-scout-17b-instruct"]
         }
       }
     },
@@ -362,9 +181,38 @@
       "reasoning": true,
       "providers": {
         "openrouter": {
+          "codenames": ["nvidia/nemotron-3-super-120b-a12b:free"]
+        }
+      }
+    },
+    {
+      "name": "Meta Llama 4 Maverick 400B/17A",
+      "command": "maverick",
+      "vision": true,
+      "providers": {
+        "akash": {
+          "codenames": ["Meta-Llama-4-Maverick-17B-128E-Instruct-FP8"]
+        },
+        "chutes": {
+          "codenames": ["chutesai/Llama-4-Maverick-17B-128E-Instruct-FP8"]
+        },
+        "electronhub": {
           "codenames": [
-            "nvidia/nemotron-3-super-120b-a12b:free"
+            "llama-4-maverick-17b-128e-instruct",
+            "llama-4-maverick-17b-128e-instruct:free"
           ]
+        },
+        "github": {
+          "codenames": ["meta/Llama-4-Maverick-17B-128E-Instruct-FP8"]
+        },
+        "groq": {
+          "codenames": ["meta-llama/llama-4-maverick-17b-128e-instruct"]
+        },
+        "mnn": {
+          "codenames": ["llama-4-maverick"]
+        },
+        "zukijourney": {
+          "codenames": ["llama-4-maverick-17b-instruct"]
         }
       }
     },
@@ -373,19 +221,13 @@
       "command": "longcat",
       "providers": {
         "electronhub": {
-          "codenames": [
-            "longcat-flash-chat"
-          ]
+          "codenames": ["longcat-flash-chat"]
         },
         "longcat": {
-          "codenames": [
-            "LongCat-Flash-Chat"
-          ]
+          "codenames": ["LongCat-Flash-Chat"]
         },
         "openrouter": {
-          "codenames": [
-            "meituan/longcat-flash-chat:free"
-          ]
+          "codenames": ["meituan/longcat-flash-chat:free"]
         }
       }
     },
@@ -395,9 +237,7 @@
       "vision": true,
       "providers": {
         "openrouter": {
-          "codenames": [
-            "nvidia/nemotron-nano-12b-v2-vl:free"
-          ]
+          "codenames": ["nvidia/nemotron-nano-12b-v2-vl:free"]
         }
       }
     },
@@ -406,31 +246,7 @@
       "command": "hermes",
       "providers": {
         "openrouter": {
-          "codenames": [
-            "nousresearch/hermes-3-llama-3.1-405b:free"
-          ]
-        }
-      }
-    },
-    {
-      "name": "Ling 2.6 Flash",
-      "command": "ling",
-      "providers": {
-        "openrouter": {
-          "codenames": [
-            "inclusionai/ling-2.6-flash:free"
-          ]
-        }
-      }
-    },
-    {
-      "name": "Perplexity Sonar (ðŸŒ Web Search)",
-      "command": "sonar",
-      "providers": {
-        "perplexity": {
-          "codenames": [
-            "sonar"
-          ]
+          "codenames": ["nousresearch/hermes-3-llama-3.1-405b:free"]
         }
       }
     },
@@ -451,7 +267,8 @@
     }
   ],
   "default_models": [
-    "GLM 5.1",
+    "DeepSeek V4 Flash",
+    "DeepSeek V3.2",
     "GLM 4.5 Air",
     "GLM 4.7 Flash"
   ],
@@ -469,6 +286,7 @@
   ],
   "providers_order": [
     "openrouter",
+    "zenmux",
     "ollama",
     "cerebras",
     "minimax",
@@ -496,5 +314,5 @@
     "perplexity",
     "atlas"
   ],
-  "current_version": 21
+  "current_version": 31
 }
