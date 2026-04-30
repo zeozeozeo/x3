@@ -67,6 +67,7 @@ const (
 	kivestBaseURL       = "https://ai.ezif.in/v1"
 	agentrouterBaseURL  = "https://agentrouter.org/v1"
 	zenmuxBaseURL       = "https://zenmux.ai/api/v1"
+	deepseekBaseURL     = "https://api.deepseek.com"
 )
 
 const (
@@ -104,6 +105,7 @@ const (
 	ProviderKivest       = "kivest"
 	ProviderAgentrouter  = "agentrouter"
 	ProviderZenmux       = "zenmux"
+	ProviderDeepseek     = "deepseek"
 )
 
 type ModelProvider struct {
@@ -177,6 +179,7 @@ var (
 		{Name: ProviderKivest},
 		{Name: ProviderAgentrouter},
 		{Name: ProviderZenmux},
+		{Name: ProviderDeepseek},
 		//{Name: ProviderG4F},
 	}
 
@@ -380,6 +383,8 @@ func (m Model) Client(provider string) (baseUrls []string, tokens []string, code
 		tokenEnvKey, apiVar = "X3_AGENTROUTER_TOKEN", agentrouterBaseURL
 	case ProviderZenmux:
 		tokenEnvKey, apiVar = "X3_ZENMUX_TOKEN", zenmuxBaseURL
+	case ProviderDeepseek:
+		tokenEnvKey, apiVar = "X3_DEEPSEEK_TOKEN", deepseekBaseURL
 	default:
 		return nil, nil, nil
 	}
