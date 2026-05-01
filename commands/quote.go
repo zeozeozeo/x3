@@ -1,4 +1,4 @@
-package commands
+﻿package commands
 
 import (
 	"fmt"
@@ -92,7 +92,7 @@ var QuoteCommand = discord.SlashCommandCreate{
 }
 
 // sendQuote sends a formatted quote embed.
-func sendQuote(event *handler.CommandEvent, client bot.Client, channelID, messageID snowflake.ID, quote db.Quote, nr int) error {
+func sendQuote(event *handler.CommandEvent, client *bot.Client, channelID, messageID snowflake.ID, quote db.Quote, nr int) error {
 	text := fmt.Sprintf(
 		"“%s”\n\n\\- <@%d> in <#%d>, quoted by <@%d>",
 		quote.Text,
@@ -101,33 +101,31 @@ func sendQuote(event *handler.CommandEvent, client bot.Client, channelID, messag
 		quote.Quoter,
 	)
 
-	builder := discord.NewEmbedBuilder().
-		SetColor(0xFFD700).
-		SetTitle(fmt.Sprintf("📜 Quote #%d", nr)).
-		SetTimestamp(quote.Timestamp).
-		SetDescription(text)
+	builder := discord.NewEmbed().
+		WithColor(0xFFD700).
+		WithTitle(fmt.Sprintf("📜 Quote #%d", nr)).
+		WithTimestamp(quote.Timestamp).
+		WithDescription(text)
 	if quote.AttachmentURL != "" {
-		builder.SetImage(quote.AttachmentURL)
+		builder.WithImage(quote.AttachmentURL)
 	}
 
 	if channelID != 0 && messageID != 0 { // used for replying to the "x3 quote" message
-		_, err := client.Rest().CreateMessage(
+		_, err := client.Rest.CreateMessage(
 			channelID,
-			discord.NewMessageCreateBuilder().
-				SetMessageReferenceByID(messageID).
-				SetAllowedMentions(&discord.AllowedMentions{
+			discord.NewMessageCreate().
+				WithMessageReferenceByID(messageID).
+				WithAllowedMentions(&discord.AllowedMentions{
 					RepliedUser: false,
 				}).
-				AddEmbeds(builder.Build()).
-				Build(),
+				AddEmbeds(builder),
 		)
 		return err
 	} else if event != nil { // used for slash command responses
 		return event.CreateMessage(
-			discord.NewMessageCreateBuilder().
-				AddEmbeds(builder.Build()).
-				SetEphemeral(event.SlashCommandInteractionData().Bool("ephemeral")).
-				Build(),
+			discord.NewMessageCreate().
+				AddEmbeds(builder).
+				WithEphemeral(event.SlashCommandInteractionData().Bool("ephemeral")),
 		)
 	}
 	return fmt.Errorf("sendQuote called with no event and no channel/message ID")
@@ -281,18 +279,16 @@ func HandleQuoteRemove(event *handler.CommandEvent) error {
 	}
 
 	return event.CreateMessage(
-		discord.NewMessageCreateBuilder().
-			SetEphemeral(true).
+		discord.NewMessageCreate().
+			WithEphemeral(true).
 			AddEmbeds(
-				discord.NewEmbedBuilder().
-					SetTitle("🗑️ Quote Removed").
-					SetColor(0x0085ff).
-					SetDescription(fmt.Sprintf("Removed quote #%d: \"%s\" by %s", idx+1, ellipsisTrim(removedQuoteText, 50), removedQuoteAuthor)).
-					SetFooter("x3", x3Icon).
-					SetTimestamp(time.Now()).
-					Build(),
-			).
-			Build(),
+				discord.NewEmbed().
+					WithTitle("🗑️ Quote Removed").
+					WithColor(0x0085ff).
+					WithDescription(fmt.Sprintf("Removed quote #%d: \"%s\" by %s", idx+1, ellipsisTrim(removedQuoteText, 50), removedQuoteAuthor)).
+					WithFooter("x3", x3Icon).
+					WithTimestamp(time.Now()),
+			),
 	)
 }
 

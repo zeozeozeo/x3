@@ -153,7 +153,7 @@ func HandleGenerate(event *handler.CommandEvent) error {
 	n = max(n, 1)
 
 	// check if its an nsfw channel; if it's not we'll rely on stablehorde to censor nsfw content
-	channel, err := event.Client().Rest().GetChannel(event.Channel().ID())
+	channel, err := event.Client().Rest.GetChannel(event.Channel().ID())
 	if err == nil {
 		if guildChannel, ok := channel.(discord.GuildMessageChannel); ok {
 			isNSFW = guildChannel.NSFW()
@@ -186,9 +186,8 @@ func HandleGenerate(event *handler.CommandEvent) error {
 		if isImplicitAutoTag {
 			msg = "Auto-tagging prompt (no Danbooru tags detected)..."
 		}
-		event.UpdateInteractionResponse(discord.NewMessageUpdateBuilder().
-			SetContent(msg).
-			Build())
+		event.UpdateInteractionResponse(discord.NewMessageUpdate().
+			WithContent(msg))
 
 		tags := <-tagChan
 		if tags == "" {
@@ -284,9 +283,9 @@ func HandleGenerate(event *handler.CommandEvent) error {
 			slog.Float64("kudos", status.Kudos),
 			slog.String("id", id),
 		)
-		event.UpdateInteractionResponse(discord.NewMessageUpdateBuilder().
-			SetContent(message).
-			SetContainerComponents(
+		event.UpdateInteractionResponse(discord.NewMessageUpdate().
+			WithContent(message).
+			WithComponents(
 				discord.NewActionRow(
 					discord.ButtonComponent{
 						Style: discord.ButtonStyleSecondary,
@@ -296,8 +295,7 @@ func HandleGenerate(event *handler.CommandEvent) error {
 						CustomID: fmt.Sprintf("/cancel/%s:%d", id, event.User().ID),
 					},
 				),
-			).
-			Build())
+			))
 
 		time.Sleep(3 * time.Second)
 	}
@@ -367,11 +365,10 @@ func HandleGenerate(event *handler.CommandEvent) error {
 	}
 	sb.WriteString(fmt.Sprintf("\n-# steps=%d, n=%d, cfg_scale=%s, clip_skip=%d", steps, n, dtoa(cfgScale), clipSkip))
 
-	_, err = event.UpdateInteractionResponse(discord.NewMessageUpdateBuilder().
-		SetContent(sb.String()).
-		SetFiles(files...).
-		SetContainerComponents().
-		Build())
+	_, err = event.UpdateInteractionResponse(discord.NewMessageUpdate().
+		WithContent(sb.String()).
+		WithFiles(files...).
+		ClearComponents())
 
 	if err == nil {
 		stats, err := db.GetGlobalStats()
@@ -402,10 +399,9 @@ func HandleGenerateCancel(data discord.ButtonInteractionData, event *handler.Com
 
 	if userID != event.User().ID.String() {
 		return event.CreateMessage(
-			discord.NewMessageCreateBuilder().
-				SetContent("❌ Cannot cancel generation of another user").
-				SetEphemeral(true).
-				Build(),
+			discord.NewMessageCreate().
+				WithContent("❌ Cannot cancel generation of another user").
+				WithEphemeral(true),
 		)
 	}
 
@@ -414,9 +410,8 @@ func HandleGenerateCancel(data discord.ButtonInteractionData, event *handler.Com
 	if err := horder.GetHorder().Cancel(id); err != nil {
 		slog.Error("HandleGenerateCancel: failed to cancel", "err", err)
 		// TODO: should we update or create here? doubt this is documented
-		_, err := event.UpdateInteractionResponse(discord.NewMessageUpdateBuilder().
-			SetContent("❌ " + err.Error()).
-			Build())
+		_, err := event.UpdateInteractionResponse(discord.NewMessageUpdate().
+			WithContent("❌ " + err.Error()))
 		return err
 	}
 

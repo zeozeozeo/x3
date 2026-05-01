@@ -18,7 +18,7 @@ import (
 // FIXME: rewrite all of this
 //
 
-func InitiateDMInteraction(client bot.Client) {
+func InitiateDMInteraction(client *bot.Client) {
 	channels, err := db.GetCachedChannelIDs()
 	if err != nil {
 		slog.Error("InitiateDMInteraction: failed to get cached channel IDs", "err", err)
@@ -68,7 +68,7 @@ func InitiateDMInteraction(client bot.Client) {
 		// --- End Skip Conditions ---
 
 		// Verify channel type (as a final check)
-		channel, err := client.Rest().GetChannel(id)
+		channel, err := client.Rest.GetChannel(id)
 		if err != nil {
 			slog.Warn("InitiateDMInteraction: failed to get channel info; marking as non-DM", "err", err, "channel_id", id)
 			cache.KnownNonDM = true

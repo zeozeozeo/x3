@@ -92,7 +92,7 @@ func main() {
 					gateway.IntentGuildMessageReactions,
 					gateway.IntentDirectMessageReactions,
 				),
-				gateway.WithCompress(true),
+				gateway.WithCompression(gateway.CompressionZstdStream),
 			),
 		),
 		bot.WithEventListeners(
@@ -120,7 +120,7 @@ func main() {
 	}
 	defer client.Close(context.TODO())
 
-	if _, err = client.Rest().SetGlobalCommands(client.ApplicationID(), commands.AllCommands); err != nil {
+	if _, err = client.Rest.SetGlobalCommands(client.ApplicationID, commands.AllCommands); err != nil {
 		panic(err)
 	} else {
 		slog.Info("global commands registered successfully")

@@ -92,7 +92,7 @@ func HandleLlm(event *handler.CommandEvent, models []model.Model) error {
 	// if we can't read the message history we'll use the cache
 	useCache := event.GuildID() == nil || (event.AppPermissions() != nil && !event.AppPermissions().Has(discord.PermissionReadMessageHistory))
 	isDM := event.Channel().Type() == discord.ChannelTypeDM
-	lastInteracted := db.GetInteractionTime(event.User().ID)
+	promptContext := buildPromptContext(event.Client(), event.Channel().ID(), event.GuildID(), cache)
 
 	usernames := map[string]struct{}{}
 
@@ -109,12 +109,12 @@ func HandleLlm(event *handler.CommandEvent, models []model.Model) error {
 		if lastMessage != nil {
 			_, usernames, _, _, _ = addContextMessages(event.Client(), llmer, event.Channel().ID(), *lastMessage, cache.ContextLength)
 
-			msg, err := event.Client().Rest().GetMessage(event.Channel().ID(), *lastMessage)
+			msg, err := event.Client().Rest.GetMessage(event.Channel().ID(), *lastMessage)
 			if err == nil && msg != nil && msg.Interaction == nil {
 				if isLobotomyMessage(*msg) {
 					llmer.Lobotomize(getLobotomyAmountFromMessage(*msg))
 				} else {
-					msgPersona := persona.GetPersonaByMeta(cache.PersonaMeta, cache.Summaries, msg.Author.EffectiveName(), isDM, lastInteracted, cache.Context)
+					msgPersona := persona.GetPersonaByMeta(cache.PersonaMeta, msg.Author.EffectiveName(), isDM, promptContext)
 					llmer.SetPersona(msgPersona, nil)
 					llmer.AddMessage(llm.RoleUser, formatMsg(getMessageContent(*msg), msg.Author.EffectiveName(), msg.ReferencedMessage), msg.ID)
 					addImageAttachments(llmer, msg.Attachments)
@@ -125,7 +125,7 @@ func HandleLlm(event *handler.CommandEvent, models []model.Model) error {
 	usernames[event.User().EffectiveName()] = struct{}{} // to be safe when not using cache
 	slog.Debug("prepared initial context", slog.Int("num_messages", llmer.NumMessages()))
 
-	currentPersona := persona.GetPersonaByMeta(cache.PersonaMeta, cache.Summaries, event.User().EffectiveName(), isDM, lastInteracted, cache.Context)
+	currentPersona := persona.GetPersonaByMeta(cache.PersonaMeta, event.User().EffectiveName(), isDM, promptContext)
 	llmer.SetPersona(currentPersona, &cache.PersonaMeta.ExcessiveSplit)
 	llmer.AddMessage(llm.RoleUser, formatMsg(prompt, event.User().EffectiveName(), nil), 0)
 
@@ -180,23 +180,23 @@ func HandleLlm(event *handler.CommandEvent, models []model.Model) error {
 	var botMessage *discord.Message
 
 	if ephemeral || useCache { // (single response)
-		update := discord.NewMessageUpdateBuilder().SetFlags(flagsFromEphemeral(ephemeral)) // Get flags
+		update := discord.NewMessageUpdate().WithFlags(flagsFromEphemeral(ephemeral)) // Get flags
 		if utf8.RuneCountInString(response) > 2000 {
-			update.SetContent("")
-			update.AddFiles(&discord.File{
+			update = update.WithContent("")
+			update = update.AddFiles(&discord.File{
 				Name:   fmt.Sprintf("response-%v.txt", event.ID()),
 				Reader: strings.NewReader(response),
 			})
 			if len(files) > 0 {
-				update.AddFiles(files...)
+				update = update.AddFiles(files...)
 			}
 		} else {
-			update.SetContent(response)
+			update = update.WithContent(response)
 			if len(files) > 0 {
-				update.AddFiles(files...)
+				update = update.AddFiles(files...)
 			}
 		}
-		botMessage, err = event.UpdateInteractionResponse(update.Build())
+		botMessage, err = event.UpdateInteractionResponse(update)
 
 	} else { // (splits)
 		messages := splitLlmTags(response, &cache.PersonaMeta)

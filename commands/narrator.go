@@ -79,7 +79,7 @@ func (n *Narrator) Run() {
 		} else {
 			meta = persona.PersonaStableNarrator
 		}
-		p := persona.GetPersonaByMeta(meta, []persona.Summary{}, "", false /* dm */, time.Time{}, nil)
+		p := persona.GetPersonaByMeta(meta, "", false /* dm */, persona.PromptContext{})
 		qn.llmer.SetPersona(p, nil) // TODO: custom personas
 		res, _, err := qn.llmer.RequestCompletion(meta.GetModels(), meta.Settings, qn.prepend, context.Background())
 

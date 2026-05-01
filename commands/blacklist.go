@@ -91,9 +91,8 @@ func HandleBlacklist(event *handler.CommandEvent) error {
 	}
 
 	return event.CreateMessage(
-		discord.NewMessageCreateBuilder().
-			SetContentf(actionMessage, channelID).
-			SetEphemeral(ephemeral).
-			Build(),
+		discord.NewMessageCreate().
+			WithContentf(actionMessage, channelID).
+			WithEphemeral(ephemeral),
 	)
 }

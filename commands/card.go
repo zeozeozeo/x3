@@ -20,7 +20,7 @@ func isCardMessage(msg discord.Message) bool {
 }
 
 // handleCard checks if a character card's first message should be sent and sends it
-func handleCard(client bot.Client, channelID, messageID snowflake.ID, cache *db.ChannelCache, preMsgWg *sync.WaitGroup) (bool, error) {
+func handleCard(client *bot.Client, channelID, messageID snowflake.ID, cache *db.ChannelCache, preMsgWg *sync.WaitGroup) (bool, error) {
 	if cache.PersonaMeta.IsFirstMes && len(cache.PersonaMeta.FirstMes) > 0 {
 		cache.PersonaMeta.IsFirstMes = false // mark as sent
 

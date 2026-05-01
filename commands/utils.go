@@ -1,4 +1,4 @@
-package commands
+﻿package commands
 
 import (
 	"encoding/base64"
@@ -121,147 +121,133 @@ func HandleGenericAutocomplete(
 // sendInteractionError sends a formatted error message as a response to a command event
 func sendInteractionError(event *handler.CommandEvent, msg string, ephemeral bool) error {
 	return event.CreateMessage(
-		discord.NewMessageCreateBuilder().
-			SetAllowedMentions(&discord.AllowedMentions{
+		discord.NewMessageCreate().
+			WithAllowedMentions(&discord.AllowedMentions{
 				RepliedUser: false,
 			}).
-			SetEphemeral(ephemeral).
+			WithEphemeral(ephemeral).
 			AddEmbeds(
-				discord.NewEmbedBuilder().
-					SetColor(0xf54242).
-					SetTitle("❌ Error").
-					SetFooter("x3", x3ErrorIcon).
-					SetTimestamp(time.Now()).
-					SetDescription(toTitle(msg)).
-					Build(),
-			).
-			Build(),
+				discord.NewEmbed().
+					WithColor(0xf54242).
+					WithTitle("❌ Error").
+					WithFooter("x3", x3ErrorIcon).
+					WithTimestamp(time.Now()).
+					WithDescription(toTitle(msg)),
+			),
 	)
 }
 
 func sendInteractionErrorComponent(event *handler.ComponentEvent, msg string, ephemeral bool) error {
 	return event.CreateMessage(
-		discord.NewMessageCreateBuilder().
-			SetAllowedMentions(&discord.AllowedMentions{
+		discord.NewMessageCreate().
+			WithAllowedMentions(&discord.AllowedMentions{
 				RepliedUser: false,
 			}).
-			SetEphemeral(ephemeral).
+			WithEphemeral(ephemeral).
 			AddEmbeds(
-				discord.NewEmbedBuilder().
-					SetColor(0xf54242).
-					SetTitle("❌ Error").
-					SetFooter("x3", x3ErrorIcon).
-					SetTimestamp(time.Now()).
-					SetDescription(toTitle(msg)).
-					Build(),
-			).
-			Build(),
+				discord.NewEmbed().
+					WithColor(0xf54242).
+					WithTitle("❌ Error").
+					WithFooter("x3", x3ErrorIcon).
+					WithTimestamp(time.Now()).
+					WithDescription(toTitle(msg)),
+			),
 	)
 }
 
 func sendInteractionOk(event *handler.CommandEvent, title, msg string, ephemeral bool) error {
 	return event.CreateMessage(
-		discord.NewMessageCreateBuilder().
-			SetAllowedMentions(&discord.AllowedMentions{
+		discord.NewMessageCreate().
+			WithAllowedMentions(&discord.AllowedMentions{
 				RepliedUser: false,
 			}).
-			SetEphemeral(ephemeral).
+			WithEphemeral(ephemeral).
 			AddEmbeds(
-				discord.NewEmbedBuilder().
-					SetColor(0x0085ff).
-					SetTitle(title).
-					SetFooter("x3", x3Icon).
-					SetDescription(ellipsisTrim(msg, 1024)).
-					Build(),
-			).
-			Build(),
+				discord.NewEmbed().
+					WithColor(0x0085ff).
+					WithTitle(title).
+					WithFooter("x3", x3Icon).
+					WithDescription(ellipsisTrim(msg, 1024)),
+			),
 	)
 }
 
 // updateInteractionError updates an interaction response with a formatted error message.
 func updateInteractionError(event *handler.CommandEvent, msg string) error {
 	_, err := event.UpdateInteractionResponse(
-		discord.NewMessageUpdateBuilder().
+		discord.NewMessageUpdate().
 			AddEmbeds(
-				discord.NewEmbedBuilder().
-					SetColor(0xf54242).
-					SetTitle("❌ Error").
-					SetFooter("x3", x3ErrorIcon).
-					SetTimestamp(time.Now()).
-					SetDescription(toTitle(msg)).
-					Build(),
-			).
-			Build(),
+				discord.NewEmbed().
+					WithColor(0xf54242).
+					WithTitle("❌ Error").
+					WithFooter("x3", x3ErrorIcon).
+					WithTimestamp(time.Now()).
+					WithDescription(toTitle(msg)),
+			),
 	)
 	return err
 }
 
-func sendPrettyEmbed(client bot.Client, channelID snowflake.ID, title, text string) error {
-	_, err := client.Rest().CreateMessage(
+func sendPrettyEmbed(client *bot.Client, channelID snowflake.ID, title, text string) error {
+	_, err := client.Rest.CreateMessage(
 		channelID,
-		discord.NewMessageCreateBuilder().
+		discord.NewMessageCreate().
 			AddEmbeds(
-				discord.NewEmbedBuilder().
-					SetColor(0xFFD700).
-					SetTitle(title).
-					SetDescription(ellipsisTrim(text, 1024)).
-					SetFooter("x3", x3Icon).
-					SetTimestamp(time.Now()).
-					Build(),
-			).
-			Build(),
+				discord.NewEmbed().
+					WithColor(0xFFD700).
+					WithTitle(title).
+					WithDescription(ellipsisTrim(text, 1024)).
+					WithFooter("x3", x3Icon).
+					WithTimestamp(time.Now()),
+			),
 	)
 	return err
 }
 
-func sendPrettyEmbedReply(client bot.Client, channelID snowflake.ID, replyMessageID snowflake.ID, title, text string) error {
-	_, err := client.Rest().CreateMessage(
+func sendPrettyEmbedReply(client *bot.Client, channelID snowflake.ID, replyMessageID snowflake.ID, title, text string) error {
+	_, err := client.Rest.CreateMessage(
 		channelID,
-		discord.NewMessageCreateBuilder().
-			SetMessageReferenceByID(replyMessageID).
-			SetAllowedMentions(&discord.AllowedMentions{RepliedUser: false}).
+		discord.NewMessageCreate().
+			WithMessageReferenceByID(replyMessageID).
+			WithAllowedMentions(&discord.AllowedMentions{RepliedUser: false}).
 			AddEmbeds(
-				discord.NewEmbedBuilder().
-					SetColor(0xFFD700).
-					SetTitle(title).
-					SetDescription(ellipsisTrim(text, 1024)).
-					SetFooter("x3", x3Icon).
-					SetTimestamp(time.Now()).
-					Build(),
-			).
-			Build(),
+				discord.NewEmbed().
+					WithColor(0xFFD700).
+					WithTitle(title).
+					WithDescription(ellipsisTrim(text, 1024)).
+					WithFooter("x3", x3Icon).
+					WithTimestamp(time.Now()),
+			),
 	)
 	return err
 }
 
 // sendPrettyError sends a formatted error message as a reply to a regular message.
-func sendPrettyError(client bot.Client, msg string, channelID, messageID snowflake.ID) error {
-	_, err := client.Rest().CreateMessage(
+func sendPrettyError(client *bot.Client, msg string, channelID, messageID snowflake.ID) error {
+	_, err := client.Rest.CreateMessage(
 		channelID,
-		discord.NewMessageCreateBuilder().
-			SetMessageReferenceByID(messageID).
-			SetAllowedMentions(&discord.AllowedMentions{
+		discord.NewMessageCreate().
+			WithMessageReferenceByID(messageID).
+			WithAllowedMentions(&discord.AllowedMentions{
 				RepliedUser: false,
 			}).
 			AddEmbeds(
-				discord.NewEmbedBuilder().
-					SetColor(0xf54242).
-					SetTitle("❌ Error").
-					SetFooter("x3", x3ErrorIcon).
-					SetTimestamp(time.Now()).
-					SetDescription(toTitle(msg)).
-					Build(),
-			).
-			Build(),
+				discord.NewEmbed().
+					WithColor(0xf54242).
+					WithTitle("❌ Error").
+					WithFooter("x3", x3ErrorIcon).
+					WithTimestamp(time.Now()).
+					WithDescription(toTitle(msg)),
+			),
 	)
 	return err
 }
 
 // sendTypingWithLog sends a typing indicator and logs any errors.
-func sendTypingWithLog(client bot.Client, channelID snowflake.ID, wg *sync.WaitGroup) {
+func sendTypingWithLog(client *bot.Client, channelID snowflake.ID, wg *sync.WaitGroup) {
 	defer wg.Done()
 	// typing state lasts for 10s
-	if err := client.Rest().SendTyping(channelID); err != nil {
+	if err := client.Rest.SendTyping(channelID); err != nil {
 		slog.Error("failed to SendTyping", "err", err, slog.String("channel_id", channelID.String()))
 	}
 }
@@ -431,7 +417,7 @@ func parseMessageForLatex(content string) []messagePart {
 }
 
 func sendMessageSplits(
-	client bot.Client,
+	client *bot.Client,
 	messageID snowflake.ID, // message to reply to (0 if not replying or using interaction event)
 	event *handler.CommandEvent, // interaction event (nil if sending regular message)
 	flags discord.MessageFlags, // message flags (e.g., ephemeral)
@@ -487,7 +473,7 @@ func sendMessageSplits(
 }
 
 func sendTextPart(
-	client bot.Client,
+	client *bot.Client,
 	messageID *snowflake.ID,
 	event **handler.CommandEvent,
 	flags discord.MessageFlags,
@@ -542,17 +528,17 @@ func sendTextPart(
 				Files:   currentFiles,
 			})
 		} else {
-			builder := discord.NewMessageCreateBuilder().
-				SetContent(segment).
-				SetFlags(flags).
-				SetAllowedMentions(&discord.AllowedMentions{RepliedUser: false}).
+			builder := discord.NewMessageCreate().
+				WithContent(segment).
+				WithFlags(flags).
+				WithAllowedMentions(&discord.AllowedMentions{RepliedUser: false}).
 				AddFiles(currentFiles...)
 			if i == 0 && *isFirst && *messageID != 0 {
-				builder.SetMessageReferenceByID(*messageID)
+				builder = builder.WithMessageReferenceByID(*messageID)
 			}
 
 			if len(currentFiles) > 0 || strings.TrimSpace(rawSegment) != "" {
-				message, err = client.Rest().CreateMessage(channelID, builder.Build())
+				message, err = client.Rest.CreateMessage(channelID, builder)
 			}
 		}
 
@@ -659,11 +645,11 @@ func isImageAttachment(attachment discord.Attachment) bool {
 	return attachment.ContentType != nil && strings.HasPrefix(*attachment.ContentType, "image/")
 }
 
-func purgeBotMessagesAfter(client bot.Client, messageID, channelID snowflake.ID, inclusive, inDM bool) error {
+func purgeBotMessagesAfter(client *bot.Client, messageID, channelID snowflake.ID, inclusive, inDM bool) error {
 	if messageID == 0 {
 		return errors.New("message ID cannot be zero")
 	}
-	messages, err := client.Rest().GetMessages(channelID, 0, 0, messageID, 100)
+	messages, err := client.Rest.GetMessages(channelID, 0, 0, messageID, 100)
 	if err != nil {
 		return err
 	}
@@ -681,13 +667,13 @@ func purgeBotMessagesAfter(client bot.Client, messageID, channelID snowflake.ID,
 
 	if !inDM {
 		if len(ids) >= 2 {
-			return client.Rest().BulkDeleteMessages(channelID, ids)
+			return client.Rest.BulkDeleteMessages(channelID, ids)
 		} else if len(ids) == 1 {
-			return client.Rest().DeleteMessage(channelID, ids[0])
+			return client.Rest.DeleteMessage(channelID, ids[0])
 		}
 	} else {
 		for _, id := range ids {
-			err := client.Rest().DeleteMessage(channelID, id)
+			err := client.Rest.DeleteMessage(channelID, id)
 			if err != nil {
 				return err
 			}

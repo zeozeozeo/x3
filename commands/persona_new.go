@@ -1,4 +1,4 @@
-package commands
+﻿package commands
 
 import (
 	"errors"
@@ -83,7 +83,7 @@ func dynamicButton(label string, customID string, fieldLen int) discord.ButtonCo
 	}
 }
 
-func sortedActionRow(buttons []discord.InteractiveComponent) []discord.ContainerComponent {
+func sortedActionRow(buttons []discord.InteractiveComponent) []discord.LayoutComponent {
 	sort.SliceStable(buttons, func(i, j int) bool {
 		btnI, okI := buttons[i].(discord.ButtonComponent)
 		btnJ, okJ := buttons[j].(discord.ButtonComponent)
@@ -93,7 +93,7 @@ func sortedActionRow(buttons []discord.InteractiveComponent) []discord.Container
 		return btnI.Style < btnJ.Style
 	})
 
-	var rows []discord.ContainerComponent
+	var rows []discord.LayoutComponent
 	const maxButtonsPerRow = 5
 
 	for i := 0; i < len(buttons); i += maxButtonsPerRow {
@@ -112,7 +112,7 @@ func formatRequired(s string, length int) string {
 	return s
 }
 
-func sendOrReplyWithFlowEmbed(event *handler.CommandEvent, channelID snowflake.ID, client bot.Client, flow *db.PersonaNewFlow) (snowflake.ID, error) {
+func sendOrReplyWithFlowEmbed(event *handler.CommandEvent, channelID snowflake.ID, client *bot.Client, flow *db.PersonaNewFlow) (snowflake.ID, error) {
 	requiredFieldsLeft := []string{}
 	if flow.Card.PersonaName == "" {
 		requiredFieldsLeft = append(requiredFieldsLeft, "Persona name (unique identifier for this persona)")
@@ -138,9 +138,9 @@ func sendOrReplyWithFlowEmbed(event *handler.CommandEvent, channelID snowflake.I
 		adviceStr += "\n* Set scenario and greetings if you want to start the roleplay with something"
 	}
 
-	builder := discord.NewEmbedBuilder().
-		SetTitle("Persona maker").
-		SetDescriptionf("Suggestions:\n%s\n\nUse `{{char}}` for character name and `{{user}}` for user name.", adviceStr).
+	builder := discord.NewEmbed().
+		WithTitle("Persona maker").
+		WithDescriptionf("Suggestions:\n%s\n\nUse `{{char}}` for character name and `{{user}}` for user name.", adviceStr).
 		AddFields(
 			discord.EmbedField{
 				Name:  "Persona name (required, unique)",
@@ -175,9 +175,9 @@ func sendOrReplyWithFlowEmbed(event *handler.CommandEvent, channelID snowflake.I
 				Value: formatCardField(strings.Join(flow.Card.Tags, ", ")),
 			},
 		).
-		SetColor(0x0085ff).
-		SetFooter("x3", x3Icon).
-		SetTimestamp(time.Now())
+		WithColor(0x0085ff).
+		WithFooter("x3", x3Icon).
+		WithTimestamp(time.Now())
 
 	for i, greeting := range flow.Card.AllGreetings() {
 		builder = builder.AddField(fmt.Sprintf("Greeting #%d", i+1), formatCardField(greeting), false)
@@ -211,16 +211,15 @@ func sendOrReplyWithFlowEmbed(event *handler.CommandEvent, channelID snowflake.I
 		},
 	}
 
-	messageCreate := discord.NewMessageCreateBuilder().
-		SetAllowedMentions(&discord.AllowedMentions{
+	messageCreate := discord.NewMessageCreate().
+		WithAllowedMentions(&discord.AllowedMentions{
 			RepliedUser: false,
 		}).
-		AddEmbeds(builder.Build()).
-		SetContainerComponents(sortedActionRow(buttons)...).
-		Build()
+		AddEmbeds(builder).
+		WithComponents(sortedActionRow(buttons)...)
 
 	if channelID != 0 {
-		message, err := client.Rest().CreateMessage(channelID, messageCreate)
+		message, err := client.Rest.CreateMessage(channelID, messageCreate)
 		return message.ID, err
 	}
 	return 0, event.CreateMessage(messageCreate)
@@ -248,7 +247,7 @@ func HandlePersonaMaker(event *handler.CommandEvent) error {
 func handlePersonaMakerNew(event *handler.CommandEvent) error {
 	cache := db.GetChannelCache(event.Channel().ID())
 	if cache.PersonaNewFlow != nil && cache.PersonaNewFlow.FlowMessageID != 0 {
-		event.Client().Rest().DeleteMessage(event.Channel().ID(), cache.PersonaNewFlow.FlowMessageID)
+		event.Client().Rest.DeleteMessage(event.Channel().ID(), cache.PersonaNewFlow.FlowMessageID)
 	}
 	cache.PersonaNewFlow = &db.PersonaNewFlow{}
 	cache.Write(event.Channel().ID())
@@ -296,7 +295,7 @@ func handlePersonaMakerEdit(event *handler.CommandEvent) error {
 	}
 
 	if cache.PersonaNewFlow.FlowMessageID != 0 {
-		event.Client().Rest().DeleteMessage(event.Channel().ID(), cache.PersonaNewFlow.FlowMessageID)
+		event.Client().Rest.DeleteMessage(event.Channel().ID(), cache.PersonaNewFlow.FlowMessageID)
 	}
 	cache.Write(event.Channel().ID())
 
@@ -372,7 +371,7 @@ func HandlePersonaNewSetButton(data discord.ButtonInteractionData, event *handle
 		if err := cache.Write(event.Channel().ID()); err != nil {
 			return err
 		}
-		return event.Client().Rest().DeleteMessage(event.Channel().ID(), event.Message.ID)
+		return event.Client().Rest.DeleteMessage(event.Channel().ID(), event.Message.ID)
 	}
 
 	if customID == "done" {
@@ -437,17 +436,15 @@ func HandlePersonaNewSetButton(data discord.ButtonInteractionData, event *handle
 		}
 
 		return event.CreateMessage(
-			discord.NewMessageCreateBuilder().
+			discord.NewMessageCreate().
 				AddEmbeds(
-					discord.NewEmbedBuilder().
-						SetColor(0x0085ff).
-						SetTitle("Persona created").
-						SetDescriptionf("Created and applied custom persona `%s` (character: `%s`)\n\nUse `/persona persona:<name>` to apply the persona, `/personamaker delete name:<name>` to delete it. **This is only visible for you!**", personaName, cache.PersonaMeta.TavernCard.Data.Name).
-						SetFooter("x3", x3Icon).
-						SetTimestamp(time.Now()).
-						Build(),
-				).
-				Build(),
+					discord.NewEmbed().
+						WithColor(0x0085ff).
+						WithTitle("Persona created").
+						WithDescriptionf("Created and applied custom persona `%s` (character: `%s`)\n\nUse `/persona persona:<name>` to apply the persona, `/personamaker delete name:<name>` to delete it. **This is only visible for you!**", personaName, cache.PersonaMeta.TavernCard.Data.Name).
+						WithFooter("x3", x3Icon).
+						WithTimestamp(time.Now()),
+				),
 		)
 	}
 
@@ -505,21 +502,19 @@ func HandlePersonaNewSetButton(data discord.ButtonInteractionData, event *handle
 	}
 
 	return event.CreateMessage(
-		discord.NewMessageCreateBuilder().
-			SetAllowedMentions(&discord.AllowedMentions{
+		discord.NewMessageCreate().
+			WithAllowedMentions(&discord.AllowedMentions{
 				RepliedUser: false,
 			}).
-			SetEphemeral(false).
+			WithEphemeral(false).
 			AddEmbeds(
-				discord.NewEmbedBuilder().
-					SetColor(0x0085ff).
-					SetTitlef("Changing %s", settingWhat).
-					SetFooter("x3", x3Icon).
-					SetDescription(formatCardField(field)).
-					Build(),
+				discord.NewEmbed().
+					WithColor(0x0085ff).
+					WithTitlef("Changing %s", settingWhat).
+					WithFooter("x3", x3Icon).
+					WithDescription(formatCardField(field)),
 			).
-			AddFiles(files...).
-			Build(),
+			AddFiles(files...),
 	)
 }
 

@@ -76,7 +76,7 @@ func splitLlmTags(response string, personaMeta *persona.PersonaMeta) (messages [
 
 // Doesn't call SendTyping!
 func handleLlmInteraction2(
-	client bot.Client,
+	client *bot.Client,
 	channelID,
 	messageID snowflake.ID, // ID of the triggering message (user message or interaction)
 	content string, // Content of the triggering message (can be empty for regenerate/time interaction)
@@ -147,7 +147,8 @@ func handleLlmInteraction2(
 		cache.Summaries[i].Age++
 	}
 
-	p := persona.GetPersonaByMeta(cache.PersonaMeta, cache.Summaries, username, isDM, db.GetInteractionTime(userID), cache.Context)
+	promptContext := buildPromptContext(client, channelID, nil, cache)
+	p := persona.GetPersonaByMeta(cache.PersonaMeta, username, isDM, promptContext)
 
 	// avoid formatting reply if the reference is the message we're about to regenerate
 	if reference != nil && isRegenerate && reference.ID == lastResponseMessage.ID {
@@ -234,26 +235,26 @@ func handleLlmInteraction2(
 		// edit the previous message for regeneration
 		response = replaceLlmTagsWithNewlines(response, &cache.PersonaMeta)
 
-		builder := discord.NewMessageUpdateBuilder().SetAllowedMentions(&discord.AllowedMentions{RepliedUser: false})
+		builder := discord.NewMessageUpdate().WithAllowedMentions(&discord.AllowedMentions{RepliedUser: false})
 		if utf8.RuneCountInString(response) > 2000 {
 			// if too long, send as file attachment
-			builder.SetContent("")
-			builder.AddFiles(&discord.File{
+			builder = builder.WithContent("")
+			builder = builder.AddFiles(&discord.File{
 				Reader: strings.NewReader(response),
 				Name:   fmt.Sprintf("response-%v.txt", lastResponseMessage.ID),
 			})
 			// add reasoning file if it exists
 			if len(files) > 0 {
-				builder.AddFiles(files...)
+				builder = builder.AddFiles(files...)
 			}
 		} else {
-			builder.SetContent(response)
+			builder = builder.WithContent(response)
 			if len(files) > 0 {
-				builder.AddFiles(files...)
+				builder = builder.AddFiles(files...)
 			}
 		}
 
-		_, err = client.Rest().UpdateMessage(channelID, lastResponseMessage.ID, builder.Build())
+		_, err = client.Rest.UpdateMessage(channelID, lastResponseMessage.ID, builder)
 		if err != nil {
 			slog.Error("failed to update message for regeneration", "err", err)
 			return response, 0, fmt.Errorf("failed to update message: %w", err)
@@ -404,7 +405,7 @@ func parseStableNarratorTags(response string) (string, error) {
 	return "", fmt.Errorf("narrator: failed to parse tags")
 }
 
-func handleNarration(client bot.Client, channelID, messageID snowflake.ID, llmer llm.Llmer, triggerContent string) {
+func handleNarration(client *bot.Client, channelID, messageID snowflake.ID, llmer llm.Llmer, triggerContent string) {
 	llmer.LobotomizeKeepLast(4) // keep last 4 turns
 	GetNarrator().QueueNarration(llmer, stableNarratorPrepend, func(llmer *llm.Llmer, response string) {
 		tags, err := parseStableNarratorTags(response)
@@ -416,7 +417,7 @@ func handleNarration(client bot.Client, channelID, messageID snowflake.ID, llmer
 }
 
 // handleNarrationGenerate generates an image based on LLM-provided tags and sends it as a reply.
-func handleNarrationGenerate(client bot.Client, channelID, messageID snowflake.ID, tags, triggerContent string) {
+func handleNarrationGenerate(client *bot.Client, channelID, messageID snowflake.ID, tags, triggerContent string) {
 	if tags == "" {
 		return
 	}
@@ -443,7 +444,7 @@ func handleNarrationGenerate(client bot.Client, channelID, messageID snowflake.I
 	}
 
 	isNSFW := true
-	channel, err := client.Rest().GetChannel(channelID)
+	channel, err := client.Rest.GetChannel(channelID)
 	if err == nil {
 		if guildChannel, ok := channel.(discord.GuildMessageChannel); ok {
 			isNSFW = guildChannel.NSFW()
@@ -513,15 +514,14 @@ func handleNarrationGenerate(client bot.Client, channelID, messageID snowflake.I
 		} else {
 			updatedContent = triggerContent + "\n-# " + bar
 		}
-		client.Rest().UpdateMessage(
+		client.Rest.UpdateMessage(
 			channelID,
 			messageID,
-			discord.NewMessageUpdateBuilder().
-				SetContent(updatedContent).
-				SetAllowedMentions(&discord.AllowedMentions{
+			discord.NewMessageUpdate().
+				WithContent(updatedContent).
+				WithAllowedMentions(&discord.AllowedMentions{
 					RepliedUser: false,
-				}).
-				Build(),
+				}),
 		)
 
 		if status.Done || status.Faulted {
@@ -587,23 +587,21 @@ func handleNarrationGenerate(client bot.Client, channelID, messageID snowflake.I
 	}
 
 	// send the image as a reply
-	_, err = client.Rest().CreateMessage(channelID, discord.NewMessageCreateBuilder().
-		SetContentf("-# %s", prompt).
-		SetFiles(files...).
-		SetMessageReference(&discord.MessageReference{MessageID: &messageID, ChannelID: &channelID}).
-		SetAllowedMentions(&discord.AllowedMentions{RepliedUser: false}).
-		Build())
+	_, err = client.Rest.CreateMessage(channelID, discord.NewMessageCreate().
+		WithContentf("-# %s", prompt).
+		WithFiles(files...).
+		WithMessageReference(&discord.MessageReference{MessageID: &messageID, ChannelID: &channelID}).
+		WithAllowedMentions(&discord.AllowedMentions{RepliedUser: false}))
 
 	// remove the progressbar
-	client.Rest().UpdateMessage(
+	client.Rest.UpdateMessage(
 		channelID,
 		messageID,
-		discord.NewMessageUpdateBuilder().
-			SetContent(triggerContent).
-			SetAllowedMentions(&discord.AllowedMentions{
+		discord.NewMessageUpdate().
+			WithContent(triggerContent).
+			WithAllowedMentions(&discord.AllowedMentions{
 				RepliedUser: false,
-			}).
-			Build(),
+			}),
 	)
 
 	if err != nil {

@@ -66,7 +66,7 @@ func handleCharacterCardImage(event *events.MessageCreate) bool {
 		}
 
 		cache := db.GetChannelCache(event.ChannelID)
-		card, err := cache.PersonaMeta.ApplyChara(body, event.Message.Author.EffectiveName(), cache.Context)
+		card, err := cache.PersonaMeta.ApplyChara(body, event.Message.Author.EffectiveName())
 		if err != nil {
 			slog.Error("failed to apply character card", "err", err)
 			sendPrettyEmbed(event.Client(), event.ChannelID, "Failed to apply character card", err.Error())
@@ -190,7 +190,7 @@ func OnMessageCreate(event *events.MessageCreate) {
 		}
 
 		if isScam {
-			_ = event.Client().Rest().DeleteMessage(event.ChannelID, event.MessageID)
+			_ = event.Client().Rest.DeleteMessage(event.ChannelID, event.MessageID)
 
 			// notify (debounced)
 			if lastNotify, ok := antiscamNotificationDebounce.Load(*event.GuildID); !ok || time.Since(lastNotify.(time.Time)) > 30*time.Second {
@@ -269,39 +269,37 @@ func OnMessageCreate(event *events.MessageCreate) {
 
 	// real?
 	if containsProtogenRegex.MatchString(event.Message.Content) {
-		event.Client().Rest().CreateMessage(
+		event.Client().Rest.CreateMessage(
 			event.ChannelID,
-			discord.NewMessageCreateBuilder().
-				SetContent("https://tenor.com/view/protogen-vrchat-hello-hi-jumping-gif-18406743932972249866").
-				SetMessageReferenceByID(event.MessageID).
-				SetAllowedMentions(&discord.AllowedMentions{RepliedUser: false}).
-				Build(),
+			discord.NewMessageCreate().
+				WithContent("https://tenor.com/view/protogen-vrchat-hello-hi-jumping-gif-18406743932972249866").
+				WithMessageReferenceByID(event.MessageID).
+				WithAllowedMentions(&discord.AllowedMentions{RepliedUser: false}),
 		)
 		return
 	}
 	if containsSigmaRegex.MatchString(event.Message.Content) {
-		event.Client().Rest().CreateMessage(
+		event.Client().Rest.CreateMessage(
 			event.ChannelID,
-			discord.NewMessageCreateBuilder().
-				SetMessageReferenceByID(event.MessageID).
-				SetAllowedMentions(&discord.AllowedMentions{RepliedUser: false}).
-				AddFile("sigma-boy.mp4", "", bytes.NewReader(media.SigmaBoyMp4)).
-				Build(),
+			discord.NewMessageCreate().
+				WithMessageReferenceByID(event.MessageID).
+				WithAllowedMentions(&discord.AllowedMentions{RepliedUser: false}).
+				AddFile("sigma-boy.mp4", "", bytes.NewReader(media.SigmaBoyMp4)),
 		)
 		return
 	}
 }
 
-func handleReactionAdd(client bot.Client, messageAuthorID *snowflake.ID, channelID, messageID, userID snowflake.ID, emoji discord.PartialEmoji, isDM bool) {
+func handleReactionAdd(client *bot.Client, messageAuthorID *snowflake.ID, channelID, messageID, userID snowflake.ID, emoji discord.PartialEmoji, isDM bool) {
 	if messageAuthorID == nil || *messageAuthorID != client.ID() {
 		return
 	}
-	msg, err := client.Rest().GetMessage(channelID, messageID)
+	msg, err := client.Rest.GetMessage(channelID, messageID)
 	if err != nil || msg == nil {
 		slog.Warn("OnReactionAdd failed to get message", "err", err)
 		return
 	}
-	user, err := client.Rest().GetUser(userID)
+	user, err := client.Rest.GetUser(userID)
 	if err != nil {
 		slog.Warn("OnReactionAdd failed to get user", "err", err)
 		return
@@ -357,7 +355,7 @@ func OnMessageUpdate(event *events.MessageUpdate) {
 	}
 
 	// determine if this is the last message sent by the user
-	msgs, err := event.Client().Rest().GetMessages(event.ChannelID, 0, 0, 0, 1)
+	msgs, err := event.Client().Rest.GetMessages(event.ChannelID, 0, 0, 0, 1)
 	if err != nil || len(msgs) == 0 {
 		return
 	}
@@ -374,11 +372,11 @@ func OnMessageUpdate(event *events.MessageUpdate) {
 	}
 
 	// delete bot messages sent after this message
-	afterMsgs, err := event.Client().Rest().GetMessages(event.ChannelID, 0, event.MessageID, 0, 10)
+	afterMsgs, err := event.Client().Rest.GetMessages(event.ChannelID, 0, event.MessageID, 0, 10)
 	if err == nil {
 		for _, m := range afterMsgs {
 			if m.Author.ID == event.Client().ID() {
-				_ = event.Client().Rest().DeleteMessage(event.ChannelID, m.ID)
+				_ = event.Client().Rest.DeleteMessage(event.ChannelID, m.ID)
 			}
 		}
 	}

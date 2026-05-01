@@ -188,13 +188,12 @@ outer:
 	}
 
 	slog.Info("HandleSay: send response", "len", len(outData))
-	_, err = event.Client().Rest().CreateMessage(
+	_, err = event.Client().Rest.CreateMessage(
 		event.ChannelID,
-		discord.NewMessageCreateBuilder().
-			SetMessageReferenceByID(event.MessageID).
-			SetAllowedMentions(&discord.AllowedMentions{RepliedUser: false}).
-			AddFile(filename, "image/gif", bytes.NewReader(outData)).
-			Build(),
+		discord.NewMessageCreate().
+			WithMessageReferenceByID(event.MessageID).
+			WithAllowedMentions(&discord.AllowedMentions{RepliedUser: false}).
+			AddFile(filename, "image/gif", bytes.NewReader(outData)),
 	)
 
 	return err

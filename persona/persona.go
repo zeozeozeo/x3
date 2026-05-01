@@ -52,26 +52,15 @@ The following examples are unrelated to the context of the chat and represent th
 
 x3 is allowed to generate images. When a user explicitly asks you to generate an image, you should describe it in detail, and add the "<generate_image>" tag at the VERY END of your message (WITHOUT a closing tag).
 
-{{ if .Summaries }}
-**Past chat summaries:**
-{{ range .Summaries }}
-- {{ .Str }} (updated {{ .Age }} messages ago)
-{{ end }}
-{{ end }}
-
-{{ if .Context }}
-**Additional instructions for x3's behavior:**
-{{ range .Context }}
-- {{ . }}
-{{ end }}
+{{ if .PromptContext }}
+{{ .PromptContext }}
 {{ end }}
 
 **Search:**
 You can search the internet when needed by responding with "<search>your search query here</search>". Example: <search>highest refresh rate monitor 2026</search>
 NEVER make up search results!
 
-x3 is now being connected to {{ if .DM }}a private DM with {{ .Username }}{{ else }}a chat room{{ end }}.{{ if .InteractionElapsed }}
-It has been {{ .InteractionElapsed }} since your last interaction with {{ .Username }}.{{ end }}
+x3 is now being connected to {{ if .DM }}a private DM{{ else }}a chat room{{ end }}.
 The current date is {{ .Date }}.`)
 
 	impersonateTemplate = templateMust(
@@ -96,23 +85,12 @@ Personality:
 - You frequently use emojis like 💀 (:skull:, in context of irony), 🙏 (:pray:, in context of disapproval), 😭 (:sob:, in context of laughter), 🥀 (:wilted_rose:, in context of irony, sarcasm or disapproval).
 - Do not end sentences with a period. This is not common in chat.
 
-{{ if .Summaries }}
-**Past chat summaries:**
-{{ range .Summaries }}
-- {{ .Str }} ({{ .Age }} messages ago)
-{{ end }}
+{{ if .PromptContext }}
+{{ .PromptContext }}
 {{ end }}
 
-{{ if .Context }}
-**Additional instructions for Yapper's behavior:**
-{{ range .Context }}
-- {{ . }}
-{{ end }}
-{{ end }}
-
-Yapper is now being connected to {{ if .DM }}a private DM with {{ .Username }}{{ else }}a chat room{{ end }}.{{ if .InteractionElapsed }}
-It has been {{ .InteractionElapsed }} since your last interaction with {{ .Username }}.{{ end }}
-The current date is {{ .Date }} and the current time is {{ .Time }}.`)
+Yapper is now being connected to {{ if .DM }}a private DM{{ else }}a chat room{{ end }}.
+The current date is {{ .Date }}.`)
 
 	errNoMeta = errors.New("no meta with this name")
 )
@@ -262,18 +240,13 @@ func (s Summary) IsEmpty() bool {
 }
 
 type templateData struct {
-	Date      string
-	Time      string
-	Unix      int64
-	Summaries []Summary
-	Username  string
-	// Whether in a DM
-	DM                 bool
-	InteractionElapsed string
-	Context            []string
+	Date          string
+	Username      string
+	DM            bool
+	PromptContext string
 }
 
-type personaFunc func(tmpl *template.Template, summaries []Summary, username string, dm bool, interactedAt time.Time, context []string) Persona
+type personaFunc func(tmpl *template.Template, username string, dm bool, promptContext PromptContext) Persona
 
 func GenerateSmash(length int) string {
 	var sb strings.Builder
@@ -430,27 +403,19 @@ func getNextChar(prev rune) rune {
 	}
 }
 
-func newTemplateData(summaries []Summary, username string, dm bool, interactedAt time.Time, context []string) templateData {
+func newTemplateData(username string, dm bool, promptContext string) templateData {
 	now := time.Now().UTC()
-	//var elapsed string
-	//if !interactedAt.IsZero() && now.Sub(interactedAt) >= 10*time.Minute {
-	//	elapsed = strings.TrimSpace(humanize.RelTime(interactedAt, now, "", ""))
-	//}
 	return templateData{
-		Date:               fmt.Sprint(now.Date()),
-		Time:               now.Format(time.TimeOnly),
-		Unix:               now.Unix(),
-		Summaries:          summaries,
-		Username:           username,
-		DM:                 dm,
-		InteractionElapsed: "", // TODO: bring this back
-		Context:            context,
+		Date:          now.Format("2006-01-02"),
+		Username:      username,
+		DM:            dm,
+		PromptContext: promptContext,
 	}
 }
 
-func newPersona(tmpl *template.Template, summaries []Summary, username string, dm bool, interactedAt time.Time, context []string) Persona {
+func newPersona(tmpl *template.Template, username string, dm bool, promptContext PromptContext) Persona {
 	var tpl bytes.Buffer
-	if err := tmpl.Execute(&tpl, newTemplateData(summaries, username, dm, interactedAt, context)); err != nil {
+	if err := tmpl.Execute(&tpl, newTemplateData(username, dm, promptContext.BuildBlock())); err != nil {
 		panic(err)
 	}
 
@@ -460,7 +425,7 @@ func newPersona(tmpl *template.Template, summaries []Summary, username string, d
 }
 
 func systemPromptPersona(system string) personaFunc {
-	return func(tmpl *template.Template, summaries []Summary, username string, dm bool, interactedAt time.Time, context []string) Persona {
+	return func(tmpl *template.Template, username string, dm bool, promptContext PromptContext) Persona {
 		return Persona{
 			System: system,
 		}
@@ -606,7 +571,7 @@ var (
 		getter personaFunc
 		tmpl   *template.Template
 	}{
-		PersonaDefault.Name: {getter: func(tmpl *template.Template, summaries []Summary, username string, dm bool, interactedAt time.Time, context []string) Persona {
+		PersonaDefault.Name: {getter: func(tmpl *template.Template, username string, dm bool, promptContext PromptContext) Persona {
 			return Persona{}
 		}},
 		PersonaProto.Name:            {getter: newPersona, tmpl: x3ProtogenTemplate},
@@ -631,23 +596,34 @@ func GetMetaByName(name string) (PersonaMeta, error) {
 	return PersonaMeta{}, errNoMeta
 }
 
-func GetPersonaByMeta(meta PersonaMeta, summaries []Summary, username string, dm bool, interactedAt time.Time, context []string) Persona {
+func GetPersonaByMeta(meta PersonaMeta, username string, dm bool, promptContext PromptContext) Persona {
 	if username == "" {
 		username = "this user"
 	}
 
 	if meta.TavernCard != nil {
-		system := BuildCharaSystemPrompt(meta.TavernCard, username, summaries, context, interactedAt)
+		system := BuildCharaSystemPrompt(meta.TavernCard, username, promptContext)
 		return Persona{System: system}
 	}
 
 	if s, ok := personaGetters[meta.Name]; ok {
-		persona := s.getter(s.tmpl, summaries, username, dm, interactedAt, context)
+		persona := s.getter(s.tmpl, username, dm, promptContext)
 		if len(meta.System) != 0 {
 			persona.System = meta.System
+			if promptBlock := promptContext.BuildBlock(); promptBlock != "" {
+				persona.System = strings.TrimSpace(persona.System + "\n\n" + promptBlock)
+			}
 		}
 		return persona
 	}
 
-	return Persona{System: meta.System}
+	persona := Persona{System: meta.System}
+	if promptBlock := promptContext.BuildBlock(); promptBlock != "" {
+		if persona.System != "" {
+			persona.System = strings.TrimSpace(persona.System + "\n\n" + promptBlock)
+		} else {
+			persona.System = promptBlock
+		}
+	}
+	return persona
 }

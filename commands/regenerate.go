@@ -64,10 +64,9 @@ func HandleRegenerate(event *handler.CommandEvent) error {
 	}
 
 	_, err = event.UpdateInteractionResponse(
-		discord.NewMessageUpdateBuilder().
-			SetFlags(discord.MessageFlagEphemeral).
-			SetContentf("Regenerated message %s", jumpURL).
-			Build(),
+		discord.NewMessageUpdate().
+			WithFlags(discord.MessageFlagEphemeral).
+			WithContentf("Regenerated message %s", jumpURL),
 	)
 	return err
 }

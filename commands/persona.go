@@ -1,4 +1,4 @@
-package commands
+﻿package commands
 
 import (
 	"fmt"
@@ -142,6 +142,7 @@ func enabledDisabled(v bool) string {
 // handlePersonaInfo displays the current persona settings for the channel.
 func handlePersonaInfo(event *handler.CommandEvent, ephemeral bool) error {
 	cache := db.GetChannelCache(event.Channel().ID())
+	promptContext := buildPromptContext(event.Client(), event.Channel().ID(), event.GuildID(), cache)
 
 	meta, _ := persona.GetMetaByName(cache.PersonaMeta.Name)
 
@@ -149,12 +150,12 @@ func handlePersonaInfo(event *handler.CommandEvent, ephemeral bool) error {
 	remappedSettings := settings
 	remappedSettings.Remap()
 
-	builder := discord.NewEmbedBuilder().
-		SetTitle("Persona").
-		SetColor(0x0085ff).
-		SetDescription("Current persona settings in channel. Use `/stats` to view usage stats.").
-		SetFooter("x3", x3Icon).
-		SetTimestamp(time.Now()).
+	builder := discord.NewEmbed().
+		WithTitle("Persona").
+		WithColor(0x0085ff).
+		WithDescription("Current persona settings in channel. Use `/stats` to view usage stats.").
+		WithFooter("x3", x3Icon).
+		WithTimestamp(time.Now()).
 		AddField("Name", cache.PersonaMeta.Name, true).
 		AddField("Description", meta.Desc, true).
 		AddField("Temperature", fmt.Sprintf("%s (remapped to %s)", ftoa(settings.Temperature), ftoa(remappedSettings.Temperature)), true).
@@ -180,8 +181,8 @@ func handlePersonaInfo(event *handler.CommandEvent, ephemeral bool) error {
 	}
 
 	var files []*discord.File
-	if cache.PersonaMeta.TavernCard != nil {
-		systemPrompt := persona.BuildCharaSystemPrompt(cache.PersonaMeta.TavernCard, "user", cache.Summaries, cache.Context, db.GetInteractionTime(event.User().ID))
+	systemPrompt := persona.GetPersonaByMeta(cache.PersonaMeta, "user", event.GuildID() == nil, promptContext).System
+	if systemPrompt != "" {
 		builder.AddField("System prompt", ellipsisTrim(systemPrompt, 1024), false)
 		if utf8.RuneCountInString(systemPrompt) > 1024 {
 			files = append(files, &discord.File{
@@ -189,22 +190,13 @@ func handlePersonaInfo(event *handler.CommandEvent, ephemeral bool) error {
 				Reader: strings.NewReader(systemPrompt),
 			})
 		}
-	} else if cache.PersonaMeta.System != "" {
-		builder.AddField("System prompt", ellipsisTrim(cache.PersonaMeta.System, 1024), false)
-		if utf8.RuneCountInString(cache.PersonaMeta.System) > 1024 {
-			files = append(files, &discord.File{
-				Name:   "system-prompt-full.txt",
-				Reader: strings.NewReader(cache.PersonaMeta.System),
-			})
-		}
 	}
 
 	return event.CreateMessage(
-		discord.NewMessageCreateBuilder().
-			AddEmbeds(builder.Build()).
-			SetEphemeral(ephemeral).
-			AddFiles(files...).
-			Build(),
+		discord.NewMessageCreate().
+			AddEmbeds(builder).
+			WithEphemeral(ephemeral).
+			AddFiles(files...),
 	)
 }
 
@@ -240,10 +232,9 @@ func HandlePersona(event *handler.CommandEvent) error {
 
 	if m.Whitelisted && !db.IsInWhitelist(event.User().ID) {
 		return event.CreateMessage(
-			discord.NewMessageCreateBuilder().
-				SetContentf("You need to be whitelisted to set the model `%s`. Try `%s`", dataModel, model.DefaultModel).
-				SetEphemeral(true).
-				Build(),
+			discord.NewMessageCreate().
+				WithContentf("You need to be whitelisted to set the model `%s`. Try `%s`", dataModel, model.DefaultModel).
+				WithEphemeral(true),
 		)
 	}
 
@@ -357,7 +348,7 @@ func HandlePersona(event *handler.CommandEvent) error {
 			return updateInteractionError(event, "character card is too large (max 10MB)")
 		}
 
-		card, err := cache.PersonaMeta.ApplyChara(body, event.User().EffectiveName(), cache.Context)
+		card, err := cache.PersonaMeta.ApplyChara(body, event.User().EffectiveName())
 		if err != nil {
 			slog.Error("failed to apply character card", "err", err)
 			return updateInteractionError(event, err.Error())
@@ -461,12 +452,12 @@ func HandlePersona(event *handler.CommandEvent) error {
 		sb.WriteString("No changes made")
 	}
 
-	builder := discord.NewEmbedBuilder().
-		SetColor(0x0085ff).
-		SetTitle("Updated persona").
-		SetFooter("x3", x3Icon).
-		SetTimestamp(time.Now()).
-		SetDescription(sb.String())
+	builder := discord.NewEmbed().
+		WithColor(0x0085ff).
+		WithTitle("Updated persona").
+		WithFooter("x3", x3Icon).
+		WithTimestamp(time.Now()).
+		WithDescription(sb.String())
 
 	files := []*discord.File{}
 	if creatorNotes != "" {
@@ -482,18 +473,16 @@ func HandlePersona(event *handler.CommandEvent) error {
 
 	if dataCard == "" {
 		return event.CreateMessage(
-			discord.NewMessageCreateBuilder().
-				AddEmbeds(builder.Build()).
-				SetEphemeral(ephemeral).
-				AddFiles(files...).
-				Build(),
+			discord.NewMessageCreate().
+				AddEmbeds(builder).
+				WithEphemeral(ephemeral).
+				AddFiles(files...),
 		)
 	} else {
 		_, err := event.UpdateInteractionResponse(
-			discord.NewMessageUpdateBuilder().
-				AddEmbeds(builder.Build()).
-				AddFiles(files...).
-				Build(),
+			discord.NewMessageUpdate().
+				AddEmbeds(builder).
+				AddFiles(files...),
 		)
 		return err
 	}

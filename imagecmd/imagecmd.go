@@ -86,28 +86,25 @@ func MakeRedditImageCommand(
 			}
 
 			url := post.Data.GetRandomImage()
-			_, err = event.UpdateInteractionResponse(discord.NewMessageUpdateBuilder().
-				SetContent(url).
-				AddContainerComponents(
-					discord.ActionRowComponent{
-						discord.ButtonComponent{
-							Style: discord.ButtonStyleLink,
-							Emoji: &discord.ComponentEmoji{
-								Name: "💦",
-							},
-							URL: post.Data.GetPostLink(),
+			_, err = event.UpdateInteractionResponse(discord.NewMessageUpdate().
+				WithContent(url).
+				WithComponents(discord.NewActionRow(
+					discord.ButtonComponent{
+						Style: discord.ButtonStyleLink,
+						Emoji: &discord.ComponentEmoji{
+							Name: "💦",
 						},
-						discord.ButtonComponent{
-							Style: discord.ButtonStyleSecondary,
-							Emoji: &discord.ComponentEmoji{
-								Name: "🔄",
-							},
-							CustomID: "refresh_" + name,
-						},
+						URL: post.Data.GetPostLink(),
 					},
-				).
-				SetFlags(flags).
-				Build())
+					discord.ButtonComponent{
+						Style: discord.ButtonStyleSecondary,
+						Emoji: &discord.ComponentEmoji{
+							Name: "🔄",
+						},
+						CustomID: "refresh_" + name,
+					},
+				)).
+				WithFlags(flags))
 
 			return err
 		},
@@ -118,27 +115,24 @@ func MakeRedditImageCommand(
 				return err
 			}
 			url := post.Data.GetRandomImage()
-			_, err = event.UpdateInteractionResponse(discord.NewMessageUpdateBuilder().
-				SetContent(url).
-				AddContainerComponents(
-					discord.ActionRowComponent{
-						discord.ButtonComponent{
-							Style: discord.ButtonStyleLink,
-							Emoji: &discord.ComponentEmoji{
-								Name: "💦",
-							},
-							URL: post.Data.GetPostLink(),
+			_, err = event.UpdateInteractionResponse(discord.NewMessageUpdate().
+				WithContent(url).
+				WithComponents(discord.NewActionRow(
+					discord.ButtonComponent{
+						Style: discord.ButtonStyleLink,
+						Emoji: &discord.ComponentEmoji{
+							Name: "💦",
 						},
-						discord.ButtonComponent{
-							Style: discord.ButtonStyleSecondary,
-							Emoji: &discord.ComponentEmoji{
-								Name: "🔄",
-							},
-							CustomID: data.CustomID(),
-						},
+						URL: post.Data.GetPostLink(),
 					},
-				).
-				Build())
+					discord.ButtonComponent{
+						Style: discord.ButtonStyleSecondary,
+						Emoji: &discord.ComponentEmoji{
+							Name: "🔄",
+						},
+						CustomID: data.CustomID(),
+					},
+				)))
 			return err
 		},
 		refreshID:  "refresh_" + name,

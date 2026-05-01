@@ -195,7 +195,7 @@ func isNarrationMessage(message discord.Message) bool {
 }
 
 func fetchMessagesBefore(
-	client bot.Client,
+	client *bot.Client,
 	channelID, beforeID snowflake.ID,
 	wanted int,
 ) ([]discord.Message, error) {
@@ -203,7 +203,7 @@ func fetchMessagesBefore(
 	lastID := beforeID
 
 	for wanted > 0 {
-		msgs, err := client.Rest().GetMessages(channelID, 0, lastID, 0, min(wanted, 100))
+		msgs, err := client.Rest.GetMessages(channelID, 0, lastID, 0, min(wanted, 100))
 		if err != nil {
 			if len(all) != 0 {
 				return all, nil
@@ -226,7 +226,7 @@ func fetchMessagesBefore(
 // (this way of restoring context is pretty hacky since we use \u200B to indicate splits/impersonations, but that way we don't have to
 // rely on a db)
 func addContextMessages(
-	client bot.Client,
+	client *bot.Client,
 	llmer *llm.Llmer,
 	channelID,
 	messageID snowflake.ID, // The ID of the message *before* which to fetch context

@@ -14,11 +14,9 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/barasher/go-exiftool"
 	"github.com/cloudflare/ahocorasick"
-	"github.com/dustin/go-humanize"
 	"github.com/google/uuid"
 )
 
@@ -194,17 +192,8 @@ var (
 """
 {{ .Examples }}
 """{{ end }}
-{{ if .Summaries }}
-**Past chat summaries:**
-{{ range .Summaries }}
-- {{ .Str }} (updated {{ .Age }} messages ago)
-{{ end }}
-{{ end }}
-{{ if .Context }}
-**IMPORTANT:** Additional instructions for {{ .Char }}'s behavior:
-{{ range .Context }}
-- {{ . }}
-{{ end }}
+{{ if .PromptContext }}
+{{ .PromptContext }}
 {{ end }}
 
 Write {{ .Char }}'s next replies in a fictional chat between {{ .Char }} and {{ .User }}.`))
@@ -213,44 +202,35 @@ Write {{ .Char }}'s next replies in a fictional chat between {{ .Char }} and {{ 
 )
 
 type charaTemplateData struct {
-	Char               string
-	User               string
-	Description        string
-	Personality        string
-	Scenario           string
-	Examples           string
-	Summaries          []Summary
-	Context            []string
-	InteractionElapsed string
+	Char          string
+	User          string
+	Description   string
+	Personality   string
+	Scenario      string
+	Examples      string
+	PromptContext string
 }
 
-func newCharaTemplateData(card *TavernCardV2, user string, summaries []Summary, context []string, interactedAt time.Time) charaTemplateData {
-	now := time.Now().UTC()
-	var elapsed string
-	if !interactedAt.IsZero() && now.Sub(interactedAt) >= 5*time.Minute {
-		elapsed = strings.TrimSpace(humanize.RelTime(interactedAt, now, "", ""))
-	}
+func newCharaTemplateData(card *TavernCardV2, user string, promptContext PromptContext) charaTemplateData {
 	return charaTemplateData{
-		Char:               card.Data.Name,
-		User:               user,
-		Description:        card.FormatField(card.Data.Description, user),
-		Personality:        card.FormatField(card.Data.Personality, user),
-		Scenario:           card.FormatField(card.Data.Scenario, user),
-		Examples:           card.formatExamples(user),
-		Summaries:          summaries,
-		Context:            context,
-		InteractionElapsed: elapsed,
+		Char:          card.Data.Name,
+		User:          user,
+		Description:   card.FormatField(card.Data.Description, user),
+		Personality:   card.FormatField(card.Data.Personality, user),
+		Scenario:      card.FormatField(card.Data.Scenario, user),
+		Examples:      card.formatExamples(user),
+		PromptContext: promptContext.BuildBlock(),
 		//Date:               fmt.Sprint(now.Date()),
 		//Time:               now.Format(time.TimeOnly),
 	}
 }
 
-func BuildCharaSystemPrompt(card *TavernCardV2, user string, summaries []Summary, context []string, interactedAt time.Time) string {
+func BuildCharaSystemPrompt(card *TavernCardV2, user string, promptContext PromptContext) string {
 	if card == nil || card.Data == nil {
 		return ""
 	}
 	var b bytes.Buffer
-	data := newCharaTemplateData(card, user, summaries, context, interactedAt)
+	data := newCharaTemplateData(card, user, promptContext)
 	if err := charaTemplate.Execute(&b, data); err != nil {
 		slog.Error("BuildCharaSystemPrompt: template execution failed", "err", err)
 		return ""
@@ -258,7 +238,7 @@ func BuildCharaSystemPrompt(card *TavernCardV2, user string, summaries []Summary
 	return html.UnescapeString(b.String())
 }
 
-func (meta *PersonaMeta) ApplyJsonChara(data []byte, user string, context []string) (TavernCardV2, error) {
+func (meta *PersonaMeta) ApplyJsonChara(data []byte, user string) (TavernCardV2, error) {
 	slog.Debug("ApplyChara: chara", slog.Int("len", len(data)))
 
 	var card TavernCardV2
@@ -316,9 +296,9 @@ func writeTempFile(data []byte) (string, error) {
 	return filepath, nil
 }
 
-func (meta *PersonaMeta) ApplyChara(data []byte, user string, context []string) (TavernCardV2, error) {
+func (meta *PersonaMeta) ApplyChara(data []byte, user string) (TavernCardV2, error) {
 	// try json first
-	card, err := meta.ApplyJsonChara(data, user, context)
+	card, err := meta.ApplyJsonChara(data, user)
 	if err == nil {
 		return card, nil
 	}
@@ -350,7 +330,7 @@ func (meta *PersonaMeta) ApplyChara(data []byte, user string, context []string) 
 				return card, err
 			}
 
-			card, err = meta.ApplyJsonChara(decodedData, user, context)
+			card, err = meta.ApplyJsonChara(decodedData, user)
 			return card, err
 		}
 	}

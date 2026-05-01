@@ -38,5 +38,5 @@ func HandleRandomDMs(event *handler.CommandEvent) error {
 	} else {
 		content = "Random DMs disabled. Use `/random_dms enable:true` if you wish to opt-in again."
 	}
-	return event.CreateMessage(discord.NewMessageCreateBuilder().SetContent(content).Build())
+	return event.CreateMessage(discord.NewMessageCreate().WithContent(content))
 }

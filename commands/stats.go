@@ -1,4 +1,4 @@
-package commands
+﻿package commands
 
 import (
 	"fmt"
@@ -78,14 +78,14 @@ func HandleStats(event *handler.CommandEvent) error {
 	}
 
 	return event.CreateMessage(
-		discord.NewMessageCreateBuilder().
+		discord.NewMessageCreate().
 			AddEmbeds(
-				discord.NewEmbedBuilder().
-					SetTitle("Stats").
-					SetColor(0x0085ff).
-					SetDescription("Per-channel and global bot stats").
-					SetFooter("x3", x3Icon).
-					SetTimestamp(time.Now()).
+				discord.NewEmbed().
+					WithTitle("Stats").
+					WithColor(0x0085ff).
+					WithDescription("Per-channel and global bot stats").
+					WithFooter("x3", x3Icon).
+					WithTimestamp(time.Now()).
 					AddField("Prompt tokens (channel)", prompt, true).
 					AddField("Response tokens (channel)", response, true).
 					AddField("Total tokens (channel)", total, true).
@@ -98,10 +98,8 @@ func HandleStats(event *handler.CommandEvent) error {
 					AddField("Bot uptime", upSince, true).
 					AddField("Messages processed", humanize.Comma(int64(stats.MessageCount)), true).
 					AddField("Last message processed", lastProcessed, true).
-					AddField("Images generated", humanize.Comma(int64(stats.ImagesGenerated)), true).
-					Build(),
+					AddField("Images generated", humanize.Comma(int64(stats.ImagesGenerated)), true),
 			).
-			SetEphemeral(ephemeral).
-			Build(),
+			WithEphemeral(ephemeral),
 	)
 }

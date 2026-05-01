@@ -36,7 +36,7 @@ func GenerateImageDescription(imageURL string, ctx context.Context) (string, err
 	llmer := llm.NewLlmer(0)
 
 	meta := persona.PersonaImageDescription
-	p := persona.GetPersonaByMeta(meta, nil, "", false, time.Time{}, nil)
+	p := persona.GetPersonaByMeta(meta, "", false, persona.PromptContext{})
 	llmer.SetPersona(p, nil)
 
 	llmer.AddMessage(llm.RoleUser, "Describe this image in detail.", 0)
