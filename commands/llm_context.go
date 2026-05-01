@@ -117,60 +117,62 @@ func getMessageContent(message discord.Message) string {
 	content = sb.String()
 
 	// process text attachments
-	for i, attachment := range message.Attachments {
-		if attachment.Filename == "reasoning.txt" {
-			continue
-		}
-		maxSize := 16 * 1024
-		if attachment.Size > maxSize {
-			continue
-		}
-
-		if attachment.ContentType == nil || !strings.Contains(*attachment.ContentType, "text/plain") {
-			continue
-		}
-
-		if i == 0 && content != "" {
-			content += "\n"
-		}
-
-		var body []byte
-		var readErr error
-		// try reading from cache first
-		if b, ok := readTxtCache(attachment.ID); ok {
-			body = b
-		} else {
-			// download if not cached
-			slog.Info("downloading attachment", slog.String("url", attachment.URL))
-			resp, err := http.Get(attachment.URL)
-			if err != nil {
-				slog.Error("failed to fetch attachment", "err", err, slog.String("url", attachment.URL))
+	if !message.Author.Bot {
+		for i, attachment := range message.Attachments {
+			if attachment.Filename == "reasoning.txt" {
 				continue
 			}
-			defer resp.Body.Close()
-
-			limitedReader := io.LimitReader(resp.Body, int64(maxSize)+1)
-			body, readErr = io.ReadAll(limitedReader)
-			if readErr != nil {
-				slog.Error("failed to read attachment body", slog.Any("err", readErr), slog.String("url", attachment.URL))
-				continue
-			}
-			if len(body) > maxSize {
-				slog.Warn("attachment body exceeded size limit after download", slog.String("id", attachment.ID.String()), slog.Int("size", len(body)))
-				continue
-			}
-			if !utf8.Valid(body) {
-				slog.Warn("attachment body is not valid utf8", slog.String("id", attachment.ID.String()))
+			maxSize := 16 * 1024
+			if attachment.Size > maxSize {
 				continue
 			}
 
-			// write to cache
-			if err := writeTxtCache(attachment.ID, body); err != nil {
-				slog.Error("failed to write txt cache", "err", err, slog.String("id", attachment.ID.String()))
+			if attachment.ContentType == nil || !strings.Contains(*attachment.ContentType, "text/plain") {
+				continue
 			}
-		}
 
-		content += string(body)
+			if i == 0 && content != "" {
+				content += "\n"
+			}
+
+			var body []byte
+			var readErr error
+			// try reading from cache first
+			if b, ok := readTxtCache(attachment.ID); ok {
+				body = b
+			} else {
+				// download if not cached
+				slog.Info("downloading attachment", slog.String("url", attachment.URL))
+				resp, err := http.Get(attachment.URL)
+				if err != nil {
+					slog.Error("failed to fetch attachment", "err", err, slog.String("url", attachment.URL))
+					continue
+				}
+				defer resp.Body.Close()
+
+				limitedReader := io.LimitReader(resp.Body, int64(maxSize)+1)
+				body, readErr = io.ReadAll(limitedReader)
+				if readErr != nil {
+					slog.Error("failed to read attachment body", slog.Any("err", readErr), slog.String("url", attachment.URL))
+					continue
+				}
+				if len(body) > maxSize {
+					slog.Warn("attachment body exceeded size limit after download", slog.String("id", attachment.ID.String()), slog.Int("size", len(body)))
+					continue
+				}
+				if !utf8.Valid(body) {
+					slog.Warn("attachment body is not valid utf8", slog.String("id", attachment.ID.String()))
+					continue
+				}
+
+				// write to cache
+				if err := writeTxtCache(attachment.ID, body); err != nil {
+					slog.Error("failed to write txt cache", "err", err, slog.String("id", attachment.ID.String()))
+				}
+			}
+
+			content += string(body)
+		}
 	}
 
 	// replace mentions with readable names
