@@ -24,58 +24,18 @@ func buildPromptContext(client *bot.Client, channelID snowflake.ID, guildID *sno
 		Context:   append([]string(nil), cache.Context...),
 	}
 
-	if guildID == nil {
-		channel, err := client.Rest.GetChannel(channelID)
-		if err == nil {
-			if guildChannel, ok := channel.(discord.GuildChannel); ok {
-				inferredGuildID := guildChannel.GuildID()
-				guildID = &inferredGuildID
-			}
-		}
-	}
-
-	if guildID == nil {
-		return ctx
-	}
-
-	env, err := buildDiscordEnvironment(client, channelID, *guildID)
+	env, err := getDiscordEnvironmentSnapshot(client, channelID, guildID)
 	if err != nil {
-		slog.Warn("failed to build discord environment for prompt context", "err", err, "channel_id", channelID.String(), "guild_id", guildID.String())
-		if !env.IsEmpty() {
-			ctx.Discord = env
+		if guildID != nil {
+			slog.Warn("failed to build discord environment for prompt context", "err", err, "channel_id", channelID.String(), "guild_id", guildID.String())
+		} else {
+			slog.Warn("failed to build discord environment for prompt context", "err", err, "channel_id", channelID.String())
 		}
-		return ctx
 	}
-	ctx.Discord = env
+	if env != nil && !env.IsEmpty() {
+		ctx.Discord = env
+	}
 	return ctx
-}
-
-func buildDiscordEnvironment(client *bot.Client, channelID, guildID snowflake.ID) (*persona.DiscordEnvironment, error) {
-	env := &persona.DiscordEnvironment{}
-
-	channel, err := client.Rest.GetChannel(channelID)
-	if err == nil && channel != nil {
-		env.ChannelName, env.ChannelDescription = summarizeDiscordChannel(channel)
-	}
-
-	guild, err := client.Rest.GetGuild(guildID, false)
-	if err != nil {
-		return env, err
-	}
-
-	env.GuildName = strings.TrimSpace(guild.Name)
-	if guild.Description != nil {
-		env.GuildDescription = strings.TrimSpace(*guild.Description)
-	}
-
-	visible, err := buildVisibleChannelRefs(client, guild, channelID)
-	if err != nil {
-		slog.Warn("failed to enumerate visible channels", "err", err, "guild_id", guildID.String())
-	} else {
-		env.VisibleChannels = visible
-	}
-
-	return env, nil
 }
 
 func summarizeDiscordChannel(channel discord.Channel) (name, description string) {
@@ -97,8 +57,8 @@ func summarizeDiscordChannel(channel discord.Channel) (name, description string)
 	return name, description
 }
 
-func buildVisibleChannelRefs(client *bot.Client, guild *discord.RestGuild, currentChannelID snowflake.ID) ([]persona.DiscordChannelRef, error) {
-	guildChannels, err := client.Rest.GetGuildChannels(guild.ID)
+func buildVisibleChannelRefs(client *bot.Client, guild *discordGuildSnapshot, currentChannelID snowflake.ID) ([]persona.DiscordChannelRef, error) {
+	guildChannels, err := getGuildChannelsSnapshot(client, guild.ID)
 	if err != nil {
 		return nil, err
 	}
@@ -191,7 +151,7 @@ func sortVisibleChannelRefs(refs []persona.DiscordChannelRef) {
 	})
 }
 
-func everyoneRolePermissions(guild *discord.RestGuild) discord.Permissions {
+func everyoneRolePermissions(guild *discordGuildSnapshot) discord.Permissions {
 	for _, role := range guild.Roles {
 		if role.ID == guild.ID {
 			return role.Permissions
@@ -200,7 +160,7 @@ func everyoneRolePermissions(guild *discord.RestGuild) discord.Permissions {
 	return discord.PermissionsNone
 }
 
-func everyoneCanViewChannel(guild *discord.RestGuild, channel discord.GuildChannel) bool {
+func everyoneCanViewChannel(guild *discordGuildSnapshot, channel discord.GuildChannel) bool {
 	perms := everyoneRolePermissions(guild)
 	if perms.Has(discord.PermissionAdministrator) {
 		return true

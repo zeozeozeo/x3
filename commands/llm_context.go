@@ -224,6 +224,52 @@ func fetchMessagesBefore(
 	return all, nil
 }
 
+func loadContextMessagesBefore(
+	client *bot.Client,
+	channelID, beforeID snowflake.ID,
+	wanted int,
+) ([]discord.Message, error) {
+	if wanted <= 0 {
+		return nil, nil
+	}
+
+	history := getChannelMessageHistory(channelID)
+	messages := history.snapshotBefore(beforeID, wanted)
+	if len(messages) >= wanted {
+		return messages, nil
+	}
+
+	cursor := beforeID
+	if len(messages) > 0 {
+		cursor = messages[len(messages)-1].ID
+	}
+
+	for len(messages) < wanted {
+		remaining := wanted - len(messages)
+		batchLimit := min(remaining, 100)
+		fetched, err := fetchMessagesBefore(client, channelID, cursor, batchLimit)
+		if err != nil {
+			if len(messages) != 0 {
+				return messages, nil
+			}
+			return nil, err
+		}
+		if len(fetched) == 0 {
+			break
+		}
+
+		history.appendOlder(fetched)
+		messages = append(messages, fetched...)
+		cursor = fetched[len(fetched)-1].ID
+
+		if len(fetched) < batchLimit {
+			break
+		}
+	}
+
+	return messages, nil
+}
+
 // Returns number of messages fetched, map of usernames, last assistant response message, last assistant message ID, last user ID
 // (this way of restoring context is pretty hacky since we use \u200B to indicate splits/impersonations, but that way we don't have to
 // rely on a db)
@@ -238,7 +284,7 @@ func addContextMessages(
 		return 0, make(map[string]struct{}), nil, 0, 0
 	}
 
-	messages, err := fetchMessagesBefore(client, channelID, messageID, contextLen)
+	messages, err := loadContextMessagesBefore(client, channelID, messageID, contextLen)
 	if err != nil {
 		slog.Error("failed to get context messages", "err", err, "channel_id", channelID)
 		return 0, make(map[string]struct{}), nil, 0, 0

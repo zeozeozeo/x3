@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
@@ -22,6 +23,7 @@ var (
 	discordBeforeFilterRegexp = regexp.MustCompile(`(?i)\bbefore:(?:"([^"]+)"|'([^']+)'|([^\s]+))`)
 	discordAfterFilterRegexp  = regexp.MustCompile(`(?i)\bafter:(?:"([^"]+)"|'([^']+)'|([^\s]+))`)
 	discordPinnedFilterRegexp = regexp.MustCompile(`(?i)\bpinned:(?:"([^"]+)"|'([^']+)'|([^\s]+))`)
+	discordPageFilterRegexp   = regexp.MustCompile(`(?i)\bpage:(?:"([^"]+)"|'([^']+)'|([^\s]+))`)
 )
 
 type discordSearchSpec struct {
@@ -33,6 +35,7 @@ type discordSearchSpec struct {
 	MaxID    snowflake.ID
 	MinID    snowflake.ID
 	Pinned   *bool
+	Page     int
 }
 
 func configureDiscordSearchTool(llmer *llm.Llmer, client *bot.Client, guildID *snowflake.ID, requesterID snowflake.ID, requesterName string, includeNSFW bool) {
@@ -69,6 +72,13 @@ func getDiscordSearchResults(ctx context.Context, client *bot.Client, guildID sn
 		return fmt.Sprintf("<could not resolve mention filter(s): %s>", strings.Join(unresolvedMentionFilters, ", ")), citemap
 	}
 
+	const searchPageSize = 25
+	page := spec.Page
+	if page <= 0 {
+		page = 1
+	}
+	offset := (page - 1) * searchPageSize
+
 	channelNames := map[snowflake.ID]string{}
 	if channels, err := client.Rest.GetGuildChannels(guildID); err == nil {
 		for _, ch := range channels {
@@ -83,7 +93,8 @@ func getDiscordSearchResults(ctx context.Context, client *bot.Client, guildID sn
 	}
 
 	search := discord.GuildMessagesSearch{
-		Limit:       8,
+		Limit:       searchPageSize,
+		Offset:      offset,
 		Content:     spec.Content,
 		AuthorIDs:   authorIDs,
 		ChannelIDs:  channelIDs,
@@ -110,11 +121,11 @@ func getDiscordSearchResults(ctx context.Context, client *bot.Client, guildID sn
 	}
 
 	if len(result.Messages) == 0 {
-		return fmt.Sprintf("\n<You ran a Discord search for '%s' in the current server, but there were no matches.>\n", spec.Content), citemap
+		return fmt.Sprintf("\n<You ran a Discord search for '%s' in the current server on page %d, but there were no matches.>\n", spec.Content, page), citemap
 	}
 
 	var sb strings.Builder
-	fmt.Fprintf(&sb, "\n<You ran a Discord search for '%s' in the current server. Total matching messages: %d. Here are the top results. If these are not useful, try a different query. Use citing in your response when relevant, e.g. [1]>\n", spec.Content, result.TotalResults)
+	fmt.Fprintf(&sb, "\n<You ran a Discord search for '%s' in the current server. Page %d, %d results per page. Total matching messages: %d. Here are the current page results. If these are not useful, try a different query or another page. Use citing in your response when relevant, e.g. [1]>\n", spec.Content, page, searchPageSize, result.TotalResults)
 	if len(authorIDs) > 0 {
 		fmt.Fprintf(&sb, "<Search author filter resolved to %d Discord user id(s)>\n", len(authorIDs))
 	}
@@ -208,6 +219,14 @@ func parseDiscordSearchSpec(query string) discordSearchSpec {
 		}
 	}
 
+	pageContent, pageValues := extractDiscordFilterValues(spec.Content, discordPageFilterRegexp)
+	spec.Content = pageContent
+	if len(pageValues) > 0 {
+		if page, err := strconv.Atoi(normalizeDiscordSearchValue(pageValues[0])); err == nil {
+			spec.Page = page
+		}
+	}
+
 	return spec
 }
 
@@ -286,7 +305,7 @@ func resolveDiscordAuthorIDs(client *bot.Client, guildID snowflake.ID, requester
 	}
 
 	for _, raw := range filters {
-		filter := normalizeDiscordSearchValue(raw)
+		filter := normalizeDiscordMemberQuery(raw)
 		if filter == "" {
 			continue
 		}
@@ -310,15 +329,13 @@ func resolveDiscordAuthorIDs(client *bot.Client, guildID snowflake.ID, requester
 			continue
 		}
 
-		matched := false
-		for member := range client.Caches.Members(guildID) {
-			if memberMatchesFilter(member, filter) {
-				add(member.User.ID)
-				matched = true
-			}
-		}
-		if !matched {
+		members, ok := resolveDiscordMembersByFilter(client, guildID, filter)
+		if !ok {
 			unresolved = append(unresolved, raw)
+			continue
+		}
+		for _, member := range members {
+			add(member.User.ID)
 		}
 	}
 
@@ -351,7 +368,7 @@ func resolveDiscordChannelIDs(client *bot.Client, guildID snowflake.ID, filters 
 	}
 
 	for _, raw := range filters {
-		filter := normalizeDiscordSearchValue(raw)
+		filter := normalizeDiscordMemberQuery(raw)
 		if filter == "" {
 			continue
 		}
@@ -399,7 +416,7 @@ func resolveDiscordUserIDs(client *bot.Client, guildID snowflake.ID, requesterID
 	}
 
 	for _, raw := range filters {
-		filter := normalizeDiscordSearchValue(raw)
+		filter := normalizeDiscordMemberQuery(raw)
 		if filter == "" {
 			continue
 		}
@@ -423,19 +440,80 @@ func resolveDiscordUserIDs(client *bot.Client, guildID snowflake.ID, requesterID
 			continue
 		}
 
-		matched := false
-		for member := range client.Caches.Members(guildID) {
-			if memberMatchesFilter(member, filter) {
-				add(member.User.ID)
-				matched = true
-			}
-		}
-		if !matched {
+		members, ok := resolveDiscordMembersByFilter(client, guildID, filter)
+		if !ok {
 			unresolved = append(unresolved, raw)
+			continue
+		}
+		for _, member := range members {
+			add(member.User.ID)
 		}
 	}
 
 	return userIDs, unresolved
+}
+
+func resolveDiscordMembersByFilter(client *bot.Client, guildID snowflake.ID, filter string) ([]discord.Member, bool) {
+	filter = normalizeDiscordMemberQuery(filter)
+	if filter == "" {
+		return nil, false
+	}
+
+	seen := map[snowflake.ID]struct{}{}
+	var exactMatches []discord.Member
+	var cachedMatches []discord.Member
+	var searchMatches []discord.Member
+
+	add := func(dst *[]discord.Member, member discord.Member) {
+		if member.User.ID == 0 {
+			return
+		}
+		if _, ok := seen[member.User.ID]; ok {
+			return
+		}
+		seen[member.User.ID] = struct{}{}
+		*dst = append(*dst, member)
+	}
+
+	for member := range client.Caches.Members(guildID) {
+		if memberMatchesFilter(member, filter) {
+			add(&exactMatches, member)
+		} else if memberMatchesPartialFilter(member, filter) {
+			add(&cachedMatches, member)
+		}
+	}
+	if len(exactMatches) > 0 {
+		return exactMatches, true
+	}
+	if len(cachedMatches) == 1 {
+		return cachedMatches, true
+	}
+
+	members, err := client.Rest.SearchMembers(guildID, filter, 100)
+	if err != nil {
+		slog.Warn("discord search: failed to search guild members", "err", err, "guild_id", guildID.String(), "filter", filter)
+		return nil, false
+	}
+
+	seen = map[snowflake.ID]struct{}{}
+	for _, member := range members {
+		if memberMatchesFilter(member, filter) {
+			add(&exactMatches, member)
+		} else if memberMatchesPartialFilter(member, filter) {
+			add(&searchMatches, member)
+		}
+	}
+	if len(exactMatches) > 0 {
+		return exactMatches, true
+	}
+	if len(searchMatches) == 1 {
+		return searchMatches, true
+	}
+	if len(members) == 1 {
+		return members, true
+	}
+
+	return nil, false
 }
 
 func memberMatchesFilter(member discord.Member, filter string) bool {
@@ -459,4 +537,55 @@ func memberMatchesFilter(member discord.Member, filter string) bool {
 	}
 
 	return false
+}
+
+func memberMatchesPartialFilter(member discord.Member, filter string) bool {
+	target := normalizeDiscordName(strings.ToLower(strings.TrimSpace(filter)))
+	if target == "" {
+		return false
+	}
+
+	candidates := []string{
+		member.EffectiveName(),
+		member.User.EffectiveName(),
+		member.User.Username,
+		member.User.Tag(),
+	}
+
+	for _, candidate := range candidates {
+		candidate = normalizeDiscordName(strings.ToLower(strings.TrimSpace(candidate)))
+		if candidate == "" {
+			continue
+		}
+		if candidate == target || strings.Contains(candidate, target) || strings.Contains(target, candidate) {
+			return true
+		}
+	}
+
+	return false
+}
+
+func normalizeDiscordMemberQuery(value string) string {
+	trimmed := normalizeDiscordSearchValue(value)
+	trimmed = strings.TrimPrefix(trimmed, "@")
+	if strings.HasPrefix(trimmed, "<@") && strings.HasSuffix(trimmed, ">") {
+		trimmed = strings.TrimPrefix(trimmed, "<@")
+		trimmed = strings.TrimPrefix(trimmed, "!")
+		trimmed = strings.TrimSuffix(trimmed, ">")
+	}
+	return strings.TrimSpace(trimmed)
+}
+
+func normalizeDiscordName(value string) string {
+	var b strings.Builder
+	b.Grow(len(value))
+	for _, r := range value {
+		switch {
+		case r >= 'a' && r <= 'z':
+			b.WriteRune(r)
+		case r >= '0' && r <= '9':
+			b.WriteRune(r)
+		}
+	}
+	return b.String()
 }

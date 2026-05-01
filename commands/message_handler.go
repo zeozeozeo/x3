@@ -155,6 +155,7 @@ func isTriggerCommand(event *events.MessageCreate, cmd string) bool {
 var llmInteractionsInProgress sync.Map
 
 func OnMessageCreate(event *events.MessageCreate) {
+	recordChannelMessageHistory(event.ChannelID, event.Message)
 	if event.Message.Author.Bot {
 		return
 	}
@@ -353,6 +354,7 @@ func OnGuildMessageReactionAdd(event *events.GuildMessageReactionAdd) {
 }
 
 func OnMessageUpdate(event *events.MessageUpdate) {
+	recordChannelMessageHistory(event.ChannelID, event.Message)
 	if event.Message.Author.Bot {
 		return
 	}

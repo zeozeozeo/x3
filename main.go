@@ -85,7 +85,7 @@ func main() {
 			sharding.WithAutoScaling(true),
 			sharding.WithGatewayConfigOpts(
 				gateway.WithIntents(
-					//gateway.IntentGuilds,
+					gateway.IntentGuilds,
 					gateway.IntentGuildMessages,
 					gateway.IntentMessageContent,
 					gateway.IntentDirectMessages,
@@ -103,6 +103,18 @@ func main() {
 				},
 				OnGuildsReady: func(event *events.GuildsReady) {
 					slog.Info("guilds on shard ready", "shard_id", event.ShardID())
+				},
+				OnGuildUpdate: func(event *events.GuildUpdate) {
+					commands.InvalidateDiscordEnvironmentCacheByGuild(event.GuildID)
+				},
+				OnGuildChannelCreate: func(event *events.GuildChannelCreate) {
+					commands.InvalidateDiscordEnvironmentCacheByGuild(event.GuildID)
+				},
+				OnGuildChannelUpdate: func(event *events.GuildChannelUpdate) {
+					commands.InvalidateDiscordEnvironmentCacheByGuild(event.GuildID)
+				},
+				OnGuildChannelDelete: func(event *events.GuildChannelDelete) {
+					commands.InvalidateDiscordEnvironmentCacheByGuild(event.GuildID)
 				},
 			},
 		),
