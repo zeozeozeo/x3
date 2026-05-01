@@ -57,6 +57,8 @@ func HandleRegenerate(event *handler.CommandEvent) error {
 		nil,   // no system prompt override
 		false, // not impersonate
 		event.Channel().Type() == discord.ChannelTypeDM,
+		event.GuildID(),
+		interactionChannelNSFW(event.Channel()),
 		context.Background(),
 	)
 	if err != nil {

@@ -105,6 +105,10 @@ func handleLlmInteraction(event *events.MessageCreate) error {
 	go sendTypingWithLog(event.Client(), event.ChannelID, &wg)
 
 	content := getMessageContent(event.Message)
+	includeNSFW := false
+	if channel, ok := event.Channel(); ok {
+		includeNSFW = channel.NSFW()
+	}
 
 	_, _, err := handleLlmInteraction2(
 		event.Client(),
@@ -123,6 +127,8 @@ func handleLlmInteraction(event *events.MessageCreate) error {
 		nil,
 		false,
 		event.GuildID == nil, // if no guild this is a dm
+		event.GuildID,
+		includeNSFW,
 		ctx,
 	)
 
@@ -328,6 +334,8 @@ func handleReactionAdd(client *bot.Client, messageAuthorID *snowflake.ID, channe
 		nil,
 		false,
 		isDM, // dm event
+		msg.GuildID,
+		false,
 		context.Background(),
 	)
 

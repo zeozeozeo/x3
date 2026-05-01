@@ -122,6 +122,7 @@ func HandleLlm(event *handler.CommandEvent, models []model.Model) error {
 			}
 		}
 	}
+	configureDiscordSearchTool(llmer, event.Client(), event.GuildID(), event.User().ID, event.User().EffectiveName(), interactionChannelNSFW(event.Channel()))
 	usernames[event.User().EffectiveName()] = struct{}{} // to be safe when not using cache
 	slog.Debug("prepared initial context", slog.Int("num_messages", llmer.NumMessages()))
 

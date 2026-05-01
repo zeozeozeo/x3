@@ -92,6 +92,8 @@ func handleLlmInteraction2(
 	systemPromptOverride *string, // Optional override for the system prompt
 	isImpersonate bool, // Whether this is an impersonate interaction
 	isDM bool, // Whether this is a DM
+	guildID *snowflake.ID, // Guild context for guild-only tools
+	includeNSFW bool, // Whether Discord search should include NSFW channels
 	ctx context.Context,
 ) (string, snowflake.ID, error) { // (Returns jumpURL if regenerating, otherwise response), the bot message id and error
 	cache := db.GetChannelCache(channelID)
@@ -108,6 +110,7 @@ func handleLlmInteraction2(
 	}
 
 	llmer := llm.NewLlmer(channelID)
+	configureDiscordSearchTool(llmer, client, guildID, userID, username, includeNSFW)
 	models := cache.PersonaMeta.GetModels()
 
 	// fetch surrounding messages for context

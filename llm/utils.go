@@ -44,8 +44,14 @@ func ExtractThinking(response string) (string, string) {
 
 // extract stuff in <search></search>
 func extractSearch(s string) string {
-	startTag := "<search>"
-	endTag := "</search>"
+	return extractTaggedContent(s, "<search>", "</search>")
+}
+
+func extractDiscordSearch(s string) string {
+	return extractTaggedContent(s, "<discord>", "</discord>")
+}
+
+func extractTaggedContent(s, startTag, endTag string) string {
 
 	startIdx := strings.Index(s, startTag)
 	if startIdx == -1 {

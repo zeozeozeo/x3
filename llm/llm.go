@@ -133,14 +133,24 @@ func (u Usage) IsEmpty() bool {
 }
 
 type Llmer struct {
-	Messages  []Message    `json:"messages"`
-	ChannelID snowflake.ID `json:"channel_id"`
+	Messages                []Message    `json:"messages"`
+	ChannelID               snowflake.ID `json:"channel_id"`
+	GuildID                 *snowflake.ID `json:"guild_id,omitempty"`
+	DiscordSearchCallback   func(ctx context.Context, guildID snowflake.ID, query string) (string, map[int]string)
 }
 
 func NewLlmer(channelID snowflake.ID) *Llmer {
 	return &Llmer{
 		ChannelID: channelID,
 	}
+}
+
+func (l *Llmer) SetGuildID(guildID *snowflake.ID) {
+	l.GuildID = guildID
+}
+
+func (l *Llmer) SetDiscordSearchCallback(callback func(ctx context.Context, guildID snowflake.ID, query string) (string, map[int]string)) {
+	l.DiscordSearchCallback = callback
 }
 
 func (l *Llmer) NumMessages() int {
@@ -498,6 +508,21 @@ func (l *Llmer) requestCompletionInternal2(
 	unescaped = weirdEndRegexp.ReplaceAllString(unescaped, "$1<")
 
 	if searchDepth < 4 {
+		if search := extractDiscordSearch(unescaped); search != "" {
+			results, citemap := l.getDiscordSearchResults(ctx, search)
+			return l.requestCompletionInternal2(
+				m,
+				codename,
+				provider,
+				settings,
+				client,
+				prepend,
+				ctx,
+				searchDepth+1,
+				citemap,
+				results,
+			)
+		}
 		if search := extractSearch(unescaped); search != "" {
 			results, citemap := getSearchResults(search)
 			return l.requestCompletionInternal2(
@@ -599,6 +624,21 @@ func (l *Llmer) requestCompletionInternal(
 	}
 
 	return "", Usage{}, fmt.Errorf("all configurations for provider %s failed: %w", provider, lastErr) // all baseUrls/tokens/codenames errored
+}
+
+func (l *Llmer) getDiscordSearchResults(ctx context.Context, search string) (string, map[int]string) {
+	citemap := make(map[int]string)
+	search = strings.TrimSpace(search)
+	if search == "" {
+		return "<discord search query was empty>", citemap
+	}
+	if l.GuildID == nil {
+		return "<discord search is only available in guild channels>", citemap
+	}
+	if l.DiscordSearchCallback == nil {
+		return "<discord search is not configured for this bot>", citemap
+	}
+	return l.DiscordSearchCallback(ctx, *l.GuildID, search)
 }
 
 // removes `name:` prefix

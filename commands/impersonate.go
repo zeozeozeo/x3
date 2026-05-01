@@ -104,6 +104,8 @@ func HandleImpersonate(event *handler.CommandEvent) error {
 			systemPromptOverride,
 			isImpersonateTurn,
 			event.Channel().Type() == discord.ChannelTypeDM,
+			event.GuildID(),
+			interactionChannelNSFW(event.Channel()),
 			context.Background(),
 		)
 		if err != nil {

@@ -109,7 +109,9 @@ func InitiateDMInteraction(client *bot.Client) {
 			nil,              // No event
 			nil,
 			false,
-			true, // dm event
+			true,  // dm event
+			nil,   // no guild context
+			false, // no NSFW context
 			context.Background(),
 		)
 

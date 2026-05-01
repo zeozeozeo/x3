@@ -252,6 +252,13 @@ func sendTypingWithLog(client *bot.Client, channelID snowflake.ID, wg *sync.Wait
 	}
 }
 
+func interactionChannelNSFW(channel discord.InteractionChannel) bool {
+	if guildChannel, ok := channel.MessageChannel.(discord.GuildMessageChannel); ok {
+		return guildChannel.NSFW()
+	}
+	return false
+}
+
 // toTitle capitalizes the first letter of a string.
 func toTitle(str string) string {
 	if len(str) == 0 {
