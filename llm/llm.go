@@ -136,7 +136,7 @@ type Llmer struct {
 	Messages                []Message    `json:"messages"`
 	ChannelID               snowflake.ID `json:"channel_id"`
 	GuildID                 *snowflake.ID `json:"guild_id,omitempty"`
-	DiscordSearchCallback   func(ctx context.Context, guildID snowflake.ID, query string) (string, map[int]string)
+	DiscordSearchCallback   func(ctx context.Context, guildID snowflake.ID, query string) (string, map[int]string) `json:"-"`
 }
 
 func NewLlmer(channelID snowflake.ID) *Llmer {
