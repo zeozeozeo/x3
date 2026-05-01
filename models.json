@@ -5,6 +5,9 @@
       "command": "deepseek",
       "reasoning": true,
       "providers": {
+        "deepseek": {
+          "codenames": ["deepseek-v4-flash"]
+        },
         "mnn": {
           "codenames": ["deepseek-v4-flash"]
         },
@@ -226,22 +229,22 @@
       }
     },
     {
-      "name": "GLM 4.6V Flash",
-      "command": "glmv",
-      "vision": true,
-      "providers": {
-        "zenmux": {
-          "codenames": ["z-ai/glm-4.6v-flash-free"]
-        }
-      }
-    },
-    {
       "name": "Owl Alpha",
       "command": "stealth",
       "reasoning": true,
       "providers": {
         "openrouter": {
           "codenames": ["openrouter/owl-alpha"]
+        }
+      }
+    },
+    {
+      "name": "GLM 4.6V Flash",
+      "command": "glmv",
+      "vision": true,
+      "providers": {
+        "zenmux": {
+          "codenames": ["z-ai/glm-4.6v-flash-free"]
         }
       }
     },
@@ -259,6 +262,17 @@
       "name": "Alice (chatbot, not an LLM)",
       "command": "alice",
       "is_alice": true
+    },
+    {
+      "name": "DeepSeek V4 Pro",
+      "command": "deepseekpro",
+      "reasoning": true,
+      "providers": {
+        "deepseek": {
+          "codenames": ["deepseek-v4-pro"]
+        }
+      },
+      "limited": true
     }
   ],
   "default_models": [
@@ -281,6 +295,7 @@
     "Meta Llama 4 Scout 109B/17A"
   ],
   "providers_order": [
+    "deepseek",
     "openrouter",
     "ollama",
     "cerebras",
