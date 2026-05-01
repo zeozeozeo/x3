@@ -208,7 +208,7 @@ type charaTemplateData struct {
 	Personality   string
 	Scenario      string
 	Examples      string
-	PromptContext string
+	PromptContext template.HTML
 }
 
 func newCharaTemplateData(card *TavernCardV2, user string, promptContext PromptContext) charaTemplateData {
@@ -219,7 +219,7 @@ func newCharaTemplateData(card *TavernCardV2, user string, promptContext PromptC
 		Personality:   card.FormatField(card.Data.Personality, user),
 		Scenario:      card.FormatField(card.Data.Scenario, user),
 		Examples:      card.formatExamples(user),
-		PromptContext: promptContext.BuildBlock(),
+		PromptContext: template.HTML(promptContext.BuildBlock()),
 		//Date:               fmt.Sprint(now.Date()),
 		//Time:               now.Format(time.TimeOnly),
 	}

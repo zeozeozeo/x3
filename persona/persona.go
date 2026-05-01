@@ -243,7 +243,7 @@ type templateData struct {
 	Date          string
 	Username      string
 	DM            bool
-	PromptContext string
+	PromptContext template.HTML
 }
 
 type personaFunc func(tmpl *template.Template, username string, dm bool, promptContext PromptContext) Persona
@@ -409,7 +409,7 @@ func newTemplateData(username string, dm bool, promptContext string) templateDat
 		Date:          now.Format("2006-01-02"),
 		Username:      username,
 		DM:            dm,
-		PromptContext: promptContext,
+		PromptContext: template.HTML(promptContext),
 	}
 }
 

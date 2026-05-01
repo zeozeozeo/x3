@@ -113,9 +113,11 @@ func buildVisibleChannelRefs(client *bot.Client, guild *discord.RestGuild, curre
 			if !isTextLikeChannel(channel) {
 				continue
 			}
+			name, description := summarizeDiscordChannel(channel)
 			refs = append(refs, persona.DiscordChannelRef{
-				Name:     strings.TrimSpace(channel.Name()),
-				Category: strings.TrimSpace(categoryNameForChannel(guildChannels, channel.ParentID())),
+				Name:        name,
+				Category:    strings.TrimSpace(categoryNameForChannel(guildChannels, channel.ParentID())),
+				Description: description,
 			})
 		}
 		sortVisibleChannelRefs(refs)
@@ -148,10 +150,12 @@ func buildVisibleChannelRefs(client *bot.Client, guild *discord.RestGuild, curre
 			categoryPos = categoryPositionByID[*parentID]
 		}
 
+		name, description := summarizeDiscordChannel(channel)
 		refs = append(refs, visibleChannelRef{
 			ref: persona.DiscordChannelRef{
-				Name:     strings.TrimSpace(channel.Name()),
-				Category: categoryName,
+				Name:        name,
+				Category:    categoryName,
+				Description: description,
 			},
 			channelPosition:  channel.Position(),
 			categoryPosition: categoryPos,

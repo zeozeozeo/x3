@@ -2,14 +2,16 @@ package persona
 
 import (
 	"fmt"
+	"html"
 	"sort"
 	"strings"
 )
 
 // DiscordChannelRef is a compact, stable reference to a visible Discord channel.
 type DiscordChannelRef struct {
-	Name     string `json:"name,omitempty"`
-	Category string `json:"category,omitempty"`
+	Name        string `json:"name,omitempty"`
+	Category    string `json:"category,omitempty"`
+	Description string `json:"description,omitempty"`
 }
 
 // DiscordEnvironment captures Discord-specific metadata that should be stable for a channel.
@@ -47,16 +49,16 @@ func (ctx PromptContext) BuildBlock() string {
 		var sb strings.Builder
 		sb.WriteString("**Discord context:**\n")
 		if ctx.Discord.GuildName != "" {
-			fmt.Fprintf(&sb, "- Server: %s\n", ctx.Discord.GuildName)
+			fmt.Fprintf(&sb, "- Server: %s\n", html.UnescapeString(ctx.Discord.GuildName))
 		}
 		if ctx.Discord.GuildDescription != "" {
-			fmt.Fprintf(&sb, "- Server description: %s\n", ctx.Discord.GuildDescription)
+			fmt.Fprintf(&sb, "- Server description: %s\n", html.UnescapeString(ctx.Discord.GuildDescription))
 		}
 		if ctx.Discord.ChannelName != "" {
-			fmt.Fprintf(&sb, "- Current channel: #%s\n", ctx.Discord.ChannelName)
+			fmt.Fprintf(&sb, "- Current channel: #%s\n", html.UnescapeString(ctx.Discord.ChannelName))
 		}
 		if ctx.Discord.ChannelDescription != "" {
-			fmt.Fprintf(&sb, "- Current channel description: %s\n", ctx.Discord.ChannelDescription)
+			fmt.Fprintf(&sb, "- Current channel description: %s\n", html.UnescapeString(ctx.Discord.ChannelDescription))
 		}
 		if len(ctx.Discord.VisibleChannels) > 0 {
 			channels := clone(ctx.Discord.VisibleChannels)
@@ -68,13 +70,16 @@ func (ctx PromptContext) BuildBlock() string {
 			})
 			sb.WriteString("- Accessible text channels:\n")
 			for _, ch := range channels {
-				chName := strings.TrimSpace(ch.Name)
+				chName := html.UnescapeString(strings.TrimSpace(ch.Name))
 				if chName == "" {
 					continue
 				}
 				fmt.Fprintf(&sb, "  - #%s", chName)
 				if cat := strings.TrimSpace(ch.Category); cat != "" {
-					fmt.Fprintf(&sb, " [%s]", cat)
+					fmt.Fprintf(&sb, " [%s]", html.UnescapeString(cat))
+				}
+				if desc := html.UnescapeString(strings.TrimSpace(ch.Description)); desc != "" {
+					fmt.Fprintf(&sb, " - %s", desc)
 				}
 				sb.WriteRune('\n')
 			}
