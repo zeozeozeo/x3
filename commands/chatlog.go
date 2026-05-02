@@ -476,7 +476,7 @@ func chatArchiveBrowserMessage(archive chatArchive, page, pageSize int) discord.
 			}
 			fmt.Fprintf(&b, "**%d. %s**", i+1, author)
 			if !msg.Timestamp.IsZero() {
-				fmt.Fprintf(&b, " <t:%d:g>", msg.Timestamp.Unix())
+				fmt.Fprintf(&b, " <t:%d:f>", msg.Timestamp.Unix())
 			}
 			b.WriteString("\n")
 			b.WriteString(ellipsisTrim(msg.Content, 450))
@@ -500,14 +500,26 @@ func chatArchiveBrowserMessage(archive chatArchive, page, pageSize int) discord.
 		WithComponents(discord.NewActionRow(
 			discord.ButtonComponent{
 				Style:    discord.ButtonStyleSecondary,
-				Label:    "Previous",
+				Emoji:    &discord.ComponentEmoji{Name: "⏮️"},
+				CustomID: "/chatlog/first",
+				Disabled: page <= 0,
+			},
+			discord.ButtonComponent{
+				Style:    discord.ButtonStyleSecondary,
+				Emoji:    &discord.ComponentEmoji{Name: "⬅️"},
 				CustomID: "/chatlog/prev",
 				Disabled: page <= 0,
 			},
 			discord.ButtonComponent{
 				Style:    discord.ButtonStyleSecondary,
-				Label:    "Next",
+				Emoji:    &discord.ComponentEmoji{Name: "➡️"},
 				CustomID: "/chatlog/next",
+				Disabled: page >= maxPage,
+			},
+			discord.ButtonComponent{
+				Style:    discord.ButtonStyleSecondary,
+				Emoji:    &discord.ComponentEmoji{Name: "⏭️"},
+				CustomID: "/chatlog/last",
 				Disabled: page >= maxPage,
 			},
 		))
@@ -534,10 +546,14 @@ func HandleChatArchiveBrowser(data discord.ButtonInteractionData, event *handler
 		return fmt.Errorf("invalid archive browser custom id: %s", data.CustomID())
 	}
 	switch action {
+	case "first":
+		session.Page = 0
 	case "prev":
 		session.Page--
 	case "next":
 		session.Page++
+	case "last":
+		session.Page = max((len(session.Archive.Messages)+session.PageSize-1)/session.PageSize-1, 0)
 	}
 	totalPages := max((len(session.Archive.Messages)+session.PageSize-1)/session.PageSize, 1)
 	if session.Page < 0 {
