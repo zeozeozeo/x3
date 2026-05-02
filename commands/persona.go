@@ -1,4 +1,4 @@
-﻿package commands
+package commands
 
 import (
 	"fmt"
@@ -81,6 +81,11 @@ var PersonaCommand = discord.SlashCommandCreate{
 		discord.ApplicationCommandOptionString{
 			Name:        "card",
 			Description: "SillyTavern character card URL (image or json, get them from chub.ai or jannyai.com)",
+			Required:    false,
+		},
+		discord.ApplicationCommandOptionAttachment{
+			Name:        "card_file",
+			Description: "SillyTavern character card file (image or json)",
 			Required:    false,
 		},
 		discord.ApplicationCommandOptionInt{
@@ -207,6 +212,7 @@ func HandlePersona(event *handler.CommandEvent) error {
 	dataModel := data.String("model")
 	dataSystem := data.String("system")
 	dataCard := data.String("card")
+	dataCardFile, hasDataCardFile := data.OptAttachment("card_file")
 	dataContext, hasContext := data.OptInt("context")
 	dataTemperature, hasTemperature := data.OptFloat("temperature")
 	dataTopP, hasTopP := data.OptFloat("top_p")
@@ -216,11 +222,11 @@ func HandlePersona(event *handler.CommandEvent) error {
 	thinking, hasThinking := data.OptBool("thinking")
 	ephemeral := data.Bool("ephemeral")
 
-	if dataPersona == "" && dataModel == "" && dataSystem == "" && dataCard == "" && !hasContext && !hasTemperature && !hasTopP && !hasFreqPenalty && !hasDataSeed && !hasEnableImages && !hasThinking {
+	if dataPersona == "" && dataModel == "" && dataSystem == "" && dataCard == "" && !hasDataCardFile && !hasContext && !hasTemperature && !hasTopP && !hasFreqPenalty && !hasDataSeed && !hasEnableImages && !hasThinking {
 		return handlePersonaInfo(event, ephemeral)
 	}
 
-	if dataCard != "" {
+	if dataCard != "" || hasDataCardFile {
 		// might take some time to fetch the character card
 		if err := event.DeferCreateMessage(ephemeral); err != nil {
 			return err
@@ -315,39 +321,15 @@ func HandlePersona(event *handler.CommandEvent) error {
 	// apply character card
 	didWhat := []string{}
 	creatorNotes := ""
-	if dataCard != "" {
-		// fetch from url (this is pretty scary)
-		if !strings.HasPrefix(dataCard, "http://") && !strings.HasPrefix(dataCard, "https://") {
-			dataCard = "https://" + dataCard
+	if dataCard != "" || hasDataCardFile {
+		if dataCard != "" && hasDataCardFile {
+			return updateInteractionError(event, "use either `card` URL or `card_file`, not both")
 		}
-		slog.Debug("fetching character card", slog.String("url", dataCard))
 
-		resp, err := http.Get(dataCard)
+		body, filename, err := fetchPersonaCardData(dataCard, dataCardFile)
 		if err != nil {
-			slog.Error("failed to fetch character card", "err", err)
 			return updateInteractionError(event, err.Error())
 		}
-		defer resp.Body.Close()
-
-		const maxLimit = 10 * 1024 * 1024 // 10MB
-
-		if resp.ContentLength > maxLimit {
-			slog.Error("character card too large", "size", resp.ContentLength)
-			return updateInteractionError(event, "character card exceeds 10MB limit")
-		}
-
-		lr := io.LimitReader(resp.Body, maxLimit+1)
-		body, err := io.ReadAll(lr)
-		if err != nil {
-			slog.Error("failed to read character card resp body", "err", err)
-			return updateInteractionError(event, err.Error())
-		}
-
-		if len(body) > maxLimit {
-			slog.Error("character card download exceeded limit", "url", dataCard)
-			return updateInteractionError(event, "character card is too large (max 10MB)")
-		}
-
 		card, err := cache.PersonaMeta.ApplyChara(body, event.User().EffectiveName())
 		if err != nil {
 			slog.Error("failed to apply character card", "err", err)
@@ -356,8 +338,6 @@ func HandlePersona(event *handler.CommandEvent) error {
 		if card.Data != nil {
 			creatorNotes = card.Data.CreatorNotes
 		}
-		filename := path.Base(dataCard)
-		filename, _, _ = strings.Cut(filename, "?")
 		didWhat = append(didWhat, fmt.Sprintf("set character card to `%s`", filename))
 	}
 
@@ -471,7 +451,7 @@ func HandlePersona(event *handler.CommandEvent) error {
 		}
 	}
 
-	if dataCard == "" {
+	if dataCard == "" && !hasDataCardFile {
 		return event.CreateMessage(
 			discord.NewMessageCreate().
 				AddEmbeds(builder).
@@ -486,6 +466,54 @@ func HandlePersona(event *handler.CommandEvent) error {
 		)
 		return err
 	}
+}
+
+func fetchPersonaCardData(cardURL string, cardFile discord.Attachment) ([]byte, string, error) {
+	const maxLimit = 10 * 1024 * 1024 // 10MB
+
+	sourceURL := cardURL
+	filename := ""
+	if sourceURL != "" {
+		if !strings.HasPrefix(sourceURL, "http://") && !strings.HasPrefix(sourceURL, "https://") {
+			sourceURL = "https://" + sourceURL
+		}
+		filename = path.Base(sourceURL)
+		filename, _, _ = strings.Cut(filename, "?")
+		slog.Debug("fetching character card", slog.String("url", sourceURL))
+	} else {
+		sourceURL = cardFile.URL
+		filename = cardFile.Filename
+		if cardFile.Size > maxLimit {
+			return nil, "", fmt.Errorf("character card exceeds 10MB limit")
+		}
+		slog.Debug("fetching character card attachment", slog.String("url", sourceURL), slog.String("filename", filename))
+	}
+
+	resp, err := http.Get(sourceURL)
+	if err != nil {
+		slog.Error("failed to fetch character card", "err", err)
+		return nil, "", err
+	}
+	defer resp.Body.Close()
+
+	if resp.ContentLength > maxLimit {
+		slog.Error("character card too large", "size", resp.ContentLength)
+		return nil, "", fmt.Errorf("character card exceeds 10MB limit")
+	}
+
+	body, err := io.ReadAll(io.LimitReader(resp.Body, maxLimit+1))
+	if err != nil {
+		slog.Error("failed to read character card resp body", "err", err)
+		return nil, "", err
+	}
+	if len(body) > maxLimit {
+		slog.Error("character card download exceeded limit", "url", sourceURL)
+		return nil, "", fmt.Errorf("character card is too large (max 10MB)")
+	}
+	if filename == "" || filename == "." || filename == "/" {
+		filename = "card"
+	}
+	return body, filename, nil
 }
 
 // HandlePersonaAutocomplete handles autocomplete for the /persona command (model and persona options).
