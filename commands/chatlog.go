@@ -522,6 +522,11 @@ func chatArchiveBrowserMessage(archive chatArchive, page, pageSize int) discord.
 				CustomID: "/chatlog/last",
 				Disabled: page >= maxPage,
 			},
+			discord.ButtonComponent{
+				Style:    discord.ButtonStyleDanger,
+				Emoji:    &discord.ComponentEmoji{Name: "✖️"},
+				CustomID: "/chatlog/close",
+			},
 		))
 }
 
@@ -546,6 +551,14 @@ func HandleChatArchiveBrowser(data discord.ButtonInteractionData, event *handler
 		return fmt.Errorf("invalid archive browser custom id: %s", data.CustomID())
 	}
 	switch action {
+	case "close":
+		chatArchiveBrowserSessions.Delete(event.Message.ID.String())
+		event.DeferUpdateMessage()
+		_, err := event.UpdateInteractionResponse(discord.NewMessageUpdate().
+			WithContent("").
+			ClearEmbeds().
+			ClearComponents())
+		return err
 	case "first":
 		session.Page = 0
 	case "prev":
