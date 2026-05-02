@@ -89,8 +89,8 @@ func HandleLlm(event *handler.CommandEvent, models []model.Model) error {
 	}
 
 	var llmer *llm.Llmer
-	// if we can't read the message history we'll use the cache
-	useCache := event.GuildID() == nil || (event.AppPermissions() != nil && !event.AppPermissions().Has(discord.PermissionReadMessageHistory))
+	// if we can't read message history or an archive was imported, use cached context
+	useCache := cache.ImportedHistory != nil || event.GuildID() == nil || (event.AppPermissions() != nil && !event.AppPermissions().Has(discord.PermissionReadMessageHistory))
 	isDM := event.Channel().Type() == discord.ChannelTypeDM
 	promptContext := buildPromptContext(event.Client(), event.Channel().ID(), event.GuildID(), cache)
 
@@ -100,6 +100,9 @@ func HandleLlm(event *handler.CommandEvent, models []model.Model) error {
 		llmer = cache.Llmer
 		if llmer == nil {
 			llmer = llm.NewLlmer(event.Channel().ID())
+			if cache.ImportedHistory != nil {
+				llmer.Messages = append([]llm.Message(nil), cache.ImportedHistory.Messages...)
+			}
 		} else {
 			llmer.ChannelID = event.Channel().ID()
 		}
@@ -261,6 +264,9 @@ func HandleLlm(event *handler.CommandEvent, models []model.Model) error {
 	}
 	if useCache {
 		cache.Llmer = llmer
+		if cache.ImportedHistory != nil {
+			cache.ImportedHistory.Messages = append([]llm.Message(nil), llmer.Messages...)
+		}
 		cache.UpdateInteractionTime()
 		if err := cache.Write(event.Channel().ID()); err != nil {
 			slog.Error("failed to save channel cache", "err", err)

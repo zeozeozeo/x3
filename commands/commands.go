@@ -18,6 +18,7 @@ var AllCommands []discord.ApplicationCommandCreate = []discord.ApplicationComman
 	PersonaMakerCommand,
 	StatsCommand,
 	QuoteCommand,
+	ChatArchiveCommand,
 	//RandomDMsCommand,
 	RegenerateCommand,
 	BlacklistCommand,
@@ -68,6 +69,8 @@ func RegisterHandlers(r handler.Router) error {
 	mux.Command("/persona", HandlePersona)
 	mux.Autocomplete("/persona", HandlePersonaAutocomplete)
 	mux.Command("/stats", HandleStats)
+	mux.Command("/chatlog", HandleChatArchive)
+	mux.ButtonComponent("/chatlog/{id}", HandleChatArchiveBrowser)
 	mux.Command("/random_dms", HandleRandomDMs)
 	mux.Command("/regenerate", HandleRegenerate)
 	mux.Command("/blacklist", HandleBlacklist)

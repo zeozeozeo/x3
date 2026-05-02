@@ -3,6 +3,7 @@ package model
 import (
 	"encoding/json"
 	"os"
+	"path/filepath"
 	"sort"
 	"strings"
 	"time"
@@ -198,11 +199,34 @@ type ModelsConfig struct {
 }
 
 func LoadModelsFromJSON() error {
-	data, err := os.ReadFile("models.json")
+	path, err := findModelsJSON()
+	if err != nil {
+		return err
+	}
+	data, err := os.ReadFile(path)
 	if err != nil {
 		return err
 	}
 	return LoadModelsFromJSONData(data)
+}
+
+func findModelsJSON() (string, error) {
+	const name = "models.json"
+	dir, err := os.Getwd()
+	if err != nil {
+		return name, nil
+	}
+	for {
+		path := filepath.Join(dir, name)
+		if _, err := os.Stat(path); err == nil {
+			return path, nil
+		}
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			return name, nil
+		}
+		dir = parent
+	}
 }
 
 func LoadModelsFromJSONData(data []byte) error {

@@ -26,6 +26,10 @@ type PersonaNewFlow struct {
 	EditingCardID string               `json:"editing_card_id,omitempty"` // Name of the card being edited (for updates)
 }
 
+type ImportedChatHistory struct {
+	Messages []llm.Message `json:"messages,omitempty"`
+}
+
 // ChannelCache holds per-channel settings and temporary state.
 type ChannelCache struct {
 	// Llmer is used for caching message history in channels where the bot cannot read messages (e.g., DMs).
@@ -53,8 +57,9 @@ type ChannelCache struct {
 	// Context is a list of user-defined context strings.
 	Context []string `json:"context,omitempty"`
 	// MessagesSinceSummary tracks the number of messages since the last summary update.
-	MessagesSinceSummary int             `json:"messages_since_summary"`
-	PersonaNewFlow       *PersonaNewFlow `json:"persona_new_flow,omitempty"`
+	MessagesSinceSummary int                  `json:"messages_since_summary"`
+	PersonaNewFlow       *PersonaNewFlow      `json:"persona_new_flow,omitempty"`
+	ImportedHistory      *ImportedChatHistory `json:"imported_history,omitempty"`
 }
 
 func (cache *ChannelCache) UpdateSummary(summary persona.Summary) {

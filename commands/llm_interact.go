@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"regexp"
 	"slices"
 	"strings"
 	"sync"
@@ -36,7 +37,7 @@ const (
 	excessiveSplitPunishThres = 5
 )
 
-// replaceLlmTagsWithNewlines replaces <new_message> tags with newlines
+// replaceLlmTagsWithNewlines replaces response split markers with newlines.
 func replaceLlmTagsWithNewlines(response string, personaMeta *persona.PersonaMeta) string {
 	var b strings.Builder
 	messages := splitLlmTags(response, personaMeta)
@@ -49,7 +50,100 @@ func replaceLlmTagsWithNewlines(response string, personaMeta *persona.PersonaMet
 	return b.String()
 }
 
-// splitLlmTags splits the response by <new_message>
+var markdownListItemRegex = regexp.MustCompile(`^\s{0,3}(?:[-+*]|\d+[.)])\s+`)
+
+func isMarkdownListItem(line string) bool {
+	return markdownListItemRegex.MatchString(line)
+}
+
+func isIndentedListContinuation(line string) bool {
+	if strings.TrimSpace(line) == "" {
+		return true
+	}
+	return strings.HasPrefix(line, " ") || strings.HasPrefix(line, "\t")
+}
+
+func splitResponseChunk(response string) (messages []string) {
+	response = strings.ReplaceAll(response, "\r\n", "\n")
+	response = strings.ReplaceAll(response, "\r", "\n")
+
+	var current strings.Builder
+	inCodeBlock := false
+	inListBlock := false
+	pendingBlankLines := 0
+
+	flush := func() {
+		content := strings.TrimSpace(current.String())
+		if content != "" {
+			messages = append(messages, content)
+		}
+		current.Reset()
+		pendingBlankLines = 0
+		inListBlock = false
+	}
+
+	writePendingBlankLines := func() {
+		for pendingBlankLines > 0 {
+			if current.Len() > 0 {
+				current.WriteByte('\n')
+			}
+			pendingBlankLines--
+		}
+	}
+
+	lines := strings.Split(response, "\n")
+	for _, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		isFence := strings.HasPrefix(trimmed, "```")
+		isBlank := trimmed == ""
+
+		if isBlank {
+			if inCodeBlock {
+				if current.Len() > 0 {
+					current.WriteByte('\n')
+				}
+				continue
+			}
+			pendingBlankLines++
+			continue
+		}
+
+		if pendingBlankLines > 0 {
+			if inCodeBlock || inListBlock && (isMarkdownListItem(line) || isIndentedListContinuation(line)) {
+				writePendingBlankLines()
+			} else {
+				flush()
+			}
+		}
+
+		if current.Len() > 0 {
+			current.WriteByte('\n')
+		}
+		current.WriteString(line)
+
+		if isFence {
+			inCodeBlock = !inCodeBlock
+			if inCodeBlock {
+				inListBlock = false
+			}
+			continue
+		}
+
+		if !inCodeBlock {
+			if isMarkdownListItem(line) {
+				inListBlock = true
+			} else if inListBlock && !isIndentedListContinuation(line) {
+				inListBlock = false
+			}
+		}
+	}
+
+	flush()
+	return
+}
+
+// splitLlmTags splits model responses into Discord messages. It accepts the
+// legacy <new_message> tag and blank-line separators outside protected markdown.
 func splitLlmTags(response string, personaMeta *persona.PersonaMeta) (messages []string) {
 	defer func() {
 		if personaMeta != nil {
@@ -57,19 +151,12 @@ func splitLlmTags(response string, personaMeta *persona.PersonaMeta) (messages [
 		}
 	}()
 
-	hasSplit := strings.Contains(response, newMessageTag)
 	for content := range strings.SplitSeq(response, newMessageTag) {
 		content = strings.TrimSpace(content)
 		if content == "" {
 			continue
 		}
-
-		if hasSplit {
-			// deepseek sometimes does this instead of starting a new message
-			messages = append(messages, strings.Split(content, "\n\n")...)
-		} else {
-			messages = append(messages, content)
-		}
+		messages = append(messages, splitResponseChunk(content)...)
 	}
 	return
 }
@@ -120,13 +207,24 @@ func handleLlmInteraction2(
 	} else if models[0].IsEliza || models[0].IsAlice {
 		ctxLen = 0
 	}
-	numCtxMessages, usernames, lastResponseMessage, lastAssistantMessageID, lastUserID := addContextMessages(
-		client,
-		llmer,
-		channelID,
-		messageID,
-		ctxLen,
-	)
+	var numCtxMessages int
+	var usernames map[string]struct{}
+	var lastResponseMessage *discord.Message
+	var lastAssistantMessageID snowflake.ID
+	var lastUserID snowflake.ID
+	if cache.ImportedHistory != nil && !isRegenerate {
+		llmer.Messages = append([]llm.Message(nil), cache.ImportedHistory.Messages...)
+		numCtxMessages = len(llmer.Messages)
+		usernames = defaultKnownUsernames()
+	} else {
+		numCtxMessages, usernames, lastResponseMessage, lastAssistantMessageID, lastUserID = addContextMessages(
+			client,
+			llmer,
+			channelID,
+			messageID,
+			ctxLen,
+		)
+	}
 
 	// sanity check
 	if timeInteraction && numCtxMessages == 0 {
@@ -313,6 +411,10 @@ func handleLlmInteraction2(
 	}
 
 	cache.IsLastRandomDM = timeInteraction
+	if cache.ImportedHistory != nil && !isRegenerate {
+		cache.Llmer = llmer
+		cache.ImportedHistory.Messages = append([]llm.Message(nil), llmer.Messages...)
+	}
 	cache.UpdateInteractionTime()
 	if err := cache.Write(channelID); err != nil {
 		slog.Error("failed to write channel cache after interaction", "err", err, slog.String("channel_id", channelID.String()))

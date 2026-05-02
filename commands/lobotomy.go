@@ -6,6 +6,7 @@ import (
 	"github.com/disgoorg/disgo/discord"
 	"github.com/disgoorg/disgo/handler"
 	"github.com/zeozeozeo/x3/db"
+	"github.com/zeozeozeo/x3/llm"
 )
 
 // LobotomyCommand is the definition for the /lobotomy command
@@ -54,6 +55,19 @@ func HandleLobotomy(event *handler.CommandEvent) error {
 
 	cache := db.GetChannelCache(event.Channel().ID())
 
+	if err := event.DeferCreateMessage(ephemeral); err != nil {
+		return err
+	}
+
+	archive, err := buildChatArchive(event)
+	if err != nil {
+		return updateInteractionError(event, err.Error())
+	}
+	archiveData, err := marshalChatArchive(archive)
+	if err != nil {
+		return updateInteractionError(event, err.Error())
+	}
+
 	writeCache := false
 	if resetPersona {
 		cache.PersonaMeta = db.NewChannelCache().PersonaMeta
@@ -62,6 +76,24 @@ func HandleLobotomy(event *handler.CommandEvent) error {
 	if cache.Llmer != nil {
 		cache.Llmer.Lobotomize(amount)
 		writeCache = true
+	}
+	if cache.ImportedHistory != nil {
+		writeCache = true
+		if amount > 0 {
+			if cache.Llmer == nil {
+				cache.Llmer = llm.NewLlmer(event.Channel().ID())
+				cache.Llmer.Messages = append([]llm.Message(nil), cache.ImportedHistory.Messages...)
+				cache.Llmer.Lobotomize(amount)
+			}
+			cache.ImportedHistory.Messages = nonSystemMessages(cache.Llmer.Messages)
+			if len(cache.ImportedHistory.Messages) == 0 {
+				cache.ImportedHistory = nil
+				cache.Llmer = nil
+			}
+		} else {
+			cache.ImportedHistory = nil
+			cache.Llmer = nil
+		}
 	}
 	// in card mode, resend the card preset message
 	if len(cache.PersonaMeta.FirstMes) > 0 && amount == 0 {
@@ -83,7 +115,7 @@ func HandleLobotomy(event *handler.CommandEvent) error {
 
 	if writeCache {
 		if err := cache.Write(event.Channel().ID()); err != nil {
-			return sendInteractionError(event, err.Error(), true)
+			return updateInteractionError(event, err.Error())
 		}
 	}
 
@@ -92,14 +124,23 @@ func HandleLobotomy(event *handler.CommandEvent) error {
 		flags = discord.MessageFlagEphemeral
 	}
 
+	update := discord.NewMessageUpdate().
+		WithFlags(flags).
+		AddFiles(newChatArchiveFile(archiveData))
 	if amount > 0 {
-		return event.CreateMessage(discord.MessageCreate{
-			Content: fmt.Sprintf("Removed last %d messages from the context", amount),
-			Flags:   flags,
-		})
+		_, err = event.UpdateInteractionResponse(update.WithContentf("Removed last %d messages from the context", amount))
+		return err
 	}
-	return event.CreateMessage(discord.MessageCreate{
-		Content: "Lobotomized for this channel",
-		Flags:   flags,
-	})
+	_, err = event.UpdateInteractionResponse(update.WithContent("Lobotomized for this channel"))
+	return err
+}
+
+func nonSystemMessages(messages []llm.Message) []llm.Message {
+	out := make([]llm.Message, 0, len(messages))
+	for _, msg := range messages {
+		if msg.Role != llm.RoleSystem {
+			out = append(out, msg)
+		}
+	}
+	return out
 }
