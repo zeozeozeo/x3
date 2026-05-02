@@ -23,12 +23,13 @@ A Discord LLM roleplay and utility bot
 - Web-based model.json editor GUI
 - Furry
 - Works in DM, app and server contexts
-- Extensive LLM model selection (GLM-5, Minimax, DeepSeek V3.2, GPT-5, Llama, Kimi K2.5, etcetc)
-- Supports vision models
+- Extensive LLM model selection (GLM-5.1, DeepSeek V4, GPT-5, Llama, etcetc)
+- Supports vision models, and automatically generates text descriptions for text-only models
 - Subpar $\LaTeX$ rendering
-- Websearch (grounding)
+- Models can run websearches (grounding) and discord server searches
 - `/antiscam` to patch up Discord's incompetent spammer problem (if you're a mod)
 - Automatically preserves longer context history by summarizing previous messages
+- Ability to export and import conversations `/chatlog export`, `/chatlog import`, `/lobotomy`
 - Free and Discord based, [add it](https://discord.com/oauth2/authorize?client_id=1307635432632094740)
 
 ## Run in Docker (or Podman)
