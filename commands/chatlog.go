@@ -225,12 +225,15 @@ func downloadChatArchiveAttachment(attachment discord.Attachment) ([]byte, error
 
 func buildChatArchive(event *handler.CommandEvent) (chatArchive, error) {
 	cache := db.GetChannelCache(event.Channel().ID())
-	if shouldUseCachedChatArchive(event, cache) {
+	if cache.ImportedHistory != nil {
 		return buildChatArchiveFromLLMMessages(event.Channel().ID(), event.GuildID(), cacheHistoryMessages(cache), cache.Summaries, cache.Context), nil
 	}
 
 	rawMessages, err := fetchMessagesForArchive(event)
 	if err != nil {
+		if shouldUseCachedChatArchive(event, cache) {
+			return buildChatArchiveFromLLMMessages(event.Channel().ID(), event.GuildID(), cacheHistoryMessages(cache), cache.Summaries, cache.Context), nil
+		}
 		return chatArchive{}, err
 	}
 
@@ -244,6 +247,12 @@ func buildChatArchive(event *handler.CommandEvent) (chatArchive, error) {
 	}
 	if guildID := event.GuildID(); guildID != nil {
 		archive.GuildID = guildID.String()
+	}
+	if shouldUseCachedChatArchive(event, cache) {
+		cachedArchive := buildChatArchiveFromLLMMessages(event.Channel().ID(), event.GuildID(), cacheHistoryMessages(cache), cache.Summaries, cache.Context)
+		if len(cachedArchive.Messages) > len(archive.Messages) {
+			return cachedArchive, nil
+		}
 	}
 	return archive, nil
 }

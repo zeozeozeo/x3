@@ -411,9 +411,11 @@ func handleLlmInteraction2(
 	}
 
 	cache.IsLastRandomDM = timeInteraction
-	if cache.ImportedHistory != nil && !isRegenerate {
+	if (cache.ImportedHistory != nil || isDM) && !isRegenerate {
 		cache.Llmer = llmer
-		cache.ImportedHistory.Messages = append([]llm.Message(nil), llmer.Messages...)
+		if cache.ImportedHistory != nil {
+			cache.ImportedHistory.Messages = append([]llm.Message(nil), llmer.Messages...)
+		}
 	}
 	cache.UpdateInteractionTime()
 	if err := cache.Write(channelID); err != nil {
