@@ -328,7 +328,7 @@ func fetchMessagesForArchive(event *handler.CommandEvent) ([]discord.Message, er
 		stop := false
 		for _, msg := range batch {
 			messages = append(messages, msg)
-			if isLobotomyMessage(msg) && getLobotomyAmountFromMessage(msg) == 0 {
+			if isLobotomyMessage(msg) && strings.TrimSpace(msg.Content) != "" && getLobotomyAmountFromMessage(msg) == 0 {
 				stop = true
 				break
 			}
@@ -354,6 +354,9 @@ func replayMessagesForArchive(messages []discord.Message, botID snowflake.ID) []
 
 		if msg.Author.ID == botID {
 			if isLobotomyMessage(msg) {
+				if strings.TrimSpace(msg.Content) == "" {
+					continue
+				}
 				amount := getLobotomyAmountFromMessage(msg)
 				if amount > 0 {
 					if amount >= len(archiveMessages) {
@@ -366,7 +369,7 @@ func replayMessagesForArchive(messages []discord.Message, botID snowflake.ID) []
 				}
 				continue
 			}
-			if isCardMessage(msg) || isNarrationMessage(msg) {
+			if isChatlogMessage(msg) || isCardMessage(msg) || isNarrationMessage(msg) {
 				continue
 			}
 

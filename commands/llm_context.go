@@ -39,6 +39,10 @@ func isLobotomyMessage(msg discord.Message) bool {
 		(msg.Interaction.Name == "lobotomy" || msg.Interaction.Name == "random_dms")
 }
 
+func isChatlogMessage(msg discord.Message) bool {
+	return msg.Interaction != nil && msg.Interaction.Name == "chatlog"
+}
+
 func formatMsg(msg, username string, reference *discord.Message) string {
 	trimmedRefContent := ""
 	if reference != nil {
@@ -336,6 +340,8 @@ func addContextMessages(
 			if isLobotomyMessage(msg) {
 				// for lobotomy messages, delete the context
 				llmer.Lobotomize(getLobotomyAmountFromMessage(msg))
+				continue
+			} else if isChatlogMessage(msg) {
 				continue
 			} else if isCardMessage(msg) {
 				// for card messages, extract the actual content after the header

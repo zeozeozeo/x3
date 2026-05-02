@@ -69,3 +69,45 @@ func TestReplayMessagesForArchivePartialLobotomy(t *testing.T) {
 		t.Fatalf("unexpected second message: %#v", got[1])
 	}
 }
+
+func TestReplayMessagesForArchiveSkipsChatlogMessages(t *testing.T) {
+	botID := snowflake.ID(100)
+	user := testUser(1, "user", false)
+	bot := testUser(botID, "x3", true)
+
+	messagesNewestFirst := []discord.Message{
+		testMessage(3, bot, "Exported 1 message."),
+		testMessage(2, bot, "real response"),
+		testMessage(1, user, "hello"),
+	}
+	messagesNewestFirst[0].Interaction = &discord.MessageInteraction{Name: "chatlog"}
+
+	got := replayMessagesForArchive(messagesNewestFirst, botID)
+	if len(got) != 2 {
+		t.Fatalf("got %d messages, want 2: %#v", len(got), got)
+	}
+	if got[1].Content != "real response" {
+		t.Fatalf("unexpected assistant message: %#v", got[1])
+	}
+}
+
+func TestReplayMessagesForArchiveIgnoresEmptyDeferredLobotomy(t *testing.T) {
+	botID := snowflake.ID(100)
+	user := testUser(1, "user", false)
+	bot := testUser(botID, "x3", true)
+
+	messagesNewestFirst := []discord.Message{
+		testMessage(3, bot, ""),
+		testMessage(2, bot, "real response"),
+		testMessage(1, user, "hello"),
+	}
+	messagesNewestFirst[0].Interaction = &discord.MessageInteraction{Name: "lobotomy"}
+
+	got := replayMessagesForArchive(messagesNewestFirst, botID)
+	if len(got) != 2 {
+		t.Fatalf("got %d messages, want 2: %#v", len(got), got)
+	}
+	if got[1].Content != "real response" {
+		t.Fatalf("unexpected assistant message: %#v", got[1])
+	}
+}
