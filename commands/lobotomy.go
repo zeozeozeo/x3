@@ -1,6 +1,7 @@
 package commands
 
 import (
+	"errors"
 	"fmt"
 
 	"github.com/disgoorg/disgo/discord"
@@ -60,12 +61,18 @@ func HandleLobotomy(event *handler.CommandEvent) error {
 	}
 
 	archive, err := buildChatArchive(event)
-	if err != nil {
+	attachArchive := true
+	if errors.Is(err, errNoChatInteractions) {
+		attachArchive = false
+	} else if err != nil {
 		return updateInteractionError(event, err.Error())
 	}
-	archiveData, err := marshalChatArchive(archive)
-	if err != nil {
-		return updateInteractionError(event, err.Error())
+	var archiveData []byte
+	if attachArchive {
+		archiveData, err = marshalChatArchive(archive)
+		if err != nil {
+			return updateInteractionError(event, err.Error())
+		}
 	}
 
 	writeCache := false
@@ -125,8 +132,10 @@ func HandleLobotomy(event *handler.CommandEvent) error {
 	}
 
 	update := discord.NewMessageUpdate().
-		WithFlags(flags).
-		AddFiles(newChatArchiveFile(archiveData))
+		WithFlags(flags)
+	if attachArchive {
+		update = update.AddFiles(newChatArchiveFile(archiveData))
+	}
 	if amount > 0 {
 		_, err = event.UpdateInteractionResponse(update.WithContentf("Removed last %d messages from the context", amount))
 		return err

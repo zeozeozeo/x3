@@ -3,6 +3,7 @@ package commands
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -20,6 +21,8 @@ import (
 )
 
 const chatArchiveVersion = 1
+
+var errNoChatInteractions = errors.New("there were no interactions in this channel")
 
 type chatArchiveMessage struct {
 	Role      string    `json:"role"`
@@ -323,6 +326,7 @@ func fetchMessagesForArchive(event *handler.CommandEvent) ([]discord.Message, er
 	channelID := event.Channel().ID()
 	var messages []discord.Message
 	var before snowflake.ID
+	isFirstBatch := true
 
 	for {
 		batch, err := event.Client().Rest.GetMessages(channelID, 0, before, 0, 100)
@@ -335,6 +339,10 @@ func fetchMessagesForArchive(event *handler.CommandEvent) ([]discord.Message, er
 		if len(batch) == 0 {
 			break
 		}
+		if isFirstBatch && !containsBotMessage(batch, event.Client().ID()) {
+			return nil, errNoChatInteractions
+		}
+		isFirstBatch = false
 
 		stop := false
 		for _, msg := range batch {
@@ -351,6 +359,15 @@ func fetchMessagesForArchive(event *handler.CommandEvent) ([]discord.Message, er
 	}
 
 	return messages, nil
+}
+
+func containsBotMessage(messages []discord.Message, botID snowflake.ID) bool {
+	for _, msg := range messages {
+		if msg.Author.ID == botID {
+			return true
+		}
+	}
+	return false
 }
 
 func replayMessagesForArchive(messages []discord.Message, botID snowflake.ID) []chatArchiveMessage {
