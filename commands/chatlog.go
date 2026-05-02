@@ -299,13 +299,24 @@ func archiveMessagesFromLLM(messages []llm.Message) []chatArchiveMessage {
 			continue
 		}
 		out = append(out, chatArchiveMessage{
-			Role:    msg.Role,
-			Content: msg.Content,
-			Author:  msg.Role,
-			Images:  append([]string(nil), msg.Images...),
+			Role:      msg.Role,
+			Content:   msg.Content,
+			Author:    firstNonEmpty(msg.Author, msg.Role),
+			MessageID: msg.MessageID,
+			Timestamp: msg.Timestamp,
+			Images:    append([]string(nil), msg.Images...),
 		})
 	}
 	return out
+}
+
+func firstNonEmpty(values ...string) string {
+	for _, value := range values {
+		if value != "" {
+			return value
+		}
+	}
+	return ""
 }
 
 func fetchMessagesForArchive(event *handler.CommandEvent) ([]discord.Message, error) {
@@ -444,9 +455,12 @@ func (a chatArchive) toLLMMessages(channelID snowflake.ID) []llm.Message {
 			continue
 		}
 		messages = append(messages, llm.Message{
-			Role:    msg.Role,
-			Content: msg.Content,
-			Images:  append([]string(nil), msg.Images...),
+			Role:      msg.Role,
+			Content:   msg.Content,
+			Images:    append([]string(nil), msg.Images...),
+			Author:    msg.Author,
+			Timestamp: msg.Timestamp,
+			MessageID: msg.MessageID,
 		})
 	}
 	return messages

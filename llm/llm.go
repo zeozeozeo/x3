@@ -104,10 +104,13 @@ func ErrNoModelsForCompletion() error {
 }
 
 type Message struct {
-	Role    string       `json:"role"`
-	Content string       `json:"content"`
-	Images  []string     `json:"images"` // image URIs or base64
-	ID      snowflake.ID `json:"-"`
+	Role      string       `json:"role"`
+	Content   string       `json:"content"`
+	Images    []string     `json:"images"` // image URIs or base64
+	ID        snowflake.ID `json:"-"`
+	Author    string       `json:"author,omitempty"`
+	Timestamp time.Time    `json:"timestamp,omitempty"`
+	MessageID string       `json:"message_id,omitempty"`
 }
 
 type Usage struct {
@@ -133,10 +136,10 @@ func (u Usage) IsEmpty() bool {
 }
 
 type Llmer struct {
-	Messages                []Message    `json:"messages"`
-	ChannelID               snowflake.ID `json:"channel_id"`
-	GuildID                 *snowflake.ID `json:"guild_id,omitempty"`
-	DiscordSearchCallback   func(ctx context.Context, guildID snowflake.ID, query string) (string, map[int]string) `json:"-"`
+	Messages              []Message                                                                              `json:"messages"`
+	ChannelID             snowflake.ID                                                                           `json:"channel_id"`
+	GuildID               *snowflake.ID                                                                          `json:"guild_id,omitempty"`
+	DiscordSearchCallback func(ctx context.Context, guildID snowflake.ID, query string) (string, map[int]string) `json:"-"`
 }
 
 func NewLlmer(channelID snowflake.ID) *Llmer {

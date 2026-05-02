@@ -76,6 +76,20 @@ func addImageAttachments(llmer *llm.Llmer, attachments []discord.Attachment) {
 	}
 }
 
+func setLatestAssistantMessageMetadata(llmer *llm.Llmer, message *discord.Message) {
+	if llmer == nil || message == nil {
+		return
+	}
+	for i := len(llmer.Messages) - 1; i >= 0; i-- {
+		if llmer.Messages[i].Role == llm.RoleAssistant {
+			llmer.Messages[i].Author = message.Author.EffectiveName()
+			llmer.Messages[i].Timestamp = message.CreatedAt
+			llmer.Messages[i].MessageID = message.ID.String()
+			return
+		}
+	}
+}
+
 // writeTxtCache saves downloaded text attachment content to a local cache file
 func writeTxtCache(attachmentID snowflake.ID, content []byte) error {
 	if err := os.MkdirAll("x3-txt-cache", 0755); err != nil {
@@ -407,6 +421,10 @@ func addContextMessages(
 
 		if content != "" {
 			llmer.AddMessage(role, content, msg.ID)
+			added := &llmer.Messages[len(llmer.Messages)-1]
+			added.Author = msg.Author.EffectiveName()
+			added.Timestamp = msg.CreatedAt
+			added.MessageID = msg.ID.String()
 			usernames[msg.Author.EffectiveName()] = struct{}{} // track username
 		}
 

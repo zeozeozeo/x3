@@ -260,6 +260,14 @@ func handleLlmInteraction2(
 		reference = nil
 	}
 	llmer.AddMessage(llm.RoleUser, formatMsg(content, username, reference), messageID)
+	if len(llmer.Messages) > 0 {
+		msg := &llmer.Messages[len(llmer.Messages)-1]
+		msg.Author = username
+		if messageID != 0 {
+			msg.Timestamp = messageID.Time()
+			msg.MessageID = messageID.String()
+		}
+	}
 	addImageAttachments(llmer, attachments)
 
 	if isRegenerate {
@@ -411,6 +419,7 @@ func handleLlmInteraction2(
 	}
 
 	cache.IsLastRandomDM = timeInteraction
+	setLatestAssistantMessageMetadata(llmer, botMessage)
 	if (cache.ImportedHistory != nil || isDM) && !isRegenerate {
 		cache.Llmer = llmer
 		if cache.ImportedHistory != nil {

@@ -132,6 +132,12 @@ func HandleLlm(event *handler.CommandEvent, models []model.Model) error {
 	currentPersona := persona.GetPersonaByMeta(cache.PersonaMeta, event.User().EffectiveName(), isDM, promptContext)
 	llmer.SetPersona(currentPersona, &cache.PersonaMeta.ExcessiveSplit)
 	llmer.AddMessage(llm.RoleUser, formatMsg(prompt, event.User().EffectiveName(), nil), 0)
+	if len(llmer.Messages) > 0 {
+		msg := &llmer.Messages[len(llmer.Messages)-1]
+		msg.Author = event.User().EffectiveName()
+		msg.Timestamp = event.ID().Time()
+		msg.MessageID = event.ID().String()
+	}
 
 	err := event.DeferCreateMessage(ephemeral)
 	if err != nil {
@@ -253,6 +259,7 @@ func HandleLlm(event *handler.CommandEvent, models []model.Model) error {
 	}
 
 	if botMessage != nil {
+		setLatestAssistantMessageMetadata(llmer, botMessage)
 		if err := db.WriteMessageInteractionPrompt(botMessage.ID, prompt); err != nil {
 			slog.Error("failed to write message interaction prompt cache", "err", err)
 		}
