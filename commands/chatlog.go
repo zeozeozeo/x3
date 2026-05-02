@@ -537,8 +537,8 @@ func chatArchiveBrowserMessage(archive chatArchive, page, pageSize int) discord.
 				Disabled: page >= maxPage,
 			},
 			discord.ButtonComponent{
-				Style:    discord.ButtonStyleDanger,
-				Emoji:    &discord.ComponentEmoji{Name: "✖️"},
+				Style:    discord.ButtonStyleSecondary,
+				Emoji:    &discord.ComponentEmoji{Name: "❌"},
 				CustomID: "/chatlog/close",
 			},
 		))
