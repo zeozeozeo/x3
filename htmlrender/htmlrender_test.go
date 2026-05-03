@@ -242,6 +242,71 @@ func TestCropTransparentPNG(t *testing.T) {
 	}
 }
 
+func TestCropTransparentPNGKeepsFullyOpaqueImageWhenNoBackgroundCanBeRemoved(t *testing.T) {
+	img := image.NewNRGBA(image.Rect(0, 0, 32, 32))
+	for y := 0; y < 32; y++ {
+		for x := 0; x < 32; x++ {
+			img.Set(x, y, color.NRGBA{R: 20, G: 20, B: 20, A: 255})
+		}
+	}
+	var buf bytes.Buffer
+	if err := png.Encode(&buf, img); err != nil {
+		t.Fatal(err)
+	}
+	got, err := cropTransparentPNG(buf.Bytes())
+	if err != nil {
+		t.Fatalf("expected fully opaque image to be sent as-is, got %v", err)
+	}
+	if len(got) == 0 {
+		t.Fatal("expected image bytes")
+	}
+}
+
+func TestCropTransparentPNGRemovesSolidEdgeBackground(t *testing.T) {
+	img := image.NewNRGBA(image.Rect(0, 0, 32, 32))
+	for y := 0; y < 32; y++ {
+		for x := 0; x < 32; x++ {
+			img.Set(x, y, color.NRGBA{R: 20, G: 20, B: 20, A: 255})
+		}
+	}
+	for y := 8; y < 24; y++ {
+		for x := 8; x < 24; x++ {
+			img.Set(x, y, color.NRGBA{R: 240, G: 220, B: 120, A: 255})
+		}
+	}
+	var buf bytes.Buffer
+	if err := png.Encode(&buf, img); err != nil {
+		t.Fatal(err)
+	}
+	got, err := cropTransparentPNG(buf.Bytes())
+	if err != nil {
+		t.Fatal(err)
+	}
+	cropped, err := png.Decode(bytes.NewReader(got))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cropped.Bounds().Dx() >= 32 || cropped.Bounds().Dy() >= 32 {
+		t.Fatalf("expected solid background to be removed and cropped, got %v", cropped.Bounds())
+	}
+}
+
+func TestCropTransparentPNGAcceptsSemiTransparentInterior(t *testing.T) {
+	img := image.NewNRGBA(image.Rect(0, 0, 32, 32))
+	for y := 8; y < 24; y++ {
+		for x := 8; x < 24; x++ {
+			img.Set(x, y, color.NRGBA{R: 20, G: 20, B: 20, A: 180})
+		}
+	}
+	var buf bytes.Buffer
+	if err := png.Encode(&buf, img); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := cropTransparentPNG(buf.Bytes()); err != nil {
+		t.Fatalf("expected interior translucent artifact to crop, got %v", err)
+	}
+}
+
 func TestCropTransparentPNGRejectsFullyTransparentImage(t *testing.T) {
 	img := image.NewNRGBA(image.Rect(0, 0, 32, 32))
 	var buf bytes.Buffer

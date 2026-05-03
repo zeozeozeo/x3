@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"image"
+	"image/color"
 	"image/png"
 	"io"
 	"mime/multipart"
@@ -201,7 +202,7 @@ func (r *Renderer) Render(ctx context.Context, bodyHTML string) ([]byte, error) 
 	}
 	cropped, err := cropTransparentPNG(data)
 	if err != nil {
-		return data, nil
+		return nil, err
 	}
 	return cropped, nil
 }
@@ -319,6 +320,24 @@ func cropTransparentPNG(data []byte) ([]byte, error) {
 	if bounds.Empty() {
 		return nil, fmt.Errorf("rendered image was fully transparent")
 	}
+	if bounds.Eq(img.Bounds()) {
+		if backgroundRemoved, ok := removeSolidEdgeBackground(img); ok {
+			if cropped, err := cropTransparentPNGFromImage(backgroundRemoved); err == nil {
+				return cropped, nil
+			}
+		}
+		// Full-canvas artifacts are valid sometimes; send them as-is when the
+		// background cannot be identified safely.
+		return data, nil
+	}
+	return cropTransparentPNGFromImage(img)
+}
+
+func cropTransparentPNGFromImage(img image.Image) ([]byte, error) {
+	bounds := alphaBounds(img)
+	if bounds.Empty() {
+		return nil, fmt.Errorf("rendered image was fully transparent")
+	}
 	padded := padRect(bounds, img.Bounds(), 1)
 	cropped := image.NewNRGBA(image.Rect(0, 0, padded.Dx(), padded.Dy()))
 	for y := 0; y < padded.Dy(); y++ {
@@ -363,6 +382,73 @@ func alphaBounds(img image.Image) image.Rectangle {
 		return image.Rectangle{}
 	}
 	return image.Rect(minX, minY, maxX, maxY)
+}
+
+func removeSolidEdgeBackground(img image.Image) (image.Image, bool) {
+	bounds := img.Bounds()
+	bg := img.At(bounds.Min.X, bounds.Min.Y)
+	if !edgeMatchesColor(img, bg) {
+		return nil, false
+	}
+	out := image.NewNRGBA(bounds)
+	for y := bounds.Min.Y; y < bounds.Max.Y; y++ {
+		for x := bounds.Min.X; x < bounds.Max.X; x++ {
+			c := img.At(x, y)
+			if colorsClose(c, bg) {
+				out.Set(x, y, colorTransparent)
+			} else {
+				out.Set(x, y, c)
+			}
+		}
+	}
+	if alphaBounds(out).Empty() {
+		return nil, false
+	}
+	return out, true
+}
+
+var colorTransparent = image.NewUniform(image.Transparent).C
+
+func edgeMatchesColor(img image.Image, bg color.Color) bool {
+	bounds := img.Bounds()
+	total := 0
+	matches := 0
+	for x := bounds.Min.X; x < bounds.Max.X; x++ {
+		total += 2
+		if colorsClose(img.At(x, bounds.Min.Y), bg) {
+			matches++
+		}
+		if colorsClose(img.At(x, bounds.Max.Y-1), bg) {
+			matches++
+		}
+	}
+	for y := bounds.Min.Y + 1; y < bounds.Max.Y-1; y++ {
+		total += 2
+		if colorsClose(img.At(bounds.Min.X, y), bg) {
+			matches++
+		}
+		if colorsClose(img.At(bounds.Max.X-1, y), bg) {
+			matches++
+		}
+	}
+	return total > 0 && float64(matches)/float64(total) >= 0.96
+}
+
+func colorsClose(a, b color.Color) bool {
+	ar, ag, ab, aa := a.RGBA()
+	br, bg, bb, ba := b.RGBA()
+	const tolerance = 3 * 0x101
+	return absDiff32(ar, br) <= tolerance &&
+		absDiff32(ag, bg) <= tolerance &&
+		absDiff32(ab, bb) <= tolerance &&
+		absDiff32(aa, ba) <= tolerance
+}
+
+func absDiff32(a, b uint32) uint32 {
+	if a > b {
+		return a - b
+	}
+	return b - a
 }
 
 func padRect(rect, bounds image.Rectangle, padding int) image.Rectangle {
