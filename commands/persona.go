@@ -88,6 +88,16 @@ var PersonaCommand = discord.SlashCommandCreate{
 			Description: "SillyTavern character card file (image or json)",
 			Required:    false,
 		},
+		discord.ApplicationCommandOptionString{
+			Name:        "preset",
+			Description: "SillyTavern Chat Completion preset JSON URL",
+			Required:    false,
+		},
+		discord.ApplicationCommandOptionAttachment{
+			Name:        "preset_file",
+			Description: "SillyTavern Chat Completion preset JSON file",
+			Required:    false,
+		},
 		discord.ApplicationCommandOptionInt{
 			Name:        "context",
 			Description: "Amount of surrounding messages to use as context. Pass a negative number to reset",
@@ -127,6 +137,11 @@ var PersonaCommand = discord.SlashCommandCreate{
 		discord.ApplicationCommandOptionBool{
 			Name:        "thinking",
 			Description: "Attach thinking traces",
+			Required:    false,
+		},
+		discord.ApplicationCommandOptionBool{
+			Name:        "html",
+			Description: "Render explicit HTML blocks to image attachments",
 			Required:    false,
 		},
 		discord.ApplicationCommandOptionBool{
@@ -171,6 +186,10 @@ func handlePersonaInfo(event *handler.CommandEvent, ephemeral bool) error {
 	if cache.Llmer != nil {
 		builder.AddField("Message cache", fmt.Sprintf("%d messages", cache.Llmer.NumMessages()), true)
 	}
+	if cache.PersonaMeta.ChatPreset != nil {
+		builder.AddField("SillyTavern preset", cache.PersonaMeta.ChatPreset.DisplayName(), true)
+	}
+	builder.AddField("HTML rendering", enabledDisabled(cache.PersonaMeta.RenderHTML), true)
 
 	models := cache.PersonaMeta.Models
 	if len(models) > 0 {
@@ -213,6 +232,8 @@ func HandlePersona(event *handler.CommandEvent) error {
 	dataSystem := data.String("system")
 	dataCard := data.String("card")
 	dataCardFile, hasDataCardFile := data.OptAttachment("card_file")
+	dataPreset := data.String("preset")
+	dataPresetFile, hasDataPresetFile := data.OptAttachment("preset_file")
 	dataContext, hasContext := data.OptInt("context")
 	dataTemperature, hasTemperature := data.OptFloat("temperature")
 	dataTopP, hasTopP := data.OptFloat("top_p")
@@ -220,14 +241,15 @@ func HandlePersona(event *handler.CommandEvent) error {
 	dataSeed, hasDataSeed := data.OptInt("seed")
 	dataEnableImages, hasEnableImages := data.OptBool("images")
 	thinking, hasThinking := data.OptBool("thinking")
+	renderHTML, hasRenderHTML := data.OptBool("html")
 	ephemeral := data.Bool("ephemeral")
 
-	if dataPersona == "" && dataModel == "" && dataSystem == "" && dataCard == "" && !hasDataCardFile && !hasContext && !hasTemperature && !hasTopP && !hasFreqPenalty && !hasDataSeed && !hasEnableImages && !hasThinking {
+	if dataPersona == "" && dataModel == "" && dataSystem == "" && dataCard == "" && !hasDataCardFile && dataPreset == "" && !hasDataPresetFile && !hasContext && !hasTemperature && !hasTopP && !hasFreqPenalty && !hasDataSeed && !hasEnableImages && !hasThinking && !hasRenderHTML {
 		return handlePersonaInfo(event, ephemeral)
 	}
 
-	if dataCard != "" || hasDataCardFile {
-		// might take some time to fetch the character card
+	if dataCard != "" || hasDataCardFile || dataPreset != "" || hasDataPresetFile {
+		// might take some time to fetch remote JSON/images
 		if err := event.DeferCreateMessage(ephemeral); err != nil {
 			return err
 		}
@@ -289,6 +311,7 @@ func HandlePersona(event *handler.CommandEvent) error {
 	if dataSystem != "" {
 		cache.PersonaMeta.System = strings.ReplaceAll(dataSystem, "\\n", "\n") // let user input newlines
 		cache.PersonaMeta.TavernCard = nil
+		cache.PersonaMeta.ChatPreset = nil
 	}
 	if dataModel != "" {
 		cache.PersonaMeta.Models = []string{dataModel}
@@ -349,6 +372,30 @@ func HandlePersona(event *handler.CommandEvent) error {
 	if hasThinking {
 		cache.PersonaMeta.ThinkingTraces = thinking
 	}
+	if hasRenderHTML {
+		cache.PersonaMeta.RenderHTML = renderHTML
+	}
+
+	if dataPreset != "" || hasDataPresetFile {
+		if dataPreset != "" && hasDataPresetFile {
+			return updateInteractionError(event, "use either `preset` URL or `preset_file`, not both")
+		}
+		body, filename, err := fetchJSONAttachmentData(dataPreset, dataPresetFile, "preset")
+		if err != nil {
+			return updateInteractionError(event, err.Error())
+		}
+		preset, err := persona.ParseSTChatPreset(body)
+		if err != nil {
+			slog.Error("failed to parse SillyTavern preset", "err", err)
+			return updateInteractionError(event, "invalid SillyTavern chat preset: "+err.Error())
+		}
+		cache.PersonaMeta.ChatPreset = preset
+		cache.PersonaMeta.Settings = preset.ImportedSettings()
+		if preset.AssistantPrefill != "" {
+			cache.PersonaMeta.Prepend = strings.ReplaceAll(preset.AssistantPrefill, "\\n", "\n")
+		}
+		didWhat = append(didWhat, fmt.Sprintf("loaded SillyTavern preset `%s`", filename))
+	}
 
 	if err := cache.Write(event.Channel().ID()); err != nil {
 		if dataCard != "" {
@@ -380,6 +427,13 @@ func HandlePersona(event *handler.CommandEvent) error {
 		didWhat = append(didWhat, "unloaded character card")
 	} else if cache.PersonaMeta.TavernCard != nil && prevMeta.TavernCard != nil && cache.PersonaMeta.TavernCard.Data.Name != prevMeta.TavernCard.Data.Name {
 		didWhat = append(didWhat, fmt.Sprintf("switched character card to `%s`", cache.PersonaMeta.TavernCard.Data.Name))
+	}
+	if cache.PersonaMeta.ChatPreset != nil && prevMeta.ChatPreset == nil && dataPreset == "" && !hasDataPresetFile {
+		didWhat = append(didWhat, "loaded SillyTavern preset")
+	} else if cache.PersonaMeta.ChatPreset == nil && prevMeta.ChatPreset != nil {
+		didWhat = append(didWhat, "unloaded SillyTavern preset")
+	} else if cache.PersonaMeta.ChatPreset != nil && prevMeta.ChatPreset != nil && cache.PersonaMeta.ChatPreset.DisplayName() != prevMeta.ChatPreset.DisplayName() && dataPreset == "" && !hasDataPresetFile {
+		didWhat = append(didWhat, fmt.Sprintf("switched SillyTavern preset to `%s`", cache.PersonaMeta.ChatPreset.DisplayName()))
 	}
 	if cache.ContextLength != prevContextLen {
 		didWhat = append(didWhat, fmt.Sprintf("updated context length %d → %d", prevContextLen, cache.ContextLength))
@@ -422,6 +476,15 @@ func HandlePersona(event *handler.CommandEvent) error {
 		}
 		didWhat = append(didWhat, s)
 	}
+	if cache.PersonaMeta.RenderHTML != prevMeta.RenderHTML {
+		var s string
+		if cache.PersonaMeta.RenderHTML {
+			s = "enabled HTML rendering"
+		} else {
+			s = "disabled HTML rendering"
+		}
+		didWhat = append(didWhat, s)
+	}
 
 	if len(didWhat) > 0 {
 		sb.WriteString("Updated persona for this channel")
@@ -451,7 +514,7 @@ func HandlePersona(event *handler.CommandEvent) error {
 		}
 	}
 
-	if dataCard == "" && !hasDataCardFile {
+	if dataCard == "" && !hasDataCardFile && dataPreset == "" && !hasDataPresetFile {
 		return event.CreateMessage(
 			discord.NewMessageCreate().
 				AddEmbeds(builder).
@@ -512,6 +575,50 @@ func fetchPersonaCardData(cardURL string, cardFile discord.Attachment) ([]byte, 
 	}
 	if filename == "" || filename == "." || filename == "/" {
 		filename = "card"
+	}
+	return body, filename, nil
+}
+
+func fetchJSONAttachmentData(source string, attachment discord.Attachment, label string) ([]byte, string, error) {
+	const maxLimit = 2 * 1024 * 1024
+
+	sourceURL := source
+	filename := ""
+	if sourceURL != "" {
+		if !strings.HasPrefix(sourceURL, "http://") && !strings.HasPrefix(sourceURL, "https://") {
+			sourceURL = "https://" + sourceURL
+		}
+		filename = path.Base(sourceURL)
+		filename, _, _ = strings.Cut(filename, "?")
+		slog.Debug("fetching JSON", slog.String("label", label), slog.String("url", sourceURL))
+	} else {
+		sourceURL = attachment.URL
+		filename = attachment.Filename
+		if attachment.Size > maxLimit {
+			return nil, "", fmt.Errorf("%s exceeds 2MB limit", label)
+		}
+	}
+
+	resp, err := http.Get(sourceURL)
+	if err != nil {
+		return nil, "", fmt.Errorf("failed to fetch %s: %w", label, err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return nil, "", fmt.Errorf("failed to fetch %s: HTTP %d", label, resp.StatusCode)
+	}
+	if resp.ContentLength > maxLimit {
+		return nil, "", fmt.Errorf("%s exceeds 2MB limit", label)
+	}
+	body, err := io.ReadAll(io.LimitReader(resp.Body, maxLimit+1))
+	if err != nil {
+		return nil, "", fmt.Errorf("failed to read %s: %w", label, err)
+	}
+	if len(body) > maxLimit {
+		return nil, "", fmt.Errorf("%s exceeds 2MB limit", label)
+	}
+	if filename == "" || filename == "." || filename == "/" {
+		filename = label + ".json"
 	}
 	return body, filename, nil
 }

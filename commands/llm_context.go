@@ -351,7 +351,9 @@ func addContextMessages(
 			lastAssistantMessageID = msg.ID
 			isSplitAnyway := false
 
-			if isLobotomyMessage(msg) {
+			if cachedContent, cacheErr := db.GetMessageRenderedContent(msg.ID); cacheErr == nil && strings.TrimSpace(cachedContent) != "" {
+				content = cachedContent
+			} else if isLobotomyMessage(msg) {
 				// for lobotomy messages, delete the context
 				llmer.Lobotomize(getLobotomyAmountFromMessage(msg))
 				continue

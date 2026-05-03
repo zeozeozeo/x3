@@ -1,6 +1,7 @@
 package db
 
 import (
+	"database/sql"
 	"log/slog"
 
 	"github.com/disgoorg/snowflake/v2"
@@ -22,6 +23,29 @@ func GetMessageInteractionPrompt(id snowflake.ID) (string, error) {
 	err := DB.QueryRow("SELECT prompt FROM message_interaction_cache WHERE message_id = ?", id.String()).Scan(&prompt)
 	// Errors (like sql.ErrNoRows) are expected and handled by the caller
 	return prompt, err
+}
+
+// WriteMessageRenderedContent caches the raw assistant response when the visible
+// Discord message differs because generated HTML was rendered to an attachment.
+func WriteMessageRenderedContent(messageID snowflake.ID, content string) error {
+	if DB == nil {
+		return nil
+	}
+	_, err := DB.Exec("INSERT OR REPLACE INTO message_render_cache (message_id, content) VALUES (?, ?)", messageID.String(), content)
+	if err != nil {
+		slog.Error("failed to write rendered message cache", "err", err, slog.String("message_id", messageID.String()))
+	}
+	return err
+}
+
+// GetMessageRenderedContent retrieves the raw assistant response for a rendered message.
+func GetMessageRenderedContent(id snowflake.ID) (string, error) {
+	if DB == nil {
+		return "", sql.ErrConnDone
+	}
+	var content string
+	err := DB.QueryRow("SELECT content FROM message_render_cache WHERE message_id = ?", id.String()).Scan(&content)
+	return content, err
 }
 
 // IsAntiscamEnabled checks if a server has the antiscam feature enabled.

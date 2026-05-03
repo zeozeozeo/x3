@@ -401,7 +401,10 @@ func replayMessagesForArchive(messages []discord.Message, botID snowflake.ID) []
 				continue
 			}
 
-			content := cleanupCites(getMessageContent(msg))
+			content, cacheErr := db.GetMessageRenderedContent(msg.ID)
+			if cacheErr != nil || strings.TrimSpace(content) == "" {
+				content = cleanupCites(getMessageContent(msg))
+			}
 			if strings.HasPrefix(content, latexAPI) {
 				content = fromLatexAPI(content)
 			}

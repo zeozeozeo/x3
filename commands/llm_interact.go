@@ -332,6 +332,9 @@ func handleLlmInteraction2(
 			Reader: strings.NewReader(thinking),
 		})
 	}
+	rawResponse := response
+	htmlRendered := false
+	response, files, htmlRendered = prepareHTMLRenderedResponse(ctx, cache.PersonaMeta, response, files)
 
 	if preMsgWg != nil {
 		preMsgWg.Wait() // wait for e.g., typing indicator to finish
@@ -368,13 +371,21 @@ func handleLlmInteraction2(
 			slog.Error("failed to update message for regeneration", "err", err)
 			return response, 0, fmt.Errorf("failed to update message: %w", err)
 		}
+		if htmlRendered {
+			if err := db.WriteMessageRenderedContent(lastResponseMessage.ID, rawResponse); err != nil {
+				slog.Error("failed to cache raw rendered response", "err", err)
+			}
+		}
 		jumpURL = lastResponseMessage.JumpURL()
 	} else {
 		messages = splitLlmTags(response, &cache.PersonaMeta)
+		if len(messages) == 0 && len(files) > 0 {
+			messages = []string{""}
+		}
 
 		for i, content := range messages {
 			content = strings.TrimSpace(content)
-			if content == "" {
+			if content == "" && len(files) == 0 {
 				continue // skip empty splits
 			}
 
@@ -397,6 +408,11 @@ func handleLlmInteraction2(
 				return response, 0, fmt.Errorf("failed to send message split %d: %w", i+1, err)
 			}
 			event = nil // updated the event, send the next split as a new message
+		}
+		if htmlRendered && botMessage != nil {
+			if err := db.WriteMessageRenderedContent(botMessage.ID, rawResponse); err != nil {
+				slog.Error("failed to cache raw rendered response", "err", err)
+			}
 		}
 	}
 

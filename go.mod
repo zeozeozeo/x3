@@ -5,16 +5,19 @@ go 1.25.1
 require (
 	github.com/PuerkitoBio/goquery v1.11.0
 	github.com/disgoorg/disgo v0.19.3
+	github.com/microcosm-cc/bluemonday v1.0.27
 	github.com/zeozeozeo/aihorde-go v0.0.0-20250402140353-8cc7927c847f
 	github.com/zeozeozeo/go-aiml v0.0.0-20260127140045-3d97ed2cc746
 )
 
 require (
 	github.com/andybalholm/cascadia v1.3.3 // indirect
+	github.com/aymerick/douceur v0.2.0 // indirect
 	github.com/disgoorg/godave v0.1.0 // indirect
 	github.com/disgoorg/json/v2 v2.0.0 // indirect
 	github.com/disgoorg/omit v1.0.0 // indirect
 	github.com/dlclark/regexp2 v1.11.5 // indirect
+	github.com/gorilla/css v1.0.1 // indirect
 	github.com/klauspost/compress v1.18.4 // indirect
 	github.com/sasha-s/go-csync v0.0.0-20240107134140-fcbab37b09ad // indirect
 	golang.org/x/net v0.49.0 // indirect

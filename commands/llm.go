@@ -181,6 +181,9 @@ func HandleLlm(event *handler.CommandEvent, models []model.Model) error {
 			Reader: strings.NewReader(thinking),
 		})
 	}
+	rawResponse := response
+	htmlRendered := false
+	response, files, htmlRendered = prepareHTMLRenderedResponse(context.Background(), cache.PersonaMeta, response, files)
 
 	if ephemeral || useCache {
 		response = replaceLlmTagsWithNewlines(response, &cache.PersonaMeta)
@@ -210,11 +213,14 @@ func HandleLlm(event *handler.CommandEvent, models []model.Model) error {
 
 	} else { // (splits)
 		messages := splitLlmTags(response, &cache.PersonaMeta)
+		if len(messages) == 0 && len(files) > 0 {
+			messages = []string{""}
+		}
 
 		currentEvent := event
 		for i, content := range messages {
 			content = strings.TrimSpace(content)
-			if content == "" {
+			if content == "" && len(files) == 0 {
 				continue
 			}
 
@@ -260,6 +266,11 @@ func HandleLlm(event *handler.CommandEvent, models []model.Model) error {
 
 	if botMessage != nil {
 		setLatestAssistantMessageMetadata(llmer, botMessage)
+		if htmlRendered {
+			if err := db.WriteMessageRenderedContent(botMessage.ID, rawResponse); err != nil {
+				slog.Error("failed to cache raw rendered response", "err", err)
+			}
+		}
 		if err := db.WriteMessageInteractionPrompt(botMessage.ID, prompt); err != nil {
 			slog.Error("failed to write message interaction prompt cache", "err", err)
 		}

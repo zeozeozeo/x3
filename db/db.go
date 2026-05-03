@@ -29,6 +29,7 @@ func InitDB(dataSourceName string) error {
 		`CREATE TABLE IF NOT EXISTS whitelist ( user_id TEXT PRIMARY KEY )`,
 		`CREATE TABLE IF NOT EXISTS channel_cache ( channel_id TEXT PRIMARY KEY, cache BLOB )`,
 		`CREATE TABLE IF NOT EXISTS message_interaction_cache ( message_id TEXT PRIMARY KEY, prompt TEXT )`,
+		`CREATE TABLE IF NOT EXISTS message_render_cache ( message_id TEXT PRIMARY KEY, content TEXT )`,
 		`CREATE TABLE IF NOT EXISTS global_stats ( stats BLOB )`,
 		`CREATE TABLE IF NOT EXISTS server_stats ( server_id TEXT PRIMARY KEY, stats BLOB )`,
 		`CREATE TABLE IF NOT EXISTS blacklist ( channel_id TEXT PRIMARY KEY )`,

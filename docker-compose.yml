@@ -7,3 +7,11 @@ services:
     volumes:
       - .:/app
     working_dir: /app
+    environment:
+      - X3_GOTENBERG_URL=http://gotenberg:3000
+    depends_on:
+      - gotenberg
+  gotenberg:
+    restart: always
+    image: gotenberg/gotenberg:8
+    container_name: x3-gotenberg

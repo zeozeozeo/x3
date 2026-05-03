@@ -238,6 +238,9 @@ type Persona struct {
 	System string // System prompt
 }
 
+const htmlRenderingSystemPrompt = `**HTML rendering:**
+You may include a single self-contained HTML artifact when it meaningfully represents an in-world object such as a screen, letter, dossier, poster, table, device UI, card, book page, map, insignia, receipt, terminal, or document. Put renderable HTML in a fenced ` + "```html" + ` code block or inside <x3-render>...</x3-render>. Use inline CSS in a <style> tag. Do not use JavaScript, iframes, forms, external stylesheets, or external fonts. HTTPS image URLs are allowed, but prefer text and CSS when possible. Keep the artifact compact enough to fit in a 900px wide screenshot. Continue writing normal prose outside the render block.`
+
 type Summary struct {
 	Str string `json:"str"`
 	Age int    `json:"age"`
@@ -481,6 +484,8 @@ type PersonaMeta struct {
 	Version        int               `json:"version,omitempty"`
 	NeedSummaries  bool              `json:"need_summaries,omitempty"` // Whether summaries should be generated
 	TavernCard     *TavernCardV2     `json:"tavern_card,omitempty"`    // Current SillyTavern character card
+	ChatPreset     *STChatPreset     `json:"chat_preset,omitempty"`    // Imported SillyTavern chat-completion preset
+	RenderHTML     bool              `json:"render_html,omitempty"`    // Whether LLM-authored HTML blocks should render to image attachments
 }
 
 // this is kinda hacky, but this is just so i can update the default models
@@ -525,6 +530,9 @@ func (meta PersonaMeta) DeepCopy() PersonaMeta {
 	}
 	if meta.TavernCard != nil {
 		copied.TavernCard = meta.TavernCard.DeepCopy()
+	}
+	if meta.ChatPreset != nil {
+		copied.ChatPreset = meta.ChatPreset.DeepCopy()
 	}
 	return copied
 }
@@ -609,9 +617,16 @@ func GetPersonaByMeta(meta PersonaMeta, username string, dm bool, promptContext 
 		username = "this user"
 	}
 
+	if meta.ChatPreset != nil {
+		system := meta.ChatPreset.BuildSystemPrompt(meta.TavernCard, username, promptContext, meta.Name)
+		if system != "" {
+			return Persona{System: appendHTMLRenderingPrompt(system, meta.RenderHTML)}
+		}
+	}
+
 	if meta.TavernCard != nil {
 		system := BuildCharaSystemPrompt(meta.TavernCard, username, promptContext)
-		return Persona{System: system}
+		return Persona{System: appendHTMLRenderingPrompt(system, meta.RenderHTML)}
 	}
 
 	if s, ok := personaGetters[meta.Name]; ok {
@@ -622,6 +637,7 @@ func GetPersonaByMeta(meta PersonaMeta, username string, dm bool, promptContext 
 				persona.System = strings.TrimSpace(persona.System + "\n\n" + promptBlock)
 			}
 		}
+		persona.System = appendHTMLRenderingPrompt(persona.System, meta.RenderHTML)
 		return persona
 	}
 
@@ -633,5 +649,16 @@ func GetPersonaByMeta(meta PersonaMeta, username string, dm bool, promptContext 
 			persona.System = promptBlock
 		}
 	}
+	persona.System = appendHTMLRenderingPrompt(persona.System, meta.RenderHTML)
 	return persona
+}
+
+func appendHTMLRenderingPrompt(system string, enabled bool) string {
+	if !enabled {
+		return system
+	}
+	if strings.TrimSpace(system) == "" {
+		return htmlRenderingSystemPrompt
+	}
+	return strings.TrimSpace(system + "\n\n" + htmlRenderingSystemPrompt)
 }
