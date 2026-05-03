@@ -107,6 +107,27 @@ func TestSanitizePreservesTrailingStyleBlock(t *testing.T) {
 	}
 }
 
+func TestSanitizePreservesInlineStyledCard(t *testing.T) {
+	input := `<div style="background: #2a2a3e; border: 2px solid #e6c300; border-radius: 16px; padding: 20px; max-width: 350px; font-family: 'Segoe UI', sans-serif; color: #f0e68c; box-shadow: 0 0 20px rgba(230, 195, 0, 0.3);">
+  <div style="font-size: 18px; font-weight: bold; border-bottom: 1px solid #e6c300; padding-bottom: 8px; margin-bottom: 12px;"> Yurika</div>
+  <div style="font-size: 14px; line-height: 1.6;">
+    <b>Age:</b> 21<br>
+    <b>Role:</b> asdasdasr<br>
+    <b>Traits:</b> dasdasdas<br>
+    <b>Bio:</b> asdsadas
+  </div>
+</div>`
+	got, err := Sanitize(input)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"Yurika", "background: #2a2a3e", "box-shadow", "Age:", "line-height: 1.6"} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("sanitized HTML missing %q:\n%s", want, got)
+		}
+	}
+}
+
 func TestRendererPostsGotenbergMultipart(t *testing.T) {
 	var sawIndex, sawFormat bool
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -158,6 +179,18 @@ func TestCropTransparentPNG(t *testing.T) {
 	}
 	if img.Bounds().Dx() >= 32 || img.Bounds().Dy() >= 32 {
 		t.Fatalf("image was not cropped: %v", img.Bounds())
+	}
+}
+
+func TestCropTransparentPNGRejectsFullyTransparentImage(t *testing.T) {
+	img := image.NewNRGBA(image.Rect(0, 0, 32, 32))
+	var buf bytes.Buffer
+	if err := png.Encode(&buf, img); err != nil {
+		t.Fatal(err)
+	}
+	_, err := cropTransparentPNG(buf.Bytes())
+	if err == nil || !strings.Contains(err.Error(), "fully transparent") {
+		t.Fatalf("expected fully transparent error, got %v", err)
 	}
 }
 

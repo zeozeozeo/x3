@@ -1,4 +1,4 @@
-﻿package commands
+package commands
 
 import (
 	"encoding/base64"
@@ -504,6 +504,7 @@ func sendTextPart(
 	}
 
 	var firstSentMessage *discord.Message
+	var lastErr error
 
 	for i := 0; i < numMessages; i++ {
 		start := i * maxLen
@@ -550,8 +551,9 @@ func sendTextPart(
 		}
 
 		if err != nil {
-			//return firstSentMessage, fmt.Errorf("failed to send message split %d: %w", i+1, err)
 			slog.Warn("failed to send message split", "i", i+1, "err", err)
+			lastErr = fmt.Errorf("failed to send message split %d: %w", i+1, err)
+			continue
 		}
 
 		if i == 0 && *isFirst {
@@ -565,6 +567,10 @@ func sendTextPart(
 			*event = nil
 		}
 		*messageID = 0
+	}
+
+	if firstSentMessage == nil && lastErr != nil {
+		return nil, lastErr
 	}
 
 	return firstSentMessage, nil

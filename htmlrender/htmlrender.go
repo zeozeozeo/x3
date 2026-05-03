@@ -312,7 +312,7 @@ func cropTransparentPNG(data []byte) ([]byte, error) {
 	}
 	bounds := alphaBounds(img)
 	if bounds.Empty() {
-		return data, nil
+		return nil, fmt.Errorf("rendered image was fully transparent")
 	}
 	padded := padRect(bounds, img.Bounds(), 1)
 	cropped := image.NewNRGBA(image.Rect(0, 0, padded.Dx(), padded.Dy()))
