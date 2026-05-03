@@ -31,7 +31,7 @@ var (
 	strayFenceRegexp   = regexp.MustCompile("(?m)^\\s*```\\s*$")
 	blankLineRegexp    = regexp.MustCompile(`\n{3,}`)
 	cssImportRegexp    = regexp.MustCompile(`(?is)@import[^;]+;?`)
-	cssURLRegexp       = regexp.MustCompile(`(?is)url\s*\([^)]*\)`)
+	cssURLRegexp       = regexp.MustCompile(`(?is)url\s*\(\s*['"]?\s*[^'"\s#)][^)]*\)`)
 	safeImageSrcRegexp = regexp.MustCompile(`(?is)^(https://|data:image/(?:png|gif|jpeg|jpg|webp|avif);base64,)`)
 	svgIDRefRegexp     = regexp.MustCompile(`(?i)^url\(\s*#[a-z][a-z0-9_-]*\s*\)$`)
 	svgNameRegexp      = regexp.MustCompile(`(?i)^[a-z][a-z0-9_-]{0,80}$`)
@@ -584,7 +584,7 @@ func sanitizeCSS(css string) string {
 }
 
 func safeCSSValue(value string) bool {
-	value = strings.ToLower(value)
+	value = strings.ToLower(strings.TrimSpace(value))
 	return value == sanitizeCSS(value) &&
 		!strings.Contains(value, "<") &&
 		!strings.Contains(value, ">") &&
