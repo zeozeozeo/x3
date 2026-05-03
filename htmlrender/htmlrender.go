@@ -32,6 +32,7 @@ var (
 	blankLineRegexp    = regexp.MustCompile(`\n{3,}`)
 	cssImportRegexp    = regexp.MustCompile(`(?is)@import[^;]+;?`)
 	cssURLRegexp       = regexp.MustCompile(`(?is)url\s*\(\s*['"]?\s*[^'"\s#)][^)]*\)`)
+	cssExprRegexp      = regexp.MustCompile(`(?is)expression\s*\(|javascript:`)
 	safeImageSrcRegexp = regexp.MustCompile(`(?is)^(https://|data:image/(?:png|gif|jpeg|jpg|webp|avif);base64,)`)
 	svgIDRefRegexp     = regexp.MustCompile(`(?i)^url\(\s*#[a-z][a-z0-9_-]*\s*\)$`)
 	svgNameRegexp      = regexp.MustCompile(`(?i)^[a-z][a-z0-9_-]{0,80}$`)
@@ -489,7 +490,6 @@ func newHTMLPolicy() *bluemonday.Policy {
 	p.AllowAttrs("alt").Matching(bluemonday.Paragraph).OnElements("img")
 	p.AllowAttrs("src").Matching(safeImageSrcRegexp).OnElements("img")
 	p.AllowAttrs("style").Globally()
-	p.AllowStyles(allowedCSSProperties()...).MatchingHandler(safeCSSValue).Globally()
 	p.AllowAttrs("id").Matching(svgNameRegexp).OnElements(svgElements()...)
 	p.AllowAttrs("x", "y", "x1", "x2", "y1", "y2", "cx", "cy", "r", "rx", "ry", "width", "height", "dx", "dy", "offset").Matching(svgLengthRegexp).OnElements(svgElements()...)
 	p.AllowAttrs("opacity", "fill-opacity", "stroke-opacity", "flood-opacity", "stop-opacity", "stdDeviation", "stddeviation").Matching(svgNumberRegexp).OnElements(svgElements()...)
@@ -539,13 +539,21 @@ func findElement(node *xhtml.Node, name string) *xhtml.Node {
 func extractStyleNodes(node *xhtml.Node, styles *[]string) {
 	for child := node.FirstChild; child != nil; {
 		next := child.NextSibling
-		if child.Type == xhtml.ElementNode && strings.EqualFold(child.Data, "style") {
-			if css := sanitizeCSS(textContent(child)); css != "" {
-				*styles = append(*styles, css)
+		if child.Type == xhtml.ElementNode {
+			if strings.EqualFold(child.Data, "style") {
+				if css := sanitizeCSS(textContent(child)); css != "" {
+					*styles = append(*styles, css)
+				}
+				node.RemoveChild(child)
+				child = next
+				continue
 			}
-			node.RemoveChild(child)
-			child = next
-			continue
+
+			for i := range child.Attr {
+				if strings.EqualFold(child.Attr[i].Key, "style") {
+					child.Attr[i].Val = sanitizeCSS(child.Attr[i].Val)
+				}
+			}
 		}
 		extractStyleNodes(child, styles)
 		child = next
@@ -578,39 +586,8 @@ func inlineStyleBlock(styleCSS string) string {
 func sanitizeCSS(css string) string {
 	css = cssImportRegexp.ReplaceAllString(css, "")
 	css = cssURLRegexp.ReplaceAllString(css, "")
-	css = strings.ReplaceAll(css, "expression(", "")
-	css = strings.ReplaceAll(css, "javascript:", "")
+	css = cssExprRegexp.ReplaceAllString(css, "")
 	return strings.TrimSpace(css)
-}
-
-func safeCSSValue(value string) bool {
-	value = strings.ToLower(strings.TrimSpace(value))
-	return value == sanitizeCSS(value) &&
-		!strings.Contains(value, "<") &&
-		!strings.Contains(value, ">") &&
-		!strings.Contains(value, "{") &&
-		!strings.Contains(value, "}") &&
-		len(value) <= 512
-}
-
-func allowedCSSProperties() []string {
-	return []string{
-		"align-content", "align-items", "align-self", "background", "background-color",
-		"border", "border-bottom", "border-collapse", "border-color", "border-left",
-		"border-radius", "border-right", "border-spacing", "border-style", "border-top",
-		"border-width", "box-shadow", "box-sizing", "caption-side", "color", "column-gap",
-		"display", "filter", "flex", "flex-basis", "flex-direction", "flex-flow", "flex-grow",
-		"flex-shrink", "flex-wrap", "font", "font-family", "font-size", "font-style",
-		"font-weight", "gap", "grid", "grid-area", "grid-auto-columns", "grid-auto-flow",
-		"grid-auto-rows", "grid-column", "grid-row", "grid-template", "grid-template-areas",
-		"grid-template-columns", "grid-template-rows", "height", "justify-content",
-		"justify-items", "justify-self", "letter-spacing", "line-height", "list-style",
-		"margin", "margin-bottom", "margin-left", "margin-right", "margin-top", "max-height",
-		"max-width", "min-height", "min-width", "opacity", "outline", "overflow", "padding",
-		"padding-bottom", "padding-left", "padding-right", "padding-top", "position", "right",
-		"text-align", "text-decoration", "text-transform", "top", "transform", "vertical-align",
-		"white-space", "width", "word-break", "z-index",
-	}
 }
 
 func svgElements() []string {
