@@ -39,6 +39,46 @@ func TestSanitizeRemovesActiveContent(t *testing.T) {
 	if !strings.Contains(got, `src="https://example.com/a.png"`) {
 		t.Fatalf("safe image URL was removed: %s", got)
 	}
+	if !strings.Contains(got, "<style>") || !strings.Contains(got, "color: red") {
+		t.Fatalf("safe style block was not preserved: %s", got)
+	}
+}
+
+func TestSanitizePreservesTrailingStyleBlock(t *testing.T) {
+	input := `<div class="card">
+  <div class="header">
+    <span class="tag"> yuki</span>
+    water nymph
+  </div>
+</div>
+<style>
+  .card {
+    background: #fff9c4;
+    border-radius: 20px;
+    padding: 20px;
+    max-width: 260px;
+    box-shadow: 0 4px 15px rgba(255, 200, 0, 0.4);
+    font-family: 'Segoe UI', sans-serif;
+    color: #6b4f00;
+  }
+  .header {
+    display: flex;
+    justify-content: space-between;
+  }
+  .tag {
+    background: #f9d835;
+    border-radius: 30px;
+  }
+</style>`
+	got, err := Sanitize(input)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{`class="card"`, "<style>", ".card", "box-shadow", "justify-content: space-between"} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("sanitized HTML missing %q:\n%s", want, got)
+		}
+	}
 }
 
 func TestRendererPostsGotenbergMultipart(t *testing.T) {

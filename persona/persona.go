@@ -551,12 +551,14 @@ var (
 		Desc:          "Freaking clanker",
 		Models:        clone(model.DefaultModels),
 		NeedSummaries: true,
+		RenderHTML:    true,
 	}
 	PersonaYapper = PersonaMeta{
 		Name:          "Yapper",
 		Desc:          "Brainrotted blud",
 		Models:        clone(model.DefaultModels),
 		NeedSummaries: true,
+		RenderHTML:    true,
 	}
 	PersonaStableNarrator = PersonaMeta{
 		Name:   "Stable Narrator",

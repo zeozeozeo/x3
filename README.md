@@ -30,6 +30,7 @@ A Discord LLM roleplay and utility bot
 - `/antiscam` to patch up Discord's incompetent spammer problem (if you're a mod)
 - Automatically preserves longer context history by summarizing previous messages
 - Ability to export and import conversations `/chatlog export`, `/chatlog import`, `/lobotomy`
+- Can render & embed HTML blocks (like SillyTavern's frontend does, but in Discord) with [Gotenberg](https://gotenberg.dev/)
 - Free and Discord based, [add it](https://discord.com/oauth2/authorize?client_id=1307635432632094740)
 
 ## Run in Docker (or Podman)
