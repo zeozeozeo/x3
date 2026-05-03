@@ -239,7 +239,11 @@ type Persona struct {
 }
 
 const htmlRenderingSystemPrompt = `**HTML rendering:**
-You may include a single self-contained HTML artifact when it meaningfully represents an in-world object such as a screen, letter, dossier, poster, table, device UI, card, book page, map, insignia, receipt, terminal, or document. Put renderable HTML in a fenced ` + "```html" + ` code block or inside <x3-render>...</x3-render>. Use inline CSS in a <style> tag. Do not use JavaScript, iframes, forms, external stylesheets, or external fonts. HTTPS image URLs are allowed, but prefer text and CSS when possible. Keep the artifact compact enough to fit in a 900px wide screenshot. Continue writing normal prose outside the render block.`
+You may include a single self-contained HTML artifact when it meaningfully represents an in-world object such as a screen, letter, dossier, poster, table, device UI, card, book page, map, insignia, receipt, terminal, or document. Put renderable HTML in a fenced ` + "```html" + ` code block or inside <x3-render>...</x3-render>. Use inline CSS in a <style> tag. Do not use JavaScript, iframes, forms, external stylesheets, external fonts, or clickable links.
+
+Make the artifact visually rich and intentional: use cards, panels, borders, rounded corners, layered shadows, subtle gradients, labels, dividers, tables, badges, stamps, icons, emojis, unicode box drawing, symbols, handwriting-like notes, terminal glyphs, warning stripes, paper texture effects, glass/metal/material surfaces, and strong spacing/typography when they fit the scene. Prefer CSS shapes, text, symbols, and layout over remote images. HTTPS image URLs are allowed only when the image is genuinely part of the artifact.
+
+The artifact will be screenshotted with a transparent background and cropped to its visible pixels, so give the main object its own background, border, padding, and shadow if it should look like a physical or UI object. Keep it compact enough to fit in a 900px wide screenshot. Continue writing normal prose outside the render block.`
 
 type Summary struct {
 	Str string `json:"str"`

@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"image"
+	"image/png"
 	"io"
 	"mime/multipart"
 	"net/http"
@@ -119,7 +121,7 @@ func RenderResponse(ctx context.Context, renderer *Renderer, response string, li
 		}
 		result.Blocks = append(result.Blocks, RenderedBlock{
 			Data:     data,
-			Filename: fmt.Sprintf("x3-render-%d.webp", i+1),
+			Filename: fmt.Sprintf("x3-render-%d.png", i+1),
 		})
 	}
 	return result, nil
@@ -148,10 +150,11 @@ func (r *Renderer) Render(ctx context.Context, bodyHTML string) ([]byte, error) 
 		return nil, err
 	}
 	fields := map[string]string{
-		"width":  fmt.Sprintf("%d", width),
-		"height": fmt.Sprintf("%d", height),
-		"clip":   "false",
-		"format": "webp",
+		"width":          fmt.Sprintf("%d", width),
+		"height":         fmt.Sprintf("%d", height),
+		"clip":           "false",
+		"format":         "png",
+		"omitBackground": "true",
 	}
 	for key, value := range fields {
 		if err := writer.WriteField(key, value); err != nil {
@@ -183,7 +186,11 @@ func (r *Renderer) Render(ctx context.Context, bodyHTML string) ([]byte, error) 
 	if len(data) > 8*1024*1024 {
 		return nil, fmt.Errorf("rendered image exceeds 8MB limit")
 	}
-	return data, nil
+	cropped, err := cropTransparentPNG(data)
+	if err != nil {
+		return data, nil
+	}
+	return cropped, nil
 }
 
 func writeFileField(writer *multipart.Writer, field, filename string, data []byte) error {
@@ -218,13 +225,11 @@ func wrapDocument(bodyHTML string) string {
 }
 html, body {
   margin: 0;
-  min-height: 100%;
   background: transparent;
 }
 body {
   box-sizing: border-box;
   width: fit-content;
-  min-width: 320px;
   max-width: 900px;
   padding: 24px;
   font-family: "Noto Sans", Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
@@ -289,6 +294,69 @@ body {
 </head>
 <body><main class="mes_text x3-st-render">` + bodyHTML + `</main></body>
 </html>`
+}
+
+func cropTransparentPNG(data []byte) ([]byte, error) {
+	img, err := png.Decode(bytes.NewReader(data))
+	if err != nil {
+		return nil, err
+	}
+	bounds := alphaBounds(img)
+	if bounds.Empty() {
+		return data, nil
+	}
+	padded := padRect(bounds, img.Bounds(), 6)
+	cropped := image.NewNRGBA(image.Rect(0, 0, padded.Dx(), padded.Dy()))
+	for y := 0; y < padded.Dy(); y++ {
+		for x := 0; x < padded.Dx(); x++ {
+			cropped.Set(x, y, img.At(padded.Min.X+x, padded.Min.Y+y))
+		}
+	}
+	var out bytes.Buffer
+	if err := png.Encode(&out, cropped); err != nil {
+		return nil, err
+	}
+	return out.Bytes(), nil
+}
+
+func alphaBounds(img image.Image) image.Rectangle {
+	bounds := img.Bounds()
+	minX, minY := bounds.Max.X, bounds.Max.Y
+	maxX, maxY := bounds.Min.X, bounds.Min.Y
+	found := false
+	for y := bounds.Min.Y; y < bounds.Max.Y; y++ {
+		for x := bounds.Min.X; x < bounds.Max.X; x++ {
+			_, _, _, a := img.At(x, y).RGBA()
+			if a == 0 {
+				continue
+			}
+			if x < minX {
+				minX = x
+			}
+			if y < minY {
+				minY = y
+			}
+			if x+1 > maxX {
+				maxX = x + 1
+			}
+			if y+1 > maxY {
+				maxY = y + 1
+			}
+			found = true
+		}
+	}
+	if !found {
+		return image.Rectangle{}
+	}
+	return image.Rect(minX, minY, maxX, maxY)
+}
+
+func padRect(rect, bounds image.Rectangle, padding int) image.Rectangle {
+	rect.Min.X = max(rect.Min.X-padding, bounds.Min.X)
+	rect.Min.Y = max(rect.Min.Y-padding, bounds.Min.Y)
+	rect.Max.X = min(rect.Max.X+padding, bounds.Max.X)
+	rect.Max.Y = min(rect.Max.Y+padding, bounds.Max.Y)
+	return rect
 }
 
 func Sanitize(input string) (string, error) {

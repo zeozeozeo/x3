@@ -1,7 +1,11 @@
 package htmlrender
 
 import (
+	"bytes"
 	"context"
+	"image"
+	"image/color"
+	"image/png"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -46,7 +50,7 @@ func TestRendererPostsGotenbergMultipart(t *testing.T) {
 		if err := r.ParseMultipartForm(2 << 20); err != nil {
 			t.Fatalf("ParseMultipartForm failed: %v", err)
 		}
-		sawFormat = r.FormValue("format") == "webp"
+		sawFormat = r.FormValue("format") == "png" && r.FormValue("omitBackground") == "true"
 		files := r.MultipartForm.File["files"]
 		if len(files) == 1 && files[0].Filename == "index.html" {
 			file, err := files[0].Open()
@@ -57,9 +61,9 @@ func TestRendererPostsGotenbergMultipart(t *testing.T) {
 			body, _ := io.ReadAll(file)
 			sawIndex = strings.Contains(string(body), "<strong>ok</strong>")
 		}
-		w.Header().Set("Content-Type", "image/webp")
+		w.Header().Set("Content-Type", "image/png")
 		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte("WEBP"))
+		_, _ = w.Write(testPNG(t))
 	}))
 	defer server.Close()
 
@@ -68,10 +72,40 @@ func TestRendererPostsGotenbergMultipart(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Render failed: %v", err)
 	}
-	if string(data) != "WEBP" {
-		t.Fatalf("unexpected response data: %q", data)
+	if len(data) == 0 {
+		t.Fatal("expected response image data")
 	}
 	if !sawIndex || !sawFormat {
 		t.Fatalf("multipart request missing index/form fields: sawIndex=%v sawFormat=%v", sawIndex, sawFormat)
 	}
+}
+
+func TestCropTransparentPNG(t *testing.T) {
+	data := testPNG(t)
+	cropped, err := cropTransparentPNG(data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	img, err := png.Decode(bytes.NewReader(cropped))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if img.Bounds().Dx() >= 32 || img.Bounds().Dy() >= 32 {
+		t.Fatalf("image was not cropped: %v", img.Bounds())
+	}
+}
+
+func testPNG(t *testing.T) []byte {
+	t.Helper()
+	img := image.NewNRGBA(image.Rect(0, 0, 32, 32))
+	for y := 12; y < 20; y++ {
+		for x := 10; x < 18; x++ {
+			img.Set(x, y, color.NRGBA{R: 255, G: 255, B: 255, A: 255})
+		}
+	}
+	var buf bytes.Buffer
+	if err := png.Encode(&buf, img); err != nil {
+		t.Fatal(err)
+	}
+	return buf.Bytes()
 }

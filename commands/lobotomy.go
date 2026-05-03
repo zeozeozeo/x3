@@ -69,9 +69,13 @@ func HandleLobotomy(event *handler.CommandEvent) error {
 	}
 	var archiveData []byte
 	if attachArchive {
-		archiveData, err = marshalChatArchive(archive)
-		if err != nil {
-			return updateInteractionError(event, err.Error())
+		if chatArchiveIsEmpty(archive) {
+			attachArchive = false
+		} else {
+			archiveData, err = marshalChatArchive(archive)
+			if err != nil {
+				return updateInteractionError(event, err.Error())
+			}
 		}
 	}
 
@@ -152,4 +156,8 @@ func nonSystemMessages(messages []llm.Message) []llm.Message {
 		}
 	}
 	return out
+}
+
+func chatArchiveIsEmpty(archive chatArchive) bool {
+	return len(archive.Messages) == 0 && len(archive.Summaries) == 0 && len(archive.Context) == 0
 }
