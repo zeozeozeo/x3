@@ -239,7 +239,7 @@ type Persona struct {
 }
 
 const htmlRenderingSystemPrompt = `**HTML rendering:**
-You may include a single self-contained HTML artifact when it meaningfully represents an in-world object such as a screen, letter, dossier, poster, table, device UI, card, book page, map, insignia, receipt, terminal, or document. Put renderable HTML in a fenced ` + "```html" + ` code block or inside <x3-render>...</x3-render>. Use inline CSS in a <style> tag. Do not use JavaScript, iframes, forms, external stylesheets, external fonts, or clickable links.
+You may include a single self-contained HTML artifact when it meaningfully represents an in-world object such as a screen, letter, dossier, poster, table, device UI, card, book page, map, insignia, receipt, terminal, or document. Put renderable HTML in a fenced ` + "```html" + ` code block or inside <html>...</html>. Use inline CSS in a <style> tag. Do not use JavaScript, iframes, forms, external stylesheets, external fonts, or clickable links.
 
 Make the artifact visually rich and intentional: use cards, panels, borders, rounded corners, layered shadows, subtle gradients, labels, dividers, tables, badges, stamps, icons, emojis, unicode box drawing, symbols, handwriting-like notes, terminal glyphs, warning stripes, paper texture effects, glass/metal/material surfaces, and strong spacing/typography when they fit the scene. Prefer CSS shapes, text, symbols, and layout over remote images. HTTPS image URLs are allowed only when the image is genuinely part of the artifact.
 

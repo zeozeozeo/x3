@@ -25,8 +25,9 @@ const (
 )
 
 var (
-	renderTagRegexp    = regexp.MustCompile(`(?is)<x3-render\b[^>]*>(.*?)</x3-render>`)
-	htmlFenceRegexp    = regexp.MustCompile("(?is)```html\\s*(.*?)```")
+	htmlTagRegexp      = regexp.MustCompile(`(?is)<html\b[^>]*>(.*?)</html>`)
+	htmlFenceRegexp    = regexp.MustCompile("(?is)```(?:html)?\\s*(.*?)(?:```|\\z)")
+	strayFenceRegexp   = regexp.MustCompile("(?m)^\\s*```\\s*$")
 	blankLineRegexp    = regexp.MustCompile(`\n{3,}`)
 	cssImportRegexp    = regexp.MustCompile(`(?is)@import[^;]+;?`)
 	cssURLRegexp       = regexp.MustCompile(`(?is)url\s*\([^)]*\)`)
@@ -86,17 +87,24 @@ func Extract(response string, limit int) (display string, blocks []Block, change
 				return match
 			}
 			count++
-			blocks = append(blocks, Block{HTML: strings.TrimSpace(sub[1])})
+			blocks = append(blocks, Block{HTML: cleanExtractedHTML(sub[1])})
 			changed = true
 			return "\n"
 		})
 	}
 
-	display = replace(renderTagRegexp, display)
+	display = replace(htmlTagRegexp, display)
 	display = replace(htmlFenceRegexp, display)
 	display = strings.TrimSpace(display)
 	display = blankLineRegexp.ReplaceAllString(display, "\n\n")
 	return display, blocks, changed
+}
+
+func cleanExtractedHTML(s string) string {
+	s = strings.TrimSpace(strings.Trim(s, "\u200b\ufeff"))
+	s = strayFenceRegexp.ReplaceAllString(s, "")
+	s = strings.TrimSpace(strings.Trim(s, "\u200b\ufeff"))
+	return s
 }
 
 func RenderResponse(ctx context.Context, renderer *Renderer, response string, limit int) (Result, error) {

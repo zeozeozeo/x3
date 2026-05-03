@@ -26,6 +26,32 @@ func TestExtractHTMLBlocks(t *testing.T) {
 	}
 }
 
+func TestExtractHTMLTagBlock(t *testing.T) {
+	display, blocks, changed := Extract("hello\n<html><div>card</div></html>\nbye", 3)
+	if !changed {
+		t.Fatal("expected extraction to change the response")
+	}
+	if strings.TrimSpace(display) != "hello\n\nbye" {
+		t.Fatalf("unexpected display text: %q", display)
+	}
+	if len(blocks) != 1 || blocks[0].HTML != "<div>card</div>" {
+		t.Fatalf("unexpected blocks: %+v", blocks)
+	}
+}
+
+func TestExtractFenceCleansLeakedClosingFence(t *testing.T) {
+	_, blocks, changed := Extract("```html\n<div>card</div>\n```\u200b", 3)
+	if !changed {
+		t.Fatal("expected extraction to change the response")
+	}
+	if len(blocks) != 1 {
+		t.Fatalf("unexpected blocks: %+v", blocks)
+	}
+	if strings.Contains(blocks[0].HTML, "```") || strings.Contains(blocks[0].HTML, "\u200b") {
+		t.Fatalf("extracted HTML still contains fence debris: %q", blocks[0].HTML)
+	}
+}
+
 func TestSanitizeRemovesActiveContent(t *testing.T) {
 	got, err := Sanitize(`<style>@import url("https://bad/style.css"); .x { background: url(https://bad/bg.png); color: red; }</style><div onclick="alert(1)" style="background:url(javascript:bad); color: blue"><script>alert(1)</script><img src="https://example.com/a.png" onerror="x"><img src="http://bad/a.png"><a href="javascript:alert(1)">x</a></div>`)
 	if err != nil {
