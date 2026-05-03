@@ -32,6 +32,11 @@ var (
 	cssImportRegexp    = regexp.MustCompile(`(?is)@import[^;]+;?`)
 	cssURLRegexp       = regexp.MustCompile(`(?is)url\s*\([^)]*\)`)
 	safeImageSrcRegexp = regexp.MustCompile(`(?is)^(https://|data:image/(?:png|gif|jpeg|jpg|webp|avif);base64,)`)
+	svgIDRefRegexp     = regexp.MustCompile(`(?i)^url\(\s*#[a-z][a-z0-9_-]*\s*\)$`)
+	svgNameRegexp      = regexp.MustCompile(`(?i)^[a-z][a-z0-9_-]{0,80}$`)
+	svgNumberRegexp    = regexp.MustCompile(`(?i)^-?(?:\d+|\d*\.\d+)(?:e-?\d+)?$`)
+	svgLengthRegexp    = regexp.MustCompile(`(?i)^-?(?:\d+|\d*\.\d+)(?:e-?\d+)?(?:px|em|rem|%|vh|vw)?$`)
+	svgListRegexp      = regexp.MustCompile(`(?i)^[a-z0-9#%.,:;() _+\-/]+$`)
 	htmlPolicy         = newHTMLPolicy()
 )
 
@@ -391,6 +396,7 @@ func newHTMLPolicy() *bluemonday.Policy {
 		"summary", "sup", "table", "tbody", "td", "tfoot", "th", "thead", "time", "tr",
 		"u", "ul", "var",
 	)
+	p.AllowElements(svgElements()...)
 	p.AllowAttrs("class", "id", "title", "role", "aria-label").Matching(bluemonday.Paragraph).Globally()
 	p.AllowAttrs("colspan", "rowspan").Matching(bluemonday.Integer).OnElements("td", "th")
 	p.AllowAttrs("width", "height").Matching(bluemonday.NumberOrPercent).OnElements("img", "table", "td", "th")
@@ -398,6 +404,13 @@ func newHTMLPolicy() *bluemonday.Policy {
 	p.AllowAttrs("src").Matching(safeImageSrcRegexp).OnElements("img")
 	p.AllowAttrs("style").Globally()
 	p.AllowStyles(allowedCSSProperties()...).MatchingHandler(safeCSSValue).Globally()
+	p.AllowAttrs("id").Matching(svgNameRegexp).OnElements(svgElements()...)
+	p.AllowAttrs("x", "y", "x1", "x2", "y1", "y2", "cx", "cy", "r", "rx", "ry", "width", "height", "dx", "dy", "offset").Matching(svgLengthRegexp).OnElements(svgElements()...)
+	p.AllowAttrs("opacity", "fill-opacity", "stroke-opacity", "flood-opacity", "stop-opacity", "stdDeviation", "stddeviation").Matching(svgNumberRegexp).OnElements(svgElements()...)
+	p.AllowAttrs("viewBox", "viewbox", "points", "d", "transform", "gradientTransform", "gradienttransform", "patternTransform", "patterntransform", "values", "result", "in", "in2", "operator", "mode", "type", "baseFrequency", "basefrequency", "numOctaves", "numoctaves", "seed", "scale", "surfaceScale", "surfacescale", "lighting-color", "preserveAspectRatio", "preserveaspectratio", "orient", "markerUnits", "markerunits", "patternUnits", "patternunits", "patternContentUnits", "patterncontentunits", "refX", "refx", "refY", "refy", "markerWidth", "markerwidth", "markerHeight", "markerheight", "maskUnits", "maskunits", "maskContentUnits", "maskcontentunits", "clipPathUnits", "clippathunits", "fill-rule", "clip-rule").Matching(svgListRegexp).OnElements(svgElements()...)
+	p.AllowAttrs("fill", "stroke", "color", "flood-color", "stop-color").Matching(svgListRegexp).OnElements(svgElements()...)
+	p.AllowAttrs("stroke-width", "stroke-linecap", "stroke-linejoin", "stroke-dasharray", "font-size", "font-family", "font-weight", "text-anchor", "dominant-baseline").Matching(svgListRegexp).OnElements(svgElements()...)
+	p.AllowAttrs("filter", "clip-path", "mask", "marker-start", "marker-mid", "marker-end", "fill").Matching(svgIDRefRegexp).OnElements(svgElements()...)
 	return p
 }
 
@@ -511,5 +524,20 @@ func allowedCSSProperties() []string {
 		"padding-bottom", "padding-left", "padding-right", "padding-top", "position", "right",
 		"text-align", "text-decoration", "text-transform", "top", "transform", "vertical-align",
 		"white-space", "width", "word-break", "z-index",
+	}
+}
+
+func svgElements() []string {
+	return []string{
+		"svg", "defs", "g", "path", "rect", "circle", "ellipse", "line", "polyline",
+		"polygon", "text", "tspan", "clipPath", "clippath", "mask", "pattern", "marker",
+		"symbol", "linearGradient", "lineargradient", "radialGradient",
+		"radialgradient", "stop", "filter", "feBlend", "feblend", "feColorMatrix",
+		"fecolormatrix", "feComponentTransfer", "fecomponenttransfer", "feComposite",
+		"fecomposite", "feDisplacementMap", "fedisplacementmap", "feDropShadow",
+		"fedropshadow", "feFlood", "feflood", "feGaussianBlur", "fegaussianblur",
+		"feMerge", "femerge", "feMergeNode", "femergenode",
+		"feMorphology", "femorphology", "feOffset", "feoffset", "feTurbulence",
+		"feturbulence",
 	}
 }

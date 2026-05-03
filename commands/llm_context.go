@@ -387,7 +387,7 @@ func addContextMessages(
 
 			// potential message split
 			if isSplitAnyway || strings.HasSuffix(content, "\u200B") {
-				content = content + " " + newMessageTag + " "
+				content = content + "\n\n"
 			}
 			if strings.HasPrefix(content, "\u200B") {
 				// means impersonate message!

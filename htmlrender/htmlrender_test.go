@@ -128,6 +128,66 @@ func TestSanitizePreservesInlineStyledCard(t *testing.T) {
 	}
 }
 
+func TestSanitizeAllowsSafeSVGFilters(t *testing.T) {
+	input := `<svg viewBox="0 0 120 80" width="120" height="80">
+  <defs>
+    <filter id="softGlow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="3" result="blur"/>
+      <feDropShadow dx="0" dy="2" stdDeviation="2" flood-color="#f9d835" flood-opacity="0.7"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+  <rect x="10" y="10" width="100" height="60" rx="12" fill="#2a2a3e" filter="url(#softGlow)"/>
+</svg>`
+	got, err := Sanitize(input)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"<svg", "<filter", "fegaussianblur", "fedropshadow", `filter="url(#softGlow)"`} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("sanitized SVG missing %q:\n%s", want, got)
+		}
+	}
+}
+
+func TestSanitizeRejectsUnsafeSVGHelpers(t *testing.T) {
+	got, err := Sanitize(`<svg><foreignObject><script>alert(1)</script></foreignObject><use href="https://example.com/x.svg#id"/></svg>`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, bad := range []string{"foreignObject", "script", "<use", "href="} {
+		if strings.Contains(got, bad) {
+			t.Fatalf("unsafe SVG survived sanitization: %s", got)
+		}
+	}
+}
+
+func TestSanitizeAllowsSVGClipMaskPatternMarker(t *testing.T) {
+	input := `<svg viewBox="0 0 160 100" width="160" height="100">
+  <defs>
+    <clipPath id="roundClip"><rect x="10" y="10" width="90" height="60" rx="12"/></clipPath>
+    <mask id="fadeMask" maskUnits="userSpaceOnUse"><rect width="160" height="100" fill="white"/></mask>
+    <pattern id="dots" patternUnits="userSpaceOnUse" width="8" height="8" patternTransform="rotate(15)">
+      <circle cx="2" cy="2" r="1.5" fill="#f9d835"/>
+    </pattern>
+    <marker id="arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
+      <path d="M0,0 L8,4 L0,8 Z" fill="#f9d835"/>
+    </marker>
+  </defs>
+  <rect x="10" y="10" width="90" height="60" fill="url(#dots)" clip-path="url(#roundClip)" mask="url(#fadeMask)"/>
+  <line x1="20" y1="85" x2="140" y2="85" stroke="#f9d835" marker-end="url(#arrow)"/>
+</svg>`
+	got, err := Sanitize(input)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"clippath", "<mask", "<pattern", "<marker", `fill="url(#dots)"`, `clip-path="url(#roundClip)"`, `marker-end="url(#arrow)"`} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("sanitized SVG missing %q:\n%s", want, got)
+		}
+	}
+}
+
 func TestRendererPostsGotenbergMultipart(t *testing.T) {
 	var sawIndex, sawFormat bool
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
