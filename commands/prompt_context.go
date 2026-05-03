@@ -20,8 +20,11 @@ type visibleChannelRef struct {
 
 func buildPromptContext(client *bot.Client, channelID snowflake.ID, guildID *snowflake.ID, cache *db.ChannelCache) persona.PromptContext {
 	ctx := persona.PromptContext{
-		Summaries: append([]persona.Summary(nil), cache.Summaries...),
-		Context:   append([]string(nil), cache.Context...),
+		Memories: append([]string(nil), cache.Memories...),
+		Context:  append([]string(nil), cache.Context...),
+	}
+	if summariesEnabled() {
+		ctx.Summaries = append([]persona.Summary(nil), cache.Summaries...)
 	}
 
 	env, err := getDiscordEnvironmentSnapshot(client, channelID, guildID)

@@ -173,6 +173,14 @@ func HandleLlm(event *handler.CommandEvent, models []model.Model) error {
 			response = answer
 		}
 	}
+	if displayResponse, memories := extractMemoryTags(response); displayResponse != response || len(memories) > 0 {
+		response = displayResponse
+		setLatestAssistantMessageContent(llmer, response)
+		if len(memories) > 0 {
+			added := cache.AddMemories(memories)
+			slog.Info("stored chat memories", slog.String("channel_id", event.Channel().ID().String()), slog.Int("found", len(memories)), slog.Int("added", added))
+		}
+	}
 
 	var files []*discord.File
 	if thinking != "" && cache.PersonaMeta.ThinkingTraces {
@@ -277,8 +285,10 @@ func HandleLlm(event *handler.CommandEvent, models []model.Model) error {
 	}
 
 	// write cache
-	for i := range cache.Summaries {
-		cache.Summaries[i].Age++
+	if summariesEnabled() {
+		for i := range cache.Summaries {
+			cache.Summaries[i].Age++
+		}
 	}
 	if useCache {
 		cache.Llmer = llmer

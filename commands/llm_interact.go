@@ -243,9 +243,10 @@ func handleLlmInteraction2(
 		userID = lastUserID
 	}
 
-	// increment summary ages
-	for i := range cache.Summaries {
-		cache.Summaries[i].Age++
+	if summariesEnabled() {
+		for i := range cache.Summaries {
+			cache.Summaries[i].Age++
+		}
 	}
 
 	promptContext := buildPromptContext(client, channelID, nil, cache)
@@ -321,6 +322,14 @@ func handleLlmInteraction2(
 		if thinking != "" && answer != "" {
 			response = answer
 			slog.Debug("extracted reasoning", slog.Int("thinking_len", len(thinking)), slog.Int("answer_len", len(response)))
+		}
+	}
+	if displayResponse, memories := extractMemoryTags(response); displayResponse != response || len(memories) > 0 {
+		response = displayResponse
+		setLatestAssistantMessageContent(llmer, response)
+		if len(memories) > 0 {
+			added := cache.AddMemories(memories)
+			slog.Info("stored chat memories", slog.String("channel_id", channelID.String()), slog.Int("found", len(memories)), slog.Int("added", added))
 		}
 	}
 
@@ -425,12 +434,16 @@ func handleLlmInteraction2(
 		cache.PersonaMeta.ExcessiveSplit = excessiveSplit
 	}
 
-	cache.MessagesSinceSummary++
-	if cache.MessagesSinceSummary >= 30 {
-		if !models[0].IsVeryDumb() && cache.PersonaMeta.NeedSummaries {
-			// trigger summary generation
-			GetNarrator().QueueSummaryGeneration(channelID, *llmer)
+	if summariesEnabled() {
+		cache.MessagesSinceSummary++
+		if cache.MessagesSinceSummary >= 30 {
+			if !models[0].IsVeryDumb() && cache.PersonaMeta.NeedSummaries {
+				// trigger summary generation
+				GetNarrator().QueueSummaryGeneration(channelID, *llmer)
+			}
+			cache.MessagesSinceSummary = 0
 		}
+	} else {
 		cache.MessagesSinceSummary = 0
 	}
 

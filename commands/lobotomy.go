@@ -123,6 +123,10 @@ func HandleLobotomy(event *handler.CommandEvent) error {
 		writeCache = true
 		cache.Summaries = nil
 	}
+	if len(cache.Memories) > 0 {
+		writeCache = true
+		cache.Memories = nil
+	}
 
 	if writeCache {
 		if err := cache.Write(event.Channel().ID()); err != nil {
@@ -159,5 +163,5 @@ func nonSystemMessages(messages []llm.Message) []llm.Message {
 }
 
 func chatArchiveIsEmpty(archive chatArchive) bool {
-	return len(archive.Messages) == 0 && len(archive.Summaries) == 0 && len(archive.Context) == 0
+	return len(archive.Messages) == 0 && len(archive.Summaries) == 0 && len(archive.Memories) == 0 && len(archive.Context) == 0
 }

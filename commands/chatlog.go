@@ -40,6 +40,7 @@ type chatArchive struct {
 	GuildID    string               `json:"guild_id,omitempty"`
 	Messages   []chatArchiveMessage `json:"messages"`
 	Summaries  []persona.Summary    `json:"summaries,omitempty"`
+	Memories   []string             `json:"memories,omitempty"`
 	Context    []string             `json:"context,omitempty"`
 }
 
@@ -174,7 +175,14 @@ func handleChatArchiveImport(event *handler.CommandEvent) error {
 	cache.Llmer = llm.NewLlmer(event.Channel().ID())
 	cache.Llmer.Messages = importedMessages
 	cache.ImportedHistory = &db.ImportedChatHistory{Messages: append([]llm.Message(nil), importedMessages...)}
-	cache.Summaries = append([]persona.Summary(nil), archive.Summaries...)
+	if summariesEnabled() {
+		cache.Summaries = append([]persona.Summary(nil), archive.Summaries...)
+	} else {
+		cache.Summaries = nil
+		cache.MessagesSinceSummary = 0
+	}
+	cache.Memories = nil
+	cache.AddMemories(archive.Memories)
 	cache.Context = append([]string(nil), archive.Context...)
 	cache.UpdateInteractionTime()
 	if err := cache.Write(event.Channel().ID()); err != nil {
@@ -229,13 +237,13 @@ func downloadChatArchiveAttachment(attachment discord.Attachment) ([]byte, error
 func buildChatArchive(event *handler.CommandEvent) (chatArchive, error) {
 	cache := db.GetChannelCache(event.Channel().ID())
 	if cache.ImportedHistory != nil {
-		return buildChatArchiveFromLLMMessages(event.Channel().ID(), event.GuildID(), cacheHistoryMessages(cache), cache.Summaries, cache.Context), nil
+		return buildChatArchiveFromLLMMessages(event.Channel().ID(), event.GuildID(), cacheHistoryMessages(cache), activeSummaries(cache), cache.Memories, cache.Context), nil
 	}
 
 	rawMessages, err := fetchMessagesForArchive(event)
 	if err != nil {
 		if shouldUseCachedChatArchive(event, cache) {
-			return buildChatArchiveFromLLMMessages(event.Channel().ID(), event.GuildID(), cacheHistoryMessages(cache), cache.Summaries, cache.Context), nil
+			return buildChatArchiveFromLLMMessages(event.Channel().ID(), event.GuildID(), cacheHistoryMessages(cache), activeSummaries(cache), cache.Memories, cache.Context), nil
 		}
 		return chatArchive{}, err
 	}
@@ -245,14 +253,15 @@ func buildChatArchive(event *handler.CommandEvent) (chatArchive, error) {
 		ExportedAt: time.Now().UTC(),
 		ChannelID:  event.Channel().ID().String(),
 		Messages:   replayMessagesForArchive(rawMessages, event.Client().ID()),
-		Summaries:  append([]persona.Summary(nil), cache.Summaries...),
+		Summaries:  activeSummaries(cache),
+		Memories:   append([]string(nil), cache.Memories...),
 		Context:    append([]string(nil), cache.Context...),
 	}
 	if guildID := event.GuildID(); guildID != nil {
 		archive.GuildID = guildID.String()
 	}
 	if shouldUseCachedChatArchive(event, cache) {
-		cachedArchive := buildChatArchiveFromLLMMessages(event.Channel().ID(), event.GuildID(), cacheHistoryMessages(cache), cache.Summaries, cache.Context)
+		cachedArchive := buildChatArchiveFromLLMMessages(event.Channel().ID(), event.GuildID(), cacheHistoryMessages(cache), activeSummaries(cache), cache.Memories, cache.Context)
 		if len(cachedArchive.Messages) > len(archive.Messages) {
 			return cachedArchive, nil
 		}
@@ -280,13 +289,21 @@ func cacheHistoryMessages(cache *db.ChannelCache) []llm.Message {
 	return nil
 }
 
-func buildChatArchiveFromLLMMessages(channelID snowflake.ID, guildID *snowflake.ID, messages []llm.Message, summaries []persona.Summary, contextItems []string) chatArchive {
+func activeSummaries(cache *db.ChannelCache) []persona.Summary {
+	if !summariesEnabled() {
+		return nil
+	}
+	return append([]persona.Summary(nil), cache.Summaries...)
+}
+
+func buildChatArchiveFromLLMMessages(channelID snowflake.ID, guildID *snowflake.ID, messages []llm.Message, summaries []persona.Summary, memories []string, contextItems []string) chatArchive {
 	archive := chatArchive{
 		Version:    chatArchiveVersion,
 		ExportedAt: time.Now().UTC(),
 		ChannelID:  channelID.String(),
 		Messages:   archiveMessagesFromLLM(messages),
 		Summaries:  append([]persona.Summary(nil), summaries...),
+		Memories:   append([]string(nil), memories...),
 		Context:    append([]string(nil), contextItems...),
 	}
 	if guildID != nil {

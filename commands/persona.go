@@ -200,7 +200,10 @@ func handlePersonaInfo(event *handler.CommandEvent, ephemeral bool) error {
 		}
 	}
 
-	if len(cache.Summaries) > 0 {
+	if len(cache.Memories) > 0 {
+		builder.AddField("Memories", ellipsisTrim(strings.Join(cache.Memories, "\n"), 1024), false)
+	}
+	if summariesEnabled() && len(cache.Summaries) > 0 {
 		builder.AddField("Summary", ellipsisTrim(cache.Summaries[0].Str, 1024), false)
 	}
 

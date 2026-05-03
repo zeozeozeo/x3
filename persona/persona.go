@@ -241,6 +241,12 @@ Make the artifact visually rich and intentional: use cards, panels, borders, rou
 
 The artifact will be screenshotted with a transparent page background and cropped to its visible pixels, so give the main object its own background, border, padding, and shadow if it should look like a physical or UI object. Never set an opaque background on html, body, or a full-screen wrapper; the transparent area around the artifact must remain transparent. Keep it compact enough to fit in a 900px wide screenshot. Continue writing normal prose outside the render block.`
 
+const memorySystemPrompt = `**Memory:**
+You can save durable per-chat memory by including one or more hidden tags in your reply:
+<memory>short self-contained fact to remember later</memory>
+
+Use memories only for stable details that should matter in future replies, such as user preferences, relationships, long-term goals, decisions, or ongoing roleplay/world state. Keep each memory concise and self-contained. The memory tags are stripped before sending the message, so do not refer to them in visible prose.`
+
 type Summary struct {
 	Str string `json:"str"`
 	Age int    `json:"age"`
@@ -622,13 +628,13 @@ func GetPersonaByMeta(meta PersonaMeta, username string, dm bool, promptContext 
 	if meta.ChatPreset != nil {
 		system := meta.ChatPreset.BuildSystemPrompt(meta.TavernCard, username, promptContext, meta.Name)
 		if system != "" {
-			return Persona{System: appendHTMLRenderingPrompt(system, meta.RenderHTML)}
+			return Persona{System: appendResponseFeaturePrompts(system, meta)}
 		}
 	}
 
 	if meta.TavernCard != nil {
 		system := BuildCharaSystemPrompt(meta.TavernCard, username, promptContext)
-		return Persona{System: appendHTMLRenderingPrompt(system, meta.RenderHTML)}
+		return Persona{System: appendResponseFeaturePrompts(system, meta)}
 	}
 
 	if s, ok := personaGetters[meta.Name]; ok {
@@ -639,7 +645,7 @@ func GetPersonaByMeta(meta PersonaMeta, username string, dm bool, promptContext 
 				persona.System = strings.TrimSpace(persona.System + "\n\n" + promptBlock)
 			}
 		}
-		persona.System = appendHTMLRenderingPrompt(persona.System, meta.RenderHTML)
+		persona.System = appendResponseFeaturePrompts(persona.System, meta)
 		return persona
 	}
 
@@ -651,8 +657,33 @@ func GetPersonaByMeta(meta PersonaMeta, username string, dm bool, promptContext 
 			persona.System = promptBlock
 		}
 	}
-	persona.System = appendHTMLRenderingPrompt(persona.System, meta.RenderHTML)
+	persona.System = appendResponseFeaturePrompts(persona.System, meta)
 	return persona
+}
+
+func appendResponseFeaturePrompts(system string, meta PersonaMeta) string {
+	system = appendMemoryPrompt(system, meta.allowsMemoryTags())
+	system = appendHTMLRenderingPrompt(system, meta.RenderHTML)
+	return system
+}
+
+func (meta PersonaMeta) allowsMemoryTags() bool {
+	switch meta.Name {
+	case PersonaStableNarrator.Name, PersonaSummaryGenerator.Name, PersonaImageDescription.Name, PersonaImpersonate.Name:
+		return false
+	default:
+		return true
+	}
+}
+
+func appendMemoryPrompt(system string, enabled bool) string {
+	if !enabled {
+		return system
+	}
+	if strings.TrimSpace(system) == "" {
+		return memorySystemPrompt
+	}
+	return strings.TrimSpace(system + "\n\n" + memorySystemPrompt)
 }
 
 func appendHTMLRenderingPrompt(system string, enabled bool) string {

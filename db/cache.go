@@ -17,6 +17,8 @@ import (
 const (
 	// DefaultContextMessages is the default number of surrounding messages used for LLM context.
 	DefaultContextMessages = 100
+	maxChatMemories        = 67
+	maxChatMemoryRunes     = 500
 )
 
 type PersonaNewFlow struct {
@@ -54,6 +56,8 @@ type ChannelCache struct {
 	IsLastRandomDM bool `json:"is_last_random_dm,omitempty"`
 	// Summaries is a list of LLM-defined summaries of the message history.
 	Summaries []persona.Summary `json:"summaries,omitempty"`
+	// Memories is a list of LLM-defined memories for this channel.
+	Memories []string `json:"memories,omitempty"`
 	// Context is a list of user-defined context strings.
 	Context []string `json:"context,omitempty"`
 	// MessagesSinceSummary tracks the number of messages since the last summary update.
@@ -73,6 +77,40 @@ func (cache *ChannelCache) UpdateSummary(summary persona.Summary) {
 			cache.Summaries = cache.Summaries[:3]
 		}
 	}
+}
+
+func (cache *ChannelCache) AddMemories(memories []string) int {
+	added := 0
+	for _, memory := range memories {
+		if cache.AddMemory(memory) {
+			added++
+		}
+	}
+	return added
+}
+
+func (cache *ChannelCache) AddMemory(memory string) bool {
+	memory = strings.TrimSpace(memory)
+	if memory == "" {
+		return false
+	}
+	memory = strings.Join(strings.Fields(memory), " ")
+	if len([]rune(memory)) > maxChatMemoryRunes {
+		memory = string([]rune(memory)[:maxChatMemoryRunes])
+	}
+
+	for i, existing := range cache.Memories {
+		if strings.EqualFold(strings.TrimSpace(existing), memory) {
+			cache.Memories[i] = memory
+			return false
+		}
+	}
+
+	cache.Memories = append(cache.Memories, memory)
+	if len(cache.Memories) > maxChatMemories {
+		cache.Memories = cache.Memories[len(cache.Memories)-maxChatMemories:]
+	}
+	return true
 }
 
 // updateInteractionTime updates the LastInteraction timestamp to now.

@@ -34,12 +34,13 @@ func (env *DiscordEnvironment) IsEmpty() bool {
 // PromptContext is the stable, reusable context block that can be appended to a persona prompt.
 type PromptContext struct {
 	Summaries []Summary           `json:"summaries,omitempty"`
+	Memories  []string            `json:"memories,omitempty"`
 	Context   []string            `json:"context,omitempty"`
 	Discord   *DiscordEnvironment `json:"discord,omitempty"`
 }
 
 func (ctx PromptContext) IsEmpty() bool {
-	return ctx.Discord == nil && len(ctx.Summaries) == 0 && len(ctx.Context) == 0
+	return ctx.Discord == nil && len(ctx.Summaries) == 0 && len(ctx.Memories) == 0 && len(ctx.Context) == 0
 }
 
 func (ctx PromptContext) BuildBlock() string {
@@ -92,6 +93,22 @@ func (ctx PromptContext) BuildBlock() string {
 		sb.WriteString("**Past chat summaries:**\n")
 		for _, summary := range ctx.Summaries {
 			text := strings.TrimSpace(summary.Str)
+			if text == "" {
+				continue
+			}
+			fmt.Fprintf(&sb, "- %s\n", text)
+		}
+		block := strings.TrimSpace(sb.String())
+		if block != "" {
+			sections = append(sections, block)
+		}
+	}
+
+	if len(ctx.Memories) > 0 {
+		var sb strings.Builder
+		sb.WriteString("**Chat memories:**\n")
+		for _, item := range ctx.Memories {
+			text := strings.TrimSpace(item)
 			if text == "" {
 				continue
 			}
