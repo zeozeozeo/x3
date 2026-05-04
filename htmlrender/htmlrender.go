@@ -100,8 +100,8 @@ func Extract(response string, limit int) (display string, blocks []Block, change
 		})
 	}
 
-	display = replace(htmlTagRegexp, display)
 	display = replace(htmlFenceRegexp, display)
+	display = replace(htmlTagRegexp, display)
 	display = strings.TrimSpace(display)
 	display = blankLineRegexp.ReplaceAllString(display, "\n\n")
 	return display, blocks, changed

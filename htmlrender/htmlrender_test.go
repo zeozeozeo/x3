@@ -52,6 +52,22 @@ func TestExtractFenceCleansLeakedClosingFence(t *testing.T) {
 	}
 }
 
+func TestExtractFencedFullDocumentDoesNotCreateDoctypeBlock(t *testing.T) {
+	display, blocks, changed := Extract("before\n```html\n<!DOCTYPE html>\n<html><head><style>.card{background:#111}</style></head><body><div class=\"card\">ok</div></body></html>\n```\nafter", 3)
+	if !changed {
+		t.Fatal("expected extraction to change the response")
+	}
+	if strings.TrimSpace(display) != "before\n\nafter" {
+		t.Fatalf("unexpected display text: %q", display)
+	}
+	if len(blocks) != 1 {
+		t.Fatalf("expected one full-document block, got %+v", blocks)
+	}
+	if !strings.Contains(blocks[0].HTML, "<!DOCTYPE html>") || !strings.Contains(blocks[0].HTML, `<div class="card">ok</div>`) {
+		t.Fatalf("unexpected extracted block: %q", blocks[0].HTML)
+	}
+}
+
 func TestSanitizeRemovesActiveContent(t *testing.T) {
 	got, err := Sanitize(`<style>@import url("https://bad/style.css"); .x { background: url(https://bad/bg.png); color: red; }</style><div onclick="alert(1)" style="background:url(javascript:bad); color: blue"><script>alert(1)</script><img src="https://example.com/a.png" onerror="x"><img src="http://bad/a.png"><a href="javascript:alert(1)">x</a></div>`)
 	if err != nil {
@@ -266,6 +282,45 @@ func TestRendererPostsGotenbergMultipart(t *testing.T) {
 	}
 	if !sawIndex || !sawFormat || !sawDimensions {
 		t.Fatalf("multipart request missing index/form fields: sawIndex=%v sawFormat=%v sawDimensions=%v", sawIndex, sawFormat, sawDimensions)
+	}
+}
+
+func TestRenderResponseFencedFullDocumentRendersOnce(t *testing.T) {
+	requests := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requests++
+		if err := r.ParseMultipartForm(2 << 20); err != nil {
+			t.Fatalf("ParseMultipartForm failed: %v", err)
+		}
+		files := r.MultipartForm.File["files"]
+		if len(files) != 1 {
+			t.Fatalf("expected one index file, got %d", len(files))
+		}
+		file, err := files[0].Open()
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer file.Close()
+		body, _ := io.ReadAll(file)
+		if !strings.Contains(string(body), `class="card"`) {
+			t.Fatalf("render request lost card body:\n%s", body)
+		}
+		w.Header().Set("Content-Type", "image/png")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write(testPNG(t))
+	}))
+	defer server.Close()
+
+	response := "before\n```html\n<!DOCTYPE html>\n<html><head><style>.card{background:#111;color:#eee}</style></head><body><div class=\"card\">ok</div></body></html>\n```\nafter"
+	result, err := RenderResponse(context.Background(), &Renderer{BaseURL: server.URL, Client: server.Client()}, response, 3)
+	if err != nil {
+		t.Fatalf("RenderResponse failed: %v", err)
+	}
+	if requests != 1 {
+		t.Fatalf("expected one render request, got %d", requests)
+	}
+	if len(result.Blocks) != 1 || strings.TrimSpace(result.DisplayText) != "before\n\nafter" {
+		t.Fatalf("unexpected render result: %+v", result)
 	}
 }
 
