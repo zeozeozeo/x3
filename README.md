@@ -6,6 +6,8 @@ A Discord LLM roleplay and utility bot
 
 > [!NOTE]
 > This is not meant to be selfhosted, please add the bot instead: https://discord.com/oauth2/authorize?client_id=1307635432632094740
+>
+> Or on Matrix (E2EE supported): [@x3_bot:matrix.org](https://matrix.to/#/@x3_bot:matrix.org)
 
 ## Features
 
