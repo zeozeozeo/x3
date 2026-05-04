@@ -22,7 +22,7 @@ import (
 
 const (
 	DefaultWidth  = 900
-	DefaultHeight = 700
+	DefaultHeight = 1600
 )
 
 var (
@@ -245,9 +245,6 @@ html, body {
 }
 body {
   box-sizing: border-box;
-  width: fit-content;
-  max-width: 900px;
-  padding: 24px;
   font-family: "Noto Sans", Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   font-size: 16px;
   line-height: 1.45;
@@ -307,8 +304,36 @@ body {
   height: auto;
 }
 </style>` + inlineStyleBlock(styleCSS) + `
+<style>
+html,
+body {
+  margin: 0 !important;
+  width: max-content !important;
+  min-width: 0 !important;
+  max-width: none !important;
+  min-height: 0 !important;
+  background: transparent !important;
+  overflow: visible !important;
+}
+body {
+  display: block !important;
+  padding: 0 !important;
+}
+.x3-render-capture {
+  display: block !important;
+  box-sizing: border-box !important;
+  width: max-content !important;
+  max-width: 900px !important;
+  min-width: 1px !important;
+  min-height: 1px !important;
+  margin: 0 !important;
+  padding: 24px !important;
+  background: transparent !important;
+  overflow: visible !important;
+}
+</style>
 </head>
-<body><main class="mes_text x3-st-render">` + bodyHTML + `</main></body>
+<body><main class="mes_text x3-st-render x3-render-capture">` + bodyHTML + `</main></body>
 </html>`
 }
 

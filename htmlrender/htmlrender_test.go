@@ -188,8 +188,48 @@ func TestSanitizeAllowsSVGClipMaskPatternMarker(t *testing.T) {
 	}
 }
 
+func TestWrapDocumentKeepsCaptureSurfaceStableAfterPageCSS(t *testing.T) {
+	input := `<!DOCTYPE html>
+<html>
+<head>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: transparent; display: flex; justify-content: center; padding: 20px; }
+  .tweet-card { background: #0f0f0f; width: 598px; border-radius: 16px; }
+</style>
+</head>
+<body>
+  <div class="tweet-card">ok</div>
+</body>
+</html>`
+	sanitized, err := Sanitize(input)
+	if err != nil {
+		t.Fatal(err)
+	}
+	wrapped := wrapDocument(sanitized)
+
+	userBody := strings.Index(wrapped, "display: flex")
+	captureGuard := strings.LastIndex(wrapped, ".x3-render-capture")
+	if userBody == -1 {
+		t.Fatalf("expected user page CSS to be preserved:\n%s", wrapped)
+	}
+	if captureGuard == -1 || captureGuard < userBody {
+		t.Fatalf("expected capture guard CSS after user page CSS:\n%s", wrapped)
+	}
+	for _, want := range []string{
+		`class="mes_text x3-st-render x3-render-capture"`,
+		"body {\n  display: block !important;",
+		"padding: 24px !important;",
+		`class="tweet-card"`,
+	} {
+		if !strings.Contains(wrapped, want) {
+			t.Fatalf("wrapped document missing %q:\n%s", want, wrapped)
+		}
+	}
+}
+
 func TestRendererPostsGotenbergMultipart(t *testing.T) {
-	var sawIndex, sawFormat bool
+	var sawIndex, sawFormat, sawDimensions bool
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/forms/chromium/screenshot/html" {
 			t.Fatalf("unexpected path %s", r.URL.Path)
@@ -198,6 +238,7 @@ func TestRendererPostsGotenbergMultipart(t *testing.T) {
 			t.Fatalf("ParseMultipartForm failed: %v", err)
 		}
 		sawFormat = r.FormValue("format") == "png" && r.FormValue("omitBackground") == "true"
+		sawDimensions = r.FormValue("width") == "900" && r.FormValue("height") == "1600"
 		files := r.MultipartForm.File["files"]
 		if len(files) == 1 && files[0].Filename == "index.html" {
 			file, err := files[0].Open()
@@ -206,7 +247,8 @@ func TestRendererPostsGotenbergMultipart(t *testing.T) {
 			}
 			defer file.Close()
 			body, _ := io.ReadAll(file)
-			sawIndex = strings.Contains(string(body), "<strong>ok</strong>")
+			sawIndex = strings.Contains(string(body), "<strong>ok</strong>") &&
+				strings.Contains(string(body), "x3-render-capture")
 		}
 		w.Header().Set("Content-Type", "image/png")
 		w.WriteHeader(http.StatusOK)
@@ -222,8 +264,8 @@ func TestRendererPostsGotenbergMultipart(t *testing.T) {
 	if len(data) == 0 {
 		t.Fatal("expected response image data")
 	}
-	if !sawIndex || !sawFormat {
-		t.Fatalf("multipart request missing index/form fields: sawIndex=%v sawFormat=%v", sawIndex, sawFormat)
+	if !sawIndex || !sawFormat || !sawDimensions {
+		t.Fatalf("multipart request missing index/form fields: sawIndex=%v sawFormat=%v sawDimensions=%v", sawIndex, sawFormat, sawDimensions)
 	}
 }
 
