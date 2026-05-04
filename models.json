@@ -17,6 +17,36 @@
       }
     },
     {
+      "name": "DeepSeek V4 Pro",
+      "command": "deepseekpro",
+      "reasoning": true,
+      "providers": {
+        "deepseek": {
+          "codenames": ["deepseek-v4-pro"]
+        }
+      }
+    },
+    {
+      "name": "GLM 5.1",
+      "command": "glm",
+      "reasoning": true,
+      "providers": {
+        "vercel": {
+          "codenames": ["zai/glm-5.1"]
+        }
+      }
+    },
+    {
+      "name": "GLM 5",
+      "command": "glm5",
+      "reasoning": true,
+      "providers": {
+        "vercel": {
+          "codenames": ["zai/glm-5"]
+        }
+      }
+    },
+    {
       "name": "GLM 4.5 Air",
       "command": "glmair",
       "providers": {
@@ -33,6 +63,9 @@
       "command": "deepseek32",
       "reasoning": true,
       "providers": {
+        "mnn": {
+          "codenames": ["deepseek-v3.2"]
+        },
         "ollama": {
           "codenames": ["deepseek-v3.2:cloud"]
         }
@@ -45,6 +78,17 @@
       "providers": {
         "zhipu": {
           "codenames": ["glm-4.7-flash"]
+        }
+      }
+    },
+    {
+      "name": "Kimi K2.6",
+      "command": "kimi",
+      "vision": true,
+      "reasoning": true,
+      "providers": {
+        "vercel": {
+          "codenames": ["moonshotai/kimi-k2.6"]
         }
       }
     },
@@ -229,22 +273,22 @@
       }
     },
     {
-      "name": "Owl Alpha",
-      "command": "stealth",
-      "reasoning": true,
-      "providers": {
-        "openrouter": {
-          "codenames": ["openrouter/owl-alpha"]
-        }
-      }
-    },
-    {
       "name": "GLM 4.6V Flash",
       "command": "glmv",
       "vision": true,
       "providers": {
         "zenmux": {
           "codenames": ["z-ai/glm-4.6v-flash-free"]
+        }
+      }
+    },
+    {
+      "name": "GLM 4.7",
+      "command": "glm47",
+      "reasoning": true,
+      "providers": {
+        "vercel": {
+          "codenames": ["zai/glm-4.7"]
         }
       }
     },
@@ -262,17 +306,6 @@
       "name": "Alice (chatbot, not an LLM)",
       "command": "alice",
       "is_alice": true
-    },
-    {
-      "name": "DeepSeek V4 Pro",
-      "command": "deepseekpro",
-      "reasoning": true,
-      "providers": {
-        "deepseek": {
-          "codenames": ["deepseek-v4-pro"]
-        }
-      },
-      "limited": true
     }
   ],
   "default_models": [
@@ -289,12 +322,12 @@
     "Meta Llama 4 Maverick 400B/17A"
   ],
   "default_vision_models": [
-    "GLM 4.6V Flash",
     "NVIDIA Nemotron 3 Nano Omni 30B/A3B",
     "Meta Llama 4 Maverick 400B/17A",
     "Meta Llama 4 Scout 109B/17A"
   ],
   "providers_order": [
+    "vercel",
     "deepseek",
     "openrouter",
     "ollama",
