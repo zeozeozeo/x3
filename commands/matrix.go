@@ -93,13 +93,23 @@ func StartMatrixBot(parent context.Context) (*MatrixRuntime, error) {
 	if cryptoDB == "" {
 		cryptoDB = "x3-matrix-crypto.db"
 	}
-	if homeserver == "" || userID == "" || accessToken == "" || deviceID == "" || pickleKey == "" {
-		return nil, fmt.Errorf("matrix bot enabled, but X3_MATRIX_HOMESERVER, X3_MATRIX_USER_ID, X3_MATRIX_ACCESS_TOKEN, X3_MATRIX_DEVICE_ID and X3_MATRIX_PICKLE_KEY are required")
+	if homeserver == "" || userID == "" || accessToken == "" || pickleKey == "" {
+		return nil, fmt.Errorf("matrix bot enabled, but X3_MATRIX_HOMESERVER, X3_MATRIX_USER_ID, X3_MATRIX_ACCESS_TOKEN and X3_MATRIX_PICKLE_KEY are required")
 	}
 
 	client, err := mautrix.NewClient(homeserver, id.UserID(userID), accessToken)
 	if err != nil {
 		return nil, err
+	}
+	if deviceID == "" {
+		whoami, err := client.Whoami(parent)
+		if err != nil {
+			return nil, fmt.Errorf("failed to discover Matrix device ID from access token; set X3_MATRIX_DEVICE_ID manually: %w", err)
+		}
+		if whoami.UserID != "" && whoami.UserID != client.UserID {
+			return nil, fmt.Errorf("Matrix access token belongs to %s, but X3_MATRIX_USER_ID is %s", whoami.UserID, client.UserID)
+		}
+		deviceID = whoami.DeviceID.String()
 	}
 	client.DeviceID = id.DeviceID(deviceID)
 
@@ -109,7 +119,7 @@ func StartMatrixBot(parent context.Context) (*MatrixRuntime, error) {
 	}
 	if err := helper.Init(parent); err != nil {
 		_ = helper.Close()
-		return nil, err
+		return nil, fmt.Errorf("%w (Matrix crypto stores are device-specific; if you changed X3_MATRIX_DEVICE_ID or switched access tokens, either restore the previous device ID or use/delete X3_MATRIX_CRYPTO_DB=%s)", err, cryptoDB)
 	}
 	client.Crypto = helper
 
