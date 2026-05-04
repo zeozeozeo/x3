@@ -5,8 +5,9 @@ WORKDIR /bot
 COPY go.mod go.sum ./
 RUN go mod download
 COPY . .
+ARG GO_BUILD_TAGS="goolm"
 RUN --mount=type=cache,target=/root/.cache/go-build \
-    CGO_ENABLED=1 GOOS=linux go build -o /x3
+    CGO_ENABLED=1 GOOS=linux go build -tags "$GO_BUILD_TAGS" -o /x3
 
 # Final Stage
 FROM alpine:3.23

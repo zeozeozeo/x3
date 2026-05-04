@@ -33,9 +33,31 @@ A Discord LLM roleplay and utility bot
 - Can render & embed HTML blocks (like SillyTavern's frontend does, but in Discord) with [Gotenberg](https://gotenberg.dev/)
 - Free and Discord based, [add it](https://discord.com/oauth2/authorize?client_id=1307635432632094740)
 
+## Matrix bot
+
+Matrix support uses mautrix's pure-Go E2EE backend via the `goolm` build tag.
+
+```console
+go build -tags goolm -o x3
+```
+
+For all local terminal builds without passing `-tags` each time, set Go's user-level default:
+
+```console
+go env -w GOFLAGS=-tags=goolm
+```
+
+Set `X3_MATRIX_ENABLED=true` and the `X3_MATRIX_*` values from `.env.example`.
+
 ## Run in Docker (or Podman)
 
 ```console
 podman build -t x3 -f Dockerfile .
 podman run -d -v /path/to/your/containers/x3:/bot x3
+```
+
+To build a Discord-only container image without Matrix support:
+
+```console
+podman build --build-arg GO_BUILD_TAGS= -t x3 -f Dockerfile .
 ```

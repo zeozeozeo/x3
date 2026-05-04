@@ -26,14 +26,18 @@ func unmarshalUserCache(data []byte) (*UserCache, error) {
 
 // write saves the UserCache state to the database for the given user ID.
 func (cache UserCache) Write(id snowflake.ID) error {
-	slog.Debug("writing user cache", slog.String("user_id", id.String()))
+	return cache.WriteKey(id.String())
+}
+
+func (cache UserCache) WriteKey(key string) error {
+	slog.Debug("writing user cache", slog.String("user_id", key))
 	data, err := json.Marshal(cache)
 	if err != nil {
 		return err
 	}
-	_, err = DB.Exec("INSERT OR REPLACE INTO user_cache (user_id, cache) VALUES (?, ?)", id.String(), data)
+	_, err = DB.Exec("INSERT OR REPLACE INTO user_cache (user_id, cache) VALUES (?, ?)", key, data)
 	if err != nil {
-		slog.Error("failed to write user cache to DB", "err", err, slog.String("user_id", id.String()))
+		slog.Error("failed to write user cache to DB", "err", err, slog.String("user_id", key))
 	}
 	return err
 }
@@ -41,12 +45,16 @@ func (cache UserCache) Write(id snowflake.ID) error {
 // GetUserCache retrieves the UserCache for a given ID from the database.
 // It always returns a valid cache (a new one if not found or on error).
 func GetUserCache(id snowflake.ID) *UserCache {
+	return GetUserCacheByKey(id.String())
+}
+
+func GetUserCacheByKey(key string) *UserCache {
 	var data []byte
-	err := DB.QueryRow("SELECT cache FROM user_cache WHERE user_id = ?", id.String()).Scan(&data)
+	err := DB.QueryRow("SELECT cache FROM user_cache WHERE user_id = ?", key).Scan(&data)
 	if err != nil {
 		if err != sql.ErrNoRows {
 			// Log errors other than simply not found
-			slog.Warn("failed to get user cache from DB", "err", err, slog.String("user_id", id.String()))
+			slog.Warn("failed to get user cache from DB", "err", err, slog.String("user_id", key))
 		}
 		// Return a new cache if not found or on error
 		return NewUserCache()
@@ -55,10 +63,10 @@ func GetUserCache(id snowflake.ID) *UserCache {
 	// Decode JSON
 	cache, err := unmarshalUserCache(data)
 	if err != nil {
-		slog.Warn("failed to unmarshal user cache", "err", err, slog.String("user_id", id.String()))
+		slog.Warn("failed to unmarshal user cache", "err", err, slog.String("user_id", key))
 		// Return a new cache and attempt to overwrite the corrupted one
 		cache = NewUserCache()
-		go cache.Write(id) // Attempt to fix the corrupted entry asynchronously
+		go cache.WriteKey(key) // Attempt to fix the corrupted entry asynchronously
 	}
 	return cache
 }

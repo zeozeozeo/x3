@@ -146,14 +146,18 @@ func unmarshalChannelCache(data []byte) (*ChannelCache, error) {
 
 // write saves the ChannelCache state to the database for the given channel ID.
 func (cache ChannelCache) Write(id snowflake.ID) error {
-	slog.Debug("writing channel cache", slog.String("channel_id", id.String()))
+	return cache.WriteKey(id.String())
+}
+
+func (cache ChannelCache) WriteKey(key string) error {
+	slog.Debug("writing channel cache", slog.String("channel_id", key))
 	data, err := json.Marshal(cache)
 	if err != nil {
 		return err
 	}
-	_, err = DB.Exec("INSERT OR REPLACE INTO channel_cache (channel_id, cache) VALUES (?, ?)", id.String(), data)
+	_, err = DB.Exec("INSERT OR REPLACE INTO channel_cache (channel_id, cache) VALUES (?, ?)", key, data)
 	if err != nil {
-		slog.Error("failed to write channel cache to DB", "err", err, slog.String("channel_id", id.String()))
+		slog.Error("failed to write channel cache to DB", "err", err, slog.String("channel_id", key))
 	}
 	return err
 }
@@ -161,12 +165,16 @@ func (cache ChannelCache) Write(id snowflake.ID) error {
 // GetChannelCache retrieves the ChannelCache for a given ID from the database.
 // It always returns a valid cache (a new one if not found or on error).
 func GetChannelCache(id snowflake.ID) *ChannelCache {
+	return GetChannelCacheByKey(id.String())
+}
+
+func GetChannelCacheByKey(key string) *ChannelCache {
 	var data []byte
-	err := DB.QueryRow("SELECT cache FROM channel_cache WHERE channel_id = ?", id.String()).Scan(&data)
+	err := DB.QueryRow("SELECT cache FROM channel_cache WHERE channel_id = ?", key).Scan(&data)
 	if err != nil {
 		if err != sql.ErrNoRows {
 			// Log errors other than simply not found
-			slog.Warn("failed to get channel cache from DB", "err", err, slog.String("channel_id", id.String()))
+			slog.Warn("failed to get channel cache from DB", "err", err, slog.String("channel_id", key))
 		}
 		// Return a new cache if not found or on error
 		return NewChannelCache()
@@ -175,10 +183,10 @@ func GetChannelCache(id snowflake.ID) *ChannelCache {
 	// Decode JSON
 	cache, err := unmarshalChannelCache(data)
 	if err != nil {
-		slog.Warn("failed to unmarshal channel cache", "err", err, slog.String("channel_id", id.String()))
+		slog.Warn("failed to unmarshal channel cache", "err", err, slog.String("channel_id", key))
 		// Return a new cache and attempt to overwrite the corrupted one
 		cache = NewChannelCache()
-		go cache.Write(id) // Attempt to fix the corrupted entry asynchronously
+		go cache.WriteKey(key) // Attempt to fix the corrupted entry asynchronously
 	}
 	return cache
 }

@@ -138,13 +138,21 @@ func (u Usage) IsEmpty() bool {
 type Llmer struct {
 	Messages              []Message                                                                              `json:"messages"`
 	ChannelID             snowflake.ID                                                                           `json:"channel_id"`
+	ConversationID        string                                                                                 `json:"conversation_id,omitempty"`
 	GuildID               *snowflake.ID                                                                          `json:"guild_id,omitempty"`
 	DiscordSearchCallback func(ctx context.Context, guildID snowflake.ID, query string) (string, map[int]string) `json:"-"`
 }
 
 func NewLlmer(channelID snowflake.ID) *Llmer {
 	return &Llmer{
-		ChannelID: channelID,
+		ChannelID:      channelID,
+		ConversationID: channelID.String(),
+	}
+}
+
+func NewLlmerForKey(conversationID string) *Llmer {
+	return &Llmer{
+		ConversationID: conversationID,
 	}
 }
 
@@ -210,12 +218,16 @@ func (l *Llmer) Lobotomize(removeN int) {
 
 // this is inclusive!
 func (l *Llmer) LobotomizeUntilID(id snowflake.ID) {
+	l.LobotomizeUntilMessageID(id.String())
+}
+
+func (l *Llmer) LobotomizeUntilMessageID(messageID string) {
 	if len(l.Messages) == 0 {
 		return
 	}
 
 	for i := len(l.Messages) - 1; i >= 0; i-- {
-		if l.Messages[i].ID == id {
+		if l.Messages[i].MessageID == messageID || l.Messages[i].ID.String() == messageID {
 			if l.Messages[i].Role == RoleSystem {
 				continue // don't nuke the system prompt
 			}
@@ -226,6 +238,10 @@ func (l *Llmer) LobotomizeUntilID(id snowflake.ID) {
 }
 
 func (l *Llmer) AddMessage(role, content string, id snowflake.ID) {
+	l.AddMessageWithID(role, content, id, id.String())
+}
+
+func (l *Llmer) AddMessageWithID(role, content string, id snowflake.ID, messageID string) {
 	if len(l.Messages) > 0 && role == RoleAssistant && l.Messages[len(l.Messages)-1].Role == RoleAssistant {
 		// previous message is also an assistant message, merge this
 		// (this is required when x3 splits the message up into multiple parts to bypass
@@ -235,9 +251,10 @@ func (l *Llmer) AddMessage(role, content string, id snowflake.ID) {
 	}
 
 	msg := Message{
-		Role:    role,
-		Content: content,
-		ID:      id,
+		Role:      role,
+		Content:   content,
+		ID:        id,
+		MessageID: messageID,
 	}
 	l.Messages = append(l.Messages, msg)
 }
@@ -719,7 +736,11 @@ var weirdAliceReplacer = strings.NewReplacer(" .", ".", ", ,", ",", " ,", ",", "
 func (l *Llmer) inferAlice() string {
 	msg := l.Messages[len(l.Messages)-1]
 	content := desugarContent(msg.Content)
-	response := gAlice.Respond(content, l.ChannelID.String())
+	sessionID := l.ConversationID
+	if sessionID == "" {
+		sessionID = l.ChannelID.String()
+	}
+	response := gAlice.Respond(content, sessionID)
 	return weirdAliceReplacer.Replace(strings.Join(strings.Fields(strings.TrimSpace(response)), " "))
 }
 

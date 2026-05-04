@@ -149,6 +149,21 @@ func main() {
 	// start narrator mainloop
 	go commands.GetNarrator().Run()
 
+	matrixRuntime, err := commands.StartMatrixBot(context.Background())
+	if err != nil {
+		slog.Error("error while starting Matrix bot", "err", err)
+		return
+	}
+	if matrixRuntime != nil {
+		defer func() {
+			matrixRuntime.Cancel()
+			<-matrixRuntime.Done
+			if err := matrixRuntime.Close(); err != nil {
+				slog.Error("error closing Matrix crypto store", "err", err)
+			}
+		}()
+	}
+
 	// start GUI server
 	go func() {
 		modelEditorServer := modeled.NewServer()
