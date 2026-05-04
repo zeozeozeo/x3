@@ -461,12 +461,12 @@ func padRect(rect, bounds image.Rectangle, padding int) image.Rectangle {
 }
 
 func Sanitize(input string) (string, error) {
-	body, styleCSS := splitStyleBlocks(input)
-	body = strings.TrimSpace(htmlPolicy.Sanitize(body))
+	bodyHTML, styleCSS := splitStyleBlocks(input)
+	sanitizedBody := strings.TrimSpace(htmlPolicy.Sanitize(bodyHTML))
 	if styleCSS == "" {
-		return body, nil
+		return sanitizedBody, nil
 	}
-	return strings.TrimSpace(body + "\n" + inlineStyleBlock(styleCSS)), nil
+	return strings.TrimSpace(sanitizedBody + "\n" + inlineStyleBlock(styleCSS)), nil
 }
 
 func newHTMLPolicy() *bluemonday.Policy {
@@ -501,16 +501,18 @@ func newHTMLPolicy() *bluemonday.Policy {
 }
 
 func splitStyleBlocks(input string) (bodyHTML, styleCSS string) {
-	root, err := xhtml.Parse(strings.NewReader("<!doctype html><html><body>" + input + "</body></html>"))
+	root, err := xhtml.Parse(strings.NewReader(input))
 	if err != nil {
 		return input, ""
 	}
+
+	var styles []string
+	extractStylesAndSanitize(root, &styles)
+
 	body := findElement(root, "body")
 	if body == nil {
-		return input, ""
+		body = root
 	}
-	var styles []string
-	extractStyleNodes(body, &styles)
 
 	var out strings.Builder
 	for child := body.FirstChild; child != nil; child = child.NextSibling {
@@ -519,6 +521,30 @@ func splitStyleBlocks(input string) (bodyHTML, styleCSS string) {
 		}
 	}
 	return strings.TrimSpace(out.String()), strings.TrimSpace(strings.Join(styles, "\n"))
+}
+
+func extractStylesAndSanitize(node *xhtml.Node, styles *[]string) {
+	for child := node.FirstChild; child != nil; {
+		next := child.NextSibling
+		if child.Type == xhtml.ElementNode {
+			if strings.EqualFold(child.Data, "style") {
+				if css := sanitizeCSS(textContent(child)); css != "" {
+					*styles = append(*styles, css)
+				}
+				node.RemoveChild(child)
+				child = next
+				continue
+			}
+
+			for i := range child.Attr {
+				if strings.EqualFold(child.Attr[i].Key, "style") {
+					child.Attr[i].Val = sanitizeCSS(child.Attr[i].Val)
+				}
+			}
+		}
+		extractStylesAndSanitize(child, styles)
+		child = next
+	}
 }
 
 func findElement(node *xhtml.Node, name string) *xhtml.Node {
@@ -585,8 +611,23 @@ func inlineStyleBlock(styleCSS string) string {
 
 func sanitizeCSS(css string) string {
 	css = cssImportRegexp.ReplaceAllString(css, "")
-	css = cssURLRegexp.ReplaceAllString(css, "")
 	css = cssExprRegexp.ReplaceAllString(css, "")
+
+	css = cssURLRegexp.ReplaceAllStringFunc(css, func(match string) string {
+		start := strings.Index(match, "(")
+		end := strings.LastIndex(match, ")")
+		if start == -1 || end == -1 {
+			return ""
+		}
+		val := strings.TrimSpace(match[start+1 : end])
+		val = strings.Trim(val, `"'`)
+
+		if strings.HasPrefix(val, "#") || strings.HasPrefix(val, "data:image/") {
+			return match
+		}
+		return ""
+	})
+
 	return strings.TrimSpace(css)
 }
 
