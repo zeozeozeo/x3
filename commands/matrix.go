@@ -86,22 +86,38 @@ func StartMatrixBot(parent context.Context) (*MatrixRuntime, error) {
 
 	homeserver := strings.TrimSpace(os.Getenv("X3_MATRIX_HOMESERVER"))
 	userID := strings.TrimSpace(os.Getenv("X3_MATRIX_USER_ID"))
+	username := strings.TrimSpace(os.Getenv("X3_MATRIX_USERNAME"))
+	password := os.Getenv("X3_MATRIX_PASSWORD")
 	accessToken := strings.TrimSpace(os.Getenv("X3_MATRIX_ACCESS_TOKEN"))
 	deviceID := strings.TrimSpace(os.Getenv("X3_MATRIX_DEVICE_ID"))
+	deviceName := strings.TrimSpace(os.Getenv("X3_MATRIX_DEVICE_NAME"))
 	pickleKey := os.Getenv("X3_MATRIX_PICKLE_KEY")
 	cryptoDB := strings.TrimSpace(os.Getenv("X3_MATRIX_CRYPTO_DB"))
 	if cryptoDB == "" {
 		cryptoDB = "x3-matrix-crypto.db"
 	}
-	if homeserver == "" || userID == "" || accessToken == "" || pickleKey == "" {
-		return nil, fmt.Errorf("matrix bot enabled, but X3_MATRIX_HOMESERVER, X3_MATRIX_USER_ID, X3_MATRIX_ACCESS_TOKEN and X3_MATRIX_PICKLE_KEY are required")
+	if deviceName == "" {
+		deviceName = "x3 bot"
+	}
+	if homeserver == "" || pickleKey == "" {
+		return nil, fmt.Errorf("matrix bot enabled, but X3_MATRIX_HOMESERVER and X3_MATRIX_PICKLE_KEY are required")
+	}
+	if accessToken == "" && password == "" {
+		return nil, fmt.Errorf("matrix bot enabled, but either X3_MATRIX_ACCESS_TOKEN or X3_MATRIX_PASSWORD is required")
+	}
+	if accessToken != "" && userID == "" {
+		return nil, fmt.Errorf("X3_MATRIX_USER_ID is required when using X3_MATRIX_ACCESS_TOKEN")
+	}
+	loginUser := username
+	if loginUser == "" {
+		loginUser = userID
 	}
 
 	client, err := mautrix.NewClient(homeserver, id.UserID(userID), accessToken)
 	if err != nil {
 		return nil, err
 	}
-	if deviceID == "" {
+	if accessToken != "" && deviceID == "" {
 		whoami, err := client.Whoami(parent)
 		if err != nil {
 			return nil, fmt.Errorf("failed to discover Matrix device ID from access token; set X3_MATRIX_DEVICE_ID manually: %w", err)
@@ -117,9 +133,29 @@ func StartMatrixBot(parent context.Context) (*MatrixRuntime, error) {
 	if err != nil {
 		return nil, err
 	}
+	if accessToken == "" {
+		if loginUser == "" {
+			_ = helper.Close()
+			return nil, fmt.Errorf("X3_MATRIX_USERNAME or X3_MATRIX_USER_ID is required when using X3_MATRIX_PASSWORD")
+		}
+		req := &mautrix.ReqLogin{
+			Type:                     mautrix.AuthTypePassword,
+			Identifier:               mautrix.UserIdentifier{Type: mautrix.IdentifierTypeUser, User: loginUser},
+			Password:                 password,
+			InitialDeviceDisplayName: deviceName,
+		}
+		if deviceID != "" {
+			req.DeviceID = id.DeviceID(deviceID)
+		}
+		helper.LoginAs = req
+	}
 	if err := helper.Init(parent); err != nil {
 		_ = helper.Close()
 		return nil, fmt.Errorf("%w (Matrix crypto stores are device-specific; if you changed X3_MATRIX_DEVICE_ID or switched access tokens, either restore the previous device ID or use/delete X3_MATRIX_CRYPTO_DB=%s)", err, cryptoDB)
+	}
+	if userID != "" && client.UserID != id.UserID(userID) {
+		_ = helper.Close()
+		return nil, fmt.Errorf("Matrix login returned user %s, but X3_MATRIX_USER_ID is %s", client.UserID, userID)
 	}
 	client.Crypto = helper
 
