@@ -331,6 +331,7 @@ func pluralize(count int, singular string) string {
 type messagePart struct {
 	Content string
 	IsLatex bool
+	Display bool
 }
 
 // \fcolorbox{white}{white} for a bit of padding (hacky but works)
@@ -362,26 +363,96 @@ func fromLatexAPI(api string) string {
 }
 
 func parseMessageForLatex(content string) []messagePart {
+	rawParts := parseLatexSegments(content, latexParseOptions{})
+	parts := make([]messagePart, 0, len(rawParts))
+	for _, part := range rawParts {
+		if part.IsLatex {
+			part.Content = toLatexAPI(part.Content)
+		}
+		parts = append(parts, part)
+	}
+	return parts
+}
+
+type latexParseOptions struct {
+	AllowSlashDelimiters   bool
+	AllowUnclosedDisplay   bool
+	AllowUnclosedBracketed bool
+}
+
+func parseLatexSegments(content string, opts latexParseOptions) []messagePart {
 	var parts []messagePart
 	scanner := 0
 	textStart := 0
 
 	for scanner < len(content) {
 		if scanner+1 < len(content) && content[scanner:scanner+2] == "$$" {
-			if scanner > textStart {
-				parts = append(parts, messagePart{Content: content[textStart:scanner], IsLatex: false})
-			}
 			end := strings.Index(content[scanner+2:], "$$")
 			if end == -1 {
-				textStart = scanner
+				if opts.AllowUnclosedDisplay && isLikelyUnclosedDisplayStart(content, scanner) && validDisplayLatexContent(content[scanner+2:]) {
+					if scanner > textStart {
+						parts = append(parts, messagePart{Content: content[textStart:scanner]})
+					}
+					parts = append(parts, messagePart{Content: strings.TrimSpace(content[scanner+2:]), IsLatex: true, Display: true})
+					scanner = len(content)
+					textStart = scanner
+					break
+				}
+				scanner += 2
 				break
 			}
 
 			latexContent := content[scanner+2 : scanner+2+end]
-			parts = append(parts, messagePart{Content: toLatexAPI(latexContent), IsLatex: true})
+			if !validDisplayLatexContent(latexContent) {
+				scanner += 2
+				continue
+			}
+			if scanner > textStart {
+				parts = append(parts, messagePart{Content: content[textStart:scanner]})
+			}
+			parts = append(parts, messagePart{Content: strings.TrimSpace(latexContent), IsLatex: true, Display: true})
 
 			scanner += 2 + end + 2
 			textStart = scanner
+		} else if opts.AllowSlashDelimiters && scanner+1 < len(content) && content[scanner] == '\\' && (content[scanner+1] == '[' || content[scanner+1] == '(') {
+			open := content[scanner+1]
+			closeDelim := `\)`
+			display := false
+			if open == '[' {
+				closeDelim = `\]`
+				display = true
+			}
+			end := strings.Index(content[scanner+2:], closeDelim)
+			if end == -1 {
+				if opts.AllowUnclosedBracketed && display && isLikelyUnclosedDisplayStart(content, scanner) && validDisplayLatexContent(content[scanner+2:]) {
+					if scanner > textStart {
+						parts = append(parts, messagePart{Content: content[textStart:scanner]})
+					}
+					parts = append(parts, messagePart{Content: strings.TrimSpace(content[scanner+2:]), IsLatex: true, Display: true})
+					scanner = len(content)
+					textStart = scanner
+					break
+				}
+				scanner += 2
+				continue
+			}
+			latexContent := content[scanner+2 : scanner+2+end]
+			if display {
+				if !validDisplayLatexContent(latexContent) {
+					scanner += 2
+					continue
+				}
+			} else if !validLatexContent(latexContent) {
+				scanner += 2
+				continue
+			}
+			if scanner > textStart {
+				parts = append(parts, messagePart{Content: content[textStart:scanner]})
+			}
+			parts = append(parts, messagePart{Content: strings.TrimSpace(latexContent), IsLatex: true, Display: display})
+			scanner += 2 + end + len(closeDelim)
+			textStart = scanner
+			continue
 		} else if content[scanner] == '$' {
 			end := -1
 			searchStart := scanner + 1
@@ -399,14 +470,11 @@ func parseMessageForLatex(content string) []messagePart {
 			}
 			if end != -1 {
 				latexContent := content[scanner+1 : end]
-				isValidLatex := len(latexContent) > 0 &&
-					!strings.HasPrefix(latexContent, " ") && !strings.HasSuffix(latexContent, " ") &&
-					!strings.HasPrefix(latexContent, "\n") && !strings.HasSuffix(latexContent, "\n")
-				if isValidLatex {
+				if validLatexContent(latexContent) {
 					if scanner > textStart {
-						parts = append(parts, messagePart{Content: content[textStart:scanner], IsLatex: false})
+						parts = append(parts, messagePart{Content: content[textStart:scanner]})
 					}
-					parts = append(parts, messagePart{Content: toLatexAPI(latexContent), IsLatex: true})
+					parts = append(parts, messagePart{Content: strings.TrimSpace(latexContent), IsLatex: true})
 					scanner = end + 1
 					textStart = scanner
 					continue
@@ -418,9 +486,24 @@ func parseMessageForLatex(content string) []messagePart {
 		}
 	}
 	if textStart < len(content) {
-		parts = append(parts, messagePart{Content: content[textStart:], IsLatex: false})
+		parts = append(parts, messagePart{Content: content[textStart:]})
 	}
 	return parts
+}
+
+func validLatexContent(content string) bool {
+	return len(content) > 0 &&
+		!strings.HasPrefix(content, " ") && !strings.HasSuffix(content, " ") &&
+		!strings.HasPrefix(content, "\n") && !strings.HasSuffix(content, "\n")
+}
+
+func validDisplayLatexContent(content string) bool {
+	return strings.TrimSpace(content) != ""
+}
+
+func isLikelyUnclosedDisplayStart(content string, scanner int) bool {
+	before := strings.TrimSpace(content[:scanner])
+	return before == "" || strings.HasSuffix(before, ":")
 }
 
 func sendMessageSplits(
