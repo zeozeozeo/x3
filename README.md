@@ -34,6 +34,7 @@ A Discord LLM roleplay and utility bot
 - Ability to export and import conversations `/chatlog export`, `/chatlog import`, `/lobotomy`
 - Can render & embed HTML blocks (like SillyTavern's frontend does, but in Discord) with [Gotenberg](https://gotenberg.dev/)
 - Free and Discord based, [add it](https://discord.com/oauth2/authorize?client_id=1307635432632094740)
+- Also is a Matrix bot: [@x3_bot:matrix.org](https://matrix.to/#/@x3_bot:matrix.org)
 
 ## Matrix bot
 
@@ -52,6 +53,9 @@ go env -w GOFLAGS=-tags=goolm
 Set `X3_MATRIX_ENABLED=true` and the `X3_MATRIX_*` values from `.env.example`. If `X3_MATRIX_ACCESS_TOKEN` is empty, x3 logs in with `X3_MATRIX_USERNAME`/`X3_MATRIX_PASSWORD` and creates or reuses a dedicated Matrix device from `X3_MATRIX_CRYPTO_DB`. The Matrix UX uses text commands such as `!x3 persona`, `!x3 chat`, `!x3 context`, `!x3 lobotomy`, `!x3 regenerate`, and `!x3 chatlog export`.
 
 For encrypted rooms, keep `X3_MATRIX_DEVICE_ID` and `X3_MATRIX_CRYPTO_DB` stable across restarts. To verify the headless bot device, set `X3_MATRIX_RECOVERY_KEY` to your Matrix recovery key before starting x3. The bot will import your cross-signing keys and sign its own device on startup.
+
+> [!NOTE]
+> Currently LaTeX rendering in Matrix is only supported by a couple clients; develop.element.io, SchildiChat and Nheko should work with the experimental feature enabled.
 
 ## Run in Docker (or Podman)
 
