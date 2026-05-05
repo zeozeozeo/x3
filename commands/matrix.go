@@ -223,8 +223,9 @@ func (b *MatrixBot) onMessage(ctx context.Context, evt *event.Event) {
 	}
 
 	trimmed := strings.TrimSpace(msg.Content)
-	if b.isCommand(trimmed) {
-		if err := b.handleCommand(ctx, msg, strings.TrimSpace(strings.TrimPrefix(trimmed, b.prefix))); err != nil {
+	isDM := b.isDMRoom(ctx, msg.RoomID)
+	if rawCommand, ok := b.parseCommand(trimmed, isDM); ok {
+		if err := b.handleCommand(ctx, msg, rawCommand, isDM); err != nil {
 			slog.Error("matrix command failed", "room_id", msg.RoomID.String(), "event_id", msg.EventID.String(), "err", err)
 			_ = b.sendText(ctx, msg.RoomID, msg.EventID, "Error: "+err.Error())
 		}
@@ -234,7 +235,6 @@ func (b *MatrixBot) onMessage(ctx context.Context, evt *event.Event) {
 		return
 	}
 
-	isDM := b.isDMRoom(ctx, msg.RoomID)
 	shouldTrigger := isDM || b.mentioned(trimmed) || b.replyToBot(msg) || containsX3Regex.MatchString(trimmed)
 	if !shouldTrigger {
 		cache := db.GetChannelCacheByKey(b.roomKey(msg.RoomID))
@@ -249,8 +249,18 @@ func (b *MatrixBot) onMessage(ctx context.Context, evt *event.Event) {
 	}
 }
 
-func (b *MatrixBot) isCommand(content string) bool {
-	return content == b.prefix || strings.HasPrefix(content, b.prefix+" ")
+func (b *MatrixBot) parseCommand(content string, isDM bool) (string, bool) {
+	if content == b.prefix {
+		return "", true
+	}
+	if strings.HasPrefix(content, b.prefix+" ") {
+		return strings.TrimSpace(strings.TrimPrefix(content, b.prefix)), true
+	}
+	if isDM && strings.HasPrefix(content, "!") && !strings.HasPrefix(content, b.prefix) {
+		raw := strings.TrimSpace(strings.TrimPrefix(content, "!"))
+		return raw, raw != ""
+	}
+	return "", false
 }
 
 func (b *MatrixBot) mentioned(content string) bool {
@@ -402,10 +412,10 @@ func (b *MatrixBot) attachmentFromContent(ctx context.Context, content *event.Me
 	return att, nil
 }
 
-func (b *MatrixBot) handleCommand(ctx context.Context, msg *matrixMessage, raw string) error {
+func (b *MatrixBot) handleCommand(ctx context.Context, msg *matrixMessage, raw string, isDM bool) error {
 	raw = strings.TrimSpace(raw)
 	if raw == "" || raw == "help" {
-		return b.sendText(ctx, msg.RoomID, msg.EventID, b.helpText())
+		return b.sendText(ctx, msg.RoomID, msg.EventID, b.helpText(isDM))
 	}
 	name, rest, _ := strings.Cut(raw, " ")
 	name = strings.ToLower(strings.TrimSpace(name))
@@ -414,7 +424,7 @@ func (b *MatrixBot) handleCommand(ctx context.Context, msg *matrixMessage, raw s
 	switch name {
 	case "chat":
 		if rest == "" {
-			return b.sendText(ctx, msg.RoomID, msg.EventID, "Usage: "+b.prefix+" chat <prompt>")
+			return b.sendText(ctx, msg.RoomID, msg.EventID, "Usage: "+b.commandUsage("chat", isDM)+" <prompt>")
 		}
 		copyMsg := *msg
 		copyMsg.Content = rest
@@ -422,7 +432,7 @@ func (b *MatrixBot) handleCommand(ctx context.Context, msg *matrixMessage, raw s
 	case "persona":
 		return b.handlePersonaCommand(ctx, msg, rest)
 	case "context":
-		return b.handleContextCommand(ctx, msg, rest)
+		return b.handleContextCommand(ctx, msg, rest, isDM)
 	case "lobotomy":
 		return b.handleLobotomyCommand(ctx, msg, rest)
 	case "regenerate":
@@ -430,31 +440,38 @@ func (b *MatrixBot) handleCommand(ctx context.Context, msg *matrixMessage, raw s
 	case "stats":
 		return b.handleStatsCommand(ctx, msg)
 	case "chatlog":
-		return b.handleChatlogCommand(ctx, msg, rest)
+		return b.handleChatlogCommand(ctx, msg, rest, isDM)
 	case "blacklist":
 		return b.handleBlacklistCommand(ctx, msg, rest, false)
 	case "imageblacklist":
 		return b.handleBlacklistCommand(ctx, msg, rest, true)
 	default:
-		return b.sendText(ctx, msg.RoomID, msg.EventID, "Unknown command. Try "+b.prefix+" help")
+		return b.sendText(ctx, msg.RoomID, msg.EventID, "Unknown command. Try "+b.commandUsage("help", isDM))
 	}
 }
 
-func (b *MatrixBot) helpText() string {
+func (b *MatrixBot) commandUsage(name string, isDM bool) string {
+	if isDM {
+		return "!" + name
+	}
+	return b.prefix + " " + name
+}
+
+func (b *MatrixBot) helpText(isDM bool) string {
 	return strings.Join([]string{
 		"x3 commands:",
-		b.prefix + " chat <prompt>",
-		b.prefix + " persona",
-		b.prefix + " persona set <name>",
-		b.prefix + " persona model <model name>",
-		b.prefix + " persona system <prompt>",
-		b.prefix + " persona card <url> | preset <url>",
-		b.prefix + " persona context|temperature|top_p|frequency_penalty|seed <value>",
-		b.prefix + " persona images|thinking|html on|off",
-		b.prefix + " context add|list|clear|delete|get|edit ...",
-		b.prefix + " lobotomy [amount] [reset_persona]",
-		b.prefix + " regenerate [prepend]",
-		b.prefix + " chatlog export|import",
+		b.commandUsage("chat", isDM) + " <prompt>",
+		b.commandUsage("persona", isDM),
+		b.commandUsage("persona", isDM) + " set <name>",
+		b.commandUsage("persona", isDM) + " model <model name>",
+		b.commandUsage("persona", isDM) + " system <prompt>",
+		b.commandUsage("persona", isDM) + " card <url> | preset <url>",
+		b.commandUsage("persona", isDM) + " context|temperature|top_p|frequency_penalty|seed <value>",
+		b.commandUsage("persona", isDM) + " images|thinking|html on|off",
+		b.commandUsage("context", isDM) + " add|list|clear|delete|get|edit ...",
+		b.commandUsage("lobotomy", isDM) + " [amount] [reset_persona]",
+		b.commandUsage("regenerate", isDM) + " [prepend]",
+		b.commandUsage("chatlog", isDM) + " export|import",
 	}, "\n")
 }
 
@@ -661,7 +678,7 @@ func matrixPersonaInfo(cache *db.ChannelCache, username string, isDM bool) strin
 	return strings.TrimSpace(b.String())
 }
 
-func (b *MatrixBot) handleContextCommand(ctx context.Context, msg *matrixMessage, rest string) error {
+func (b *MatrixBot) handleContextCommand(ctx context.Context, msg *matrixMessage, rest string, isDM bool) error {
 	action, value, _ := strings.Cut(strings.TrimSpace(rest), " ")
 	action = strings.ToLower(strings.TrimSpace(action))
 	value = strings.TrimSpace(value)
@@ -670,7 +687,7 @@ func (b *MatrixBot) handleContextCommand(ctx context.Context, msg *matrixMessage
 	switch action {
 	case "add":
 		if value == "" {
-			return b.sendText(ctx, msg.RoomID, msg.EventID, "Usage: "+b.prefix+" context add <text>")
+			return b.sendText(ctx, msg.RoomID, msg.EventID, "Usage: "+b.commandUsage("context", isDM)+" add <text>")
 		}
 		cache.Context = append(cache.Context, value)
 	case "clear":
@@ -700,11 +717,11 @@ func (b *MatrixBot) handleContextCommand(ctx context.Context, msg *matrixMessage
 		nRaw, newText, _ := strings.Cut(value, " ")
 		n, err := strconv.Atoi(strings.TrimSpace(nRaw))
 		if err != nil || n < 1 || n > len(cache.Context) || strings.TrimSpace(newText) == "" {
-			return b.sendText(ctx, msg.RoomID, msg.EventID, "Usage: "+b.prefix+" context edit <n> <new text>")
+			return b.sendText(ctx, msg.RoomID, msg.EventID, "Usage: "+b.commandUsage("context", isDM)+" edit <n> <new text>")
 		}
 		cache.Context[n-1] = strings.TrimSpace(newText)
 	default:
-		return b.sendText(ctx, msg.RoomID, msg.EventID, "Usage: "+b.prefix+" context add|list|clear|delete|get|edit ...")
+		return b.sendText(ctx, msg.RoomID, msg.EventID, "Usage: "+b.commandUsage("context", isDM)+" add|list|clear|delete|get|edit ...")
 	}
 	if err := cache.WriteKey(key); err != nil {
 		return err
@@ -801,7 +818,7 @@ func (b *MatrixBot) handleBlacklistCommand(ctx context.Context, msg *matrixMessa
 	return b.sendText(ctx, msg.RoomID, msg.EventID, fmt.Sprintf("Blacklist updated: %t", enabled))
 }
 
-func (b *MatrixBot) handleChatlogCommand(ctx context.Context, msg *matrixMessage, rest string) error {
+func (b *MatrixBot) handleChatlogCommand(ctx context.Context, msg *matrixMessage, rest string, isDM bool) error {
 	action := strings.ToLower(strings.TrimSpace(rest))
 	key := b.roomKey(msg.RoomID)
 	cache := db.GetChannelCacheByKey(key)
@@ -851,7 +868,7 @@ func (b *MatrixBot) handleChatlogCommand(ctx context.Context, msg *matrixMessage
 		}
 		return b.sendText(ctx, msg.RoomID, msg.EventID, fmt.Sprintf("Imported %s into cached context.", pluralize(len(importedMessages), "message")))
 	default:
-		return b.sendText(ctx, msg.RoomID, msg.EventID, "Usage: "+b.prefix+" chatlog export|import")
+		return b.sendText(ctx, msg.RoomID, msg.EventID, "Usage: "+b.commandUsage("chatlog", isDM)+" export|import")
 	}
 }
 
