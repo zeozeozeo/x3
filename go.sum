@@ -75,6 +75,8 @@ github.com/tidwall/sjson v1.2.5/go.mod h1:Fvgq9kS/6ociJEDnK0Fk1cpYF4FIW6ZF7LAe+6
 github.com/tiktoken-go/tokenizer v0.7.0 h1:VMu6MPT0bXFDHr7UPh9uii7CNItVt3X9K90omxL54vw=
 github.com/tiktoken-go/tokenizer v0.7.0/go.mod h1:6UCYI/DtOallbmL7sSy30p6YQv60qNyU/4aVigPOx6w=
 github.com/yuin/goldmark v1.4.13/go.mod h1:6yULJ656Px+3vBD8DxQVa3kxgyrAnzto9xy5taEt/CY=
+github.com/yuin/goldmark v1.8.2 h1:kEGpgqJXdgbkhcOgBxkC0X0PmoPG1ZyoZ117rDVp4zE=
+github.com/yuin/goldmark v1.8.2/go.mod h1:ip/1k0VRfGynBgxOz0yCqHrbZXhcjxyuS66Brc7iBKg=
 github.com/zeozeozeo/aihorde-go v0.0.0-20250402140353-8cc7927c847f h1:rl/SEK8pebhP7Z6k8/sVECKf/cBJIYx5RTRBzS1OxlQ=
 github.com/zeozeozeo/aihorde-go v0.0.0-20250402140353-8cc7927c847f/go.mod h1:WQNf4Guxu9KVRt37y0gmlhinQji2S7mIgNpZ/Kj+Bag=
 github.com/zeozeozeo/go-aiml v0.0.0-20260127140045-3d97ed2cc746 h1:ms9mCMyfB8gpr2U8MUVY0nypAS2lJdxjatx+EuVM7/4=

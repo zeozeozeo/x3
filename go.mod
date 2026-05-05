@@ -6,6 +6,7 @@ require (
 	github.com/PuerkitoBio/goquery v1.11.0
 	github.com/disgoorg/disgo v0.19.3
 	github.com/microcosm-cc/bluemonday v1.0.27
+	github.com/yuin/goldmark v1.8.2
 	github.com/zeozeozeo/aihorde-go v0.0.0-20250402140353-8cc7927c847f
 	github.com/zeozeozeo/go-aiml v0.0.0-20260127140045-3d97ed2cc746
 	golang.org/x/net v0.53.0

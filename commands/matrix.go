@@ -92,6 +92,7 @@ func StartMatrixBot(parent context.Context) (*MatrixRuntime, error) {
 	deviceID := strings.TrimSpace(os.Getenv("X3_MATRIX_DEVICE_ID"))
 	deviceName := strings.TrimSpace(os.Getenv("X3_MATRIX_DEVICE_NAME"))
 	pickleKey := os.Getenv("X3_MATRIX_PICKLE_KEY")
+	recoveryKey := strings.TrimSpace(os.Getenv("X3_MATRIX_RECOVERY_KEY"))
 	cryptoDB := strings.TrimSpace(os.Getenv("X3_MATRIX_CRYPTO_DB"))
 	if cryptoDB == "" {
 		cryptoDB = "x3-matrix-crypto.db"
@@ -152,6 +153,13 @@ func StartMatrixBot(parent context.Context) (*MatrixRuntime, error) {
 	if err := helper.Init(parent); err != nil {
 		_ = helper.Close()
 		return nil, fmt.Errorf("%w (Matrix crypto stores are device-specific; if you changed X3_MATRIX_DEVICE_ID or switched access tokens, either restore the previous device ID or use/delete X3_MATRIX_CRYPTO_DB=%s)", err, cryptoDB)
+	}
+	if recoveryKey != "" {
+		if err := helper.Machine().VerifyWithRecoveryKey(parent, recoveryKey); err != nil {
+			_ = helper.Close()
+			return nil, fmt.Errorf("failed to verify Matrix bot device with X3_MATRIX_RECOVERY_KEY: %w", err)
+		}
+		slog.Info("matrix bot device verified with recovery key", "user_id", client.UserID.String(), "device_id", client.DeviceID.String())
 	}
 	if userID != "" && client.UserID != id.UserID(userID) {
 		_ = helper.Close()
@@ -1071,13 +1079,7 @@ func (b *MatrixBot) sendFiles(ctx context.Context, roomID id.RoomID, replyTo id.
 	var firstID id.EventID
 	if strings.TrimSpace(text) != "" || len(files) == 0 {
 		for _, chunk := range splitMatrixText(text) {
-			content := &event.MessageEventContent{
-				MsgType: event.MsgText,
-				Body:    chunk,
-				Mentions: &event.Mentions{
-					UserIDs: []id.UserID{},
-				},
-			}
+			content := matrixTextContent(chunk)
 			if replyTo != "" {
 				content.RelatesTo = (&event.RelatesTo{}).SetReplyTo(replyTo)
 			}
@@ -1109,10 +1111,7 @@ func (b *MatrixBot) editText(ctx context.Context, roomID id.RoomID, target id.Ev
 		return "", errRegenerateNoMessage
 	}
 	text = firstNonEmpty(strings.TrimSpace(text), "<empty response>")
-	content := &event.MessageEventContent{
-		MsgType: event.MsgText,
-		Body:    ellipsisTrim(text, matrixMaxTextLen),
-	}
+	content := matrixTextContent(ellipsisTrim(text, matrixMaxTextLen))
 	content.SetEdit(target)
 	resp, err := b.client.SendMessageEvent(ctx, roomID, event.EventMessage, content)
 	if err != nil {

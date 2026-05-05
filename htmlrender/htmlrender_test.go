@@ -86,6 +86,35 @@ func TestSanitizeRemovesActiveContent(t *testing.T) {
 	}
 }
 
+func TestSanitizeRemovesLocalImageURLs(t *testing.T) {
+	input := `<div>
+		<img src="https://127.0.0.1/a.png">
+		<img src="https://[::1]/a.png">
+		<img src="https://127.1/a.png">
+		<img src="https://2130706433/a.png">
+		<img src="https://0x7f000001/a.png">
+		<img src="https://10.0.0.4/a.png">
+		<img src="https://localhost/a.png">
+		<img src="https://printer.local/a.png">
+		<img src="https://example.com/a.png">
+		<img src="data:image/png;base64,aGVsbG8=">
+	</div>`
+	got, err := Sanitize(input)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, bad := range []string{"127.0.0.1", "::1", "127.1", "2130706433", "0x7f000001", "10.0.0.4", "localhost", "printer.local"} {
+		if strings.Contains(got, bad) {
+			t.Fatalf("local URL survived sanitization (%s): %s", bad, got)
+		}
+	}
+	for _, want := range []string{`src="https://example.com/a.png"`, `src="data:image/png;base64,aGVsbG8="`} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("safe URL missing %q: %s", want, got)
+		}
+	}
+}
+
 func TestSanitizePreservesTrailingStyleBlock(t *testing.T) {
 	input := `<div class="card">
   <div class="header">
@@ -159,7 +188,7 @@ func TestSanitizeAllowsSafeSVGFilters(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, want := range []string{"<svg", "<filter", "fegaussianblur", "fedropshadow", `filter="url(#softGlow)"`} {
+	for _, want := range []string{"<svg", "<filter", "feGaussianBlur", "fedropshadow", `filter="url(#softGlow)"`} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("sanitized SVG missing %q:\n%s", want, got)
 		}
@@ -197,7 +226,7 @@ func TestSanitizeAllowsSVGClipMaskPatternMarker(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, want := range []string{"clippath", "<mask", "<pattern", "<marker", `fill="url(#dots)"`, `clip-path="url(#roundClip)"`, `marker-end="url(#arrow)"`} {
+	for _, want := range []string{"clipPath", "<mask", "<pattern", "<marker", `fill="url(#dots)"`, `clip-path="url(#roundClip)"`, `marker-end="url(#arrow)"`} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("sanitized SVG missing %q:\n%s", want, got)
 		}
