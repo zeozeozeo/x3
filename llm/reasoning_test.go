@@ -12,34 +12,29 @@ func TestApplyReasoningSettingsVercelDisabled(t *testing.T) {
 
 	applyReasoningSettings(&req, model.ProviderVercel, false)
 
-	if req.ReasoningEffort != "none" {
-		t.Fatalf("expected reasoning_effort none, got %q", req.ReasoningEffort)
+	if req.ReasoningEffort != "" {
+		t.Fatalf("expected Vercel reasoning_effort to be omitted, got %q", req.ReasoningEffort)
 	}
 	if req.Reasoning == nil {
 		t.Fatal("expected reasoning config")
 	}
-	if req.Reasoning.Enabled == nil || *req.Reasoning.Enabled {
-		t.Fatalf("expected reasoning.enabled false, got %#v", req.Reasoning.Enabled)
+	if req.Reasoning.Enabled != nil {
+		t.Fatalf("expected Vercel reasoning.enabled to be omitted, got %#v", *req.Reasoning.Enabled)
 	}
 	if req.Reasoning.Effort != "none" {
 		t.Fatalf("expected reasoning.effort none, got %q", req.Reasoning.Effort)
 	}
 	if req.Reasoning.Exclude != nil {
-		t.Fatalf("expected Vercel disabled reasoning to omit exclude, got %#v", *req.Reasoning.Exclude)
+		t.Fatalf("expected Vercel reasoning.exclude to be omitted, got %#v", *req.Reasoning.Exclude)
 	}
-	if req.Thinking == nil || req.Thinking.Type != "disabled" {
-		t.Fatalf("expected thinking.type disabled, got %#v", req.Thinking)
+	if req.Thinking != nil {
+		t.Fatalf("expected Vercel thinking to be omitted, got %#v", req.Thinking)
 	}
-	if got := req.ChatTemplateKwargs["enable_thinking"]; got != false {
-		t.Fatalf("expected enable_thinking false, got %#v", got)
+	if req.ChatTemplateKwargs != nil {
+		t.Fatalf("expected Vercel chat_template_kwargs to be omitted, got %#v", req.ChatTemplateKwargs)
 	}
-
-	zai, ok := req.ProviderOptions["zai"].(map[string]any)
-	if !ok {
-		t.Fatalf("expected zai provider options, got %#v", req.ProviderOptions["zai"])
-	}
-	if got := zai["thinking"]; got != req.Thinking {
-		t.Fatalf("expected zai thinking to reuse request thinking config, got %#v", got)
+	if req.ProviderOptions != nil {
+		t.Fatalf("expected Vercel providerOptions to be omitted, got %#v", req.ProviderOptions)
 	}
 }
 
@@ -58,16 +53,19 @@ func TestApplyReasoningSettingsEnabled(t *testing.T) {
 
 	applyReasoningSettings(&req, model.ProviderVercel, true)
 
-	if req.ReasoningEffort != "medium" {
-		t.Fatalf("expected reasoning_effort medium, got %q", req.ReasoningEffort)
+	if req.ReasoningEffort != "" {
+		t.Fatalf("expected Vercel reasoning_effort to be omitted, got %q", req.ReasoningEffort)
 	}
-	if req.Reasoning == nil || req.Reasoning.Enabled == nil || !*req.Reasoning.Enabled {
-		t.Fatalf("expected reasoning.enabled true, got %#v", req.Reasoning)
+	if req.Reasoning == nil {
+		t.Fatal("expected reasoning config")
 	}
-	if req.Reasoning.Exclude == nil || *req.Reasoning.Exclude {
-		t.Fatalf("expected enabled reasoning to set exclude=false, got %#v", req.Reasoning.Exclude)
+	if req.Reasoning.Effort != "medium" {
+		t.Fatalf("expected reasoning.effort medium, got %q", req.Reasoning.Effort)
 	}
-	if req.Thinking == nil || req.Thinking.Type != "enabled" {
-		t.Fatalf("expected thinking.type enabled, got %#v", req.Thinking)
+	if req.Reasoning.Enabled != nil || req.Reasoning.Exclude != nil {
+		t.Fatalf("expected Vercel reasoning to only include effort, got %#v", req.Reasoning)
+	}
+	if req.Thinking != nil || req.ProviderOptions != nil || req.ChatTemplateKwargs != nil {
+		t.Fatalf("expected Vercel-specific request to omit compatibility fields: thinking=%#v providerOptions=%#v chatTemplateKwargs=%#v", req.Thinking, req.ProviderOptions, req.ChatTemplateKwargs)
 	}
 }

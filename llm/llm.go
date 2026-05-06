@@ -125,14 +125,19 @@ func applyReasoningSettings(req *openai.ChatCompletionRequest, provider string, 
 		reasoningEffort = "medium"
 	}
 
+	if provider == model.ProviderVercel {
+		req.Reasoning = &openai.ReasoningConfig{
+			Effort: reasoningEffort,
+		}
+		return
+	}
+
 	req.ReasoningEffort = reasoningEffort
 	req.Reasoning = &openai.ReasoningConfig{
 		Enabled: &reasoning,
 		Effort:  reasoningEffort,
 	}
-	if provider != model.ProviderVercel || reasoning {
-		req.Reasoning.Exclude = boolPtr(!reasoning)
-	}
+	req.Reasoning.Exclude = boolPtr(!reasoning)
 	req.Thinking = &openai.ThinkingConfig{Type: thinkingType}
 	req.ChatTemplateKwargs = map[string]any{"enable_thinking": reasoning}
 	req.ProviderOptions = map[string]any{
