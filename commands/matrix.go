@@ -750,6 +750,13 @@ func (b *MatrixBot) handleLobotomyCommand(ctx context.Context, msg *matrixMessag
 	}
 	key := b.roomKey(msg.RoomID)
 	cache := db.GetChannelCacheByKey(key)
+	archive := buildMatrixChatArchive(msg, cache)
+	archiveData, err := marshalChatArchive(archive)
+	if err != nil {
+		return err
+	}
+	attachArchive := !chatArchiveIsEmpty(archive)
+
 	if resetPersona {
 		cache.PersonaMeta = db.NewChannelCache().PersonaMeta
 	}
@@ -774,10 +781,15 @@ func (b *MatrixBot) handleLobotomyCommand(ctx context.Context, msg *matrixMessag
 	if err := cache.WriteKey(key); err != nil {
 		return err
 	}
+	text := "Lobotomized for this room."
 	if amount > 0 {
-		return b.sendText(ctx, msg.RoomID, msg.EventID, fmt.Sprintf("Removed last %d messages from the context", amount))
+		text = fmt.Sprintf("Removed last %d messages from the context", amount)
 	}
-	return b.sendText(ctx, msg.RoomID, msg.EventID, "Lobotomized for this room.")
+	if attachArchive {
+		_, err = b.sendFiles(ctx, msg.RoomID, msg.EventID, text, []matrixOutFile{matrixChatArchiveFile(archiveData, archive.ExportedAt)})
+		return err
+	}
+	return b.sendText(ctx, msg.RoomID, msg.EventID, text)
 }
 
 func (b *MatrixBot) handleStatsCommand(ctx context.Context, msg *matrixMessage) error {
@@ -829,24 +841,12 @@ func (b *MatrixBot) handleChatlogCommand(ctx context.Context, msg *matrixMessage
 	cache := db.GetChannelCacheByKey(key)
 	switch action {
 	case "export":
-		archive := chatArchive{
-			Version:    chatArchiveVersion,
-			ExportedAt: time.Now().UTC(),
-			ChannelID:  msg.RoomID.String(),
-			Messages:   archiveMessagesFromLLM(cacheHistoryMessages(cache)),
-			Summaries:  activeSummaries(cache),
-			Memories:   append([]string(nil), cache.Memories...),
-			Context:    append([]string(nil), cache.Context...),
-		}
+		archive := buildMatrixChatArchive(msg, cache)
 		data, err := marshalChatArchive(archive)
 		if err != nil {
 			return err
 		}
-		_, err = b.sendFiles(ctx, msg.RoomID, msg.EventID, "Exported chatlog.", []matrixOutFile{{
-			Name:        "x3-chatlog.json",
-			ContentType: "application/json",
-			Data:        data,
-		}})
+		_, err = b.sendFiles(ctx, msg.RoomID, msg.EventID, "Exported chatlog.", []matrixOutFile{matrixChatArchiveFile(data, archive.ExportedAt)})
 		return err
 	case "import":
 		if len(msg.Attachments) == 0 {
@@ -874,6 +874,26 @@ func (b *MatrixBot) handleChatlogCommand(ctx context.Context, msg *matrixMessage
 		return b.sendText(ctx, msg.RoomID, msg.EventID, fmt.Sprintf("Imported %s into cached context.", pluralize(len(importedMessages), "message")))
 	default:
 		return b.sendText(ctx, msg.RoomID, msg.EventID, "Usage: "+b.commandUsage("chatlog", isDM)+" export|import")
+	}
+}
+
+func buildMatrixChatArchive(msg *matrixMessage, cache *db.ChannelCache) chatArchive {
+	return chatArchive{
+		Version:    chatArchiveVersion,
+		ExportedAt: time.Now().UTC(),
+		ChannelID:  msg.RoomID.String(),
+		Messages:   archiveMessagesFromLLM(cacheHistoryMessages(cache)),
+		Summaries:  activeSummaries(cache),
+		Memories:   append([]string(nil), cache.Memories...),
+		Context:    append([]string(nil), cache.Context...),
+	}
+}
+
+func matrixChatArchiveFile(data []byte, exportedAt time.Time) matrixOutFile {
+	return matrixOutFile{
+		Name:        chatArchiveFilename(exportedAt),
+		ContentType: "application/json",
+		Data:        data,
 	}
 }
 

@@ -142,7 +142,7 @@ func HandleLobotomy(event *handler.CommandEvent) error {
 	update := discord.NewMessageUpdate().
 		WithFlags(flags)
 	if attachArchive {
-		update = update.AddFiles(newChatArchiveFile(archiveData))
+		update = update.AddFiles(newChatArchiveFile(archiveData, archive.ExportedAt))
 	}
 	if amount > 0 {
 		_, err = event.UpdateInteractionResponse(update.WithContentf("Removed last %d messages from the context", amount))

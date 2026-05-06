@@ -129,7 +129,7 @@ func handleChatArchiveExport(event *handler.CommandEvent) error {
 	_, err = event.UpdateInteractionResponse(
 		discord.NewMessageUpdate().
 			WithContentf("Exported %s.", pluralize(len(archive.Messages), "message")).
-			AddFiles(newChatArchiveFile(data)),
+			AddFiles(newChatArchiveFile(data, archive.ExportedAt)),
 	)
 	return err
 }
@@ -138,9 +138,21 @@ func marshalChatArchive(archive chatArchive) ([]byte, error) {
 	return json.MarshalIndent(archive, "", "  ")
 }
 
-func newChatArchiveFile(data []byte) *discord.File {
+func chatArchiveFilename(t time.Time) string {
+	if t.IsZero() {
+		t = time.Now().UTC()
+	}
+	t = t.UTC()
+	return fmt.Sprintf("x3-chatlog-%d-%d-%d.json", t.Year(), int(t.Month()), t.Day())
+}
+
+func newChatArchiveFile(data []byte, exportedAt ...time.Time) *discord.File {
+	t := time.Now().UTC()
+	if len(exportedAt) > 0 {
+		t = exportedAt[0]
+	}
 	return &discord.File{
-		Name:   "x3-chatlog.json",
+		Name:   chatArchiveFilename(t),
 		Reader: bytes.NewReader(data),
 	}
 }
