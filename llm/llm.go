@@ -486,18 +486,31 @@ func (l *Llmer) requestCompletionInternal2(
 	}
 	if m.Reasoning {
 		thinkingType := "disabled"
+		reasoningEffort := "none"
+		reasoningEnabled := settings.Reasoning
 		if settings.Reasoning {
 			thinkingType = "enabled"
-			req.ReasoningEffort = "high"
-			req.Reasoning = &openai.ReasoningConfig{
-				Enabled: boolPtr(true),
-				Effort:  "high",
-			}
-		} else {
-			req.Reasoning = &openai.ReasoningConfig{Effort: "none"}
+			reasoningEffort = "medium"
+		}
+		req.ReasoningEffort = reasoningEffort
+		req.Reasoning = &openai.ReasoningConfig{
+			Enabled: &reasoningEnabled,
+			Effort:  reasoningEffort,
+			Exclude: boolPtr(!settings.Reasoning),
 		}
 		req.Thinking = &openai.ThinkingConfig{Type: thinkingType}
 		req.ChatTemplateKwargs = map[string]any{"enable_thinking": settings.Reasoning}
+		req.ProviderOptions = map[string]any{
+			"zai": map[string]any{
+				"thinking": req.Thinking,
+			},
+			"openai": map[string]any{
+				"reasoningEffort": reasoningEffort,
+			},
+			"deepseek": map[string]any{
+				"thinking": req.Thinking,
+			},
+		}
 	}
 
 	completionStart := time.Now()
@@ -515,7 +528,10 @@ func (l *Llmer) requestCompletionInternal2(
 
 	message := response.Choices[0].Message
 	text := message.Content
-	reasoning := strings.TrimSpace(firstNonEmpty(message.ReasoningContent, message.Reasoning))
+	reasoning := ""
+	if settings.Reasoning {
+		reasoning = strings.TrimSpace(firstNonEmpty(message.ReasoningContent, message.Reasoning))
+	}
 	usage := Usage{
 		PromptTokens:   response.Usage.PromptTokens,
 		ResponseTokens: response.Usage.CompletionTokens,
