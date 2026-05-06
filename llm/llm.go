@@ -125,13 +125,6 @@ func applyReasoningSettings(req *openai.ChatCompletionRequest, provider string, 
 		reasoningEffort = "medium"
 	}
 
-	if provider == model.ProviderVercel {
-		req.Reasoning = &openai.ReasoningConfig{
-			Effort: reasoningEffort,
-		}
-		return
-	}
-
 	req.ReasoningEffort = reasoningEffort
 	req.Reasoning = &openai.ReasoningConfig{
 		Enabled: &reasoning,
