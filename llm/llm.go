@@ -424,8 +424,8 @@ func (l Llmer) convertMessages(hasVision, supportsImageURL bool, prepend, search
 		}
 	}
 
-	if imageIdx != -1 && len(l.Messages)-imageIdx >= 8 {
-		// older than 8 messages, we can probably let it go
+	if imageIdx != -1 && len(l.Messages)-imageIdx >= 3 {
+		// older than 3 messages, we can probably let it go
 		imageIdx = -1
 	}
 
