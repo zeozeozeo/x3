@@ -1,6 +1,7 @@
 package llm
 
 import (
+	"context"
 	"testing"
 
 	"github.com/zeozeozeo/x3/model"
@@ -133,5 +134,55 @@ func TestTrimCacheFriendlyContextPreservesSystemPrompt(t *testing.T) {
 	}
 	if got := l.NonSystemMessageCount(); got != 10 {
 		t.Fatalf("non-system messages = %d, want 10", got)
+	}
+}
+
+func TestConvertMessagesSkipsStaleImageDescriptions(t *testing.T) {
+	oldCallback := generateImageDescriptionCallback
+	defer func() { generateImageDescriptionCallback = oldCallback }()
+
+	calls := 0
+	generateImageDescriptionCallback = func(imageURL string, ctx context.Context) (string, error) {
+		calls++
+		return "description", nil
+	}
+
+	l := Llmer{}
+	l.AddMessage(RoleUser, "look", 0)
+	l.AddImage("https://example.com/image.png")
+	l.AddMessage(RoleUser, "later 1", 0)
+	l.AddMessage(RoleUser, "later 2", 0)
+
+	messages := l.convertMessages(false, false, "", "", context.Background())
+	if calls != 0 {
+		t.Fatalf("image description calls = %d, want 0", calls)
+	}
+	if len(messages) != 3 {
+		t.Fatalf("messages = %d, want 3", len(messages))
+	}
+	if messages[0].Content != "look" {
+		t.Fatalf("first content = %q, want stale image omitted", messages[0].Content)
+	}
+}
+
+func TestConvertMessagesDescribesRecentImageWithoutVision(t *testing.T) {
+	oldCallback := generateImageDescriptionCallback
+	defer func() { generateImageDescriptionCallback = oldCallback }()
+
+	generateImageDescriptionCallback = func(imageURL string, ctx context.Context) (string, error) {
+		return "description", nil
+	}
+
+	l := Llmer{}
+	l.AddMessage(RoleUser, "look", 0)
+	l.AddImage("https://cdn.discordapp.com/attachments/1/2/cat.png?ex=1&hm=2")
+	l.AddMessage(RoleUser, "later", 0)
+
+	messages := l.convertMessages(false, false, "", "", context.Background())
+	if len(messages) != 2 {
+		t.Fatalf("messages = %d, want 2", len(messages))
+	}
+	if messages[0].Content != "look\n[attached cat.png: description]" {
+		t.Fatalf("first content = %q", messages[0].Content)
 	}
 }

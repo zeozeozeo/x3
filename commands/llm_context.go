@@ -78,14 +78,14 @@ func formatMsg(msg, username string, reference *discord.Message) string {
 	return msg
 }
 
-// addImageAttachments adds image URLs from attachments after fetching them into
-// the shared image cache. The conversation history still stores compact URLs.
+// addImageAttachments adds compact image URLs to history. Fetching happens only
+// later if the LLM request decides the image is recent enough to include.
 func addImageAttachments(llmer *llm.Llmer, attachments []discord.Attachment) {
 	if attachments == nil {
 		return
 	}
 	for _, attachment := range attachments {
-		if isImageAttachment(attachment) && llm.MemoizedImageDataURI(attachment.URL) != "" {
+		if isImageAttachment(attachment) {
 			llmer.AddImage(attachment.URL)
 		}
 	}
@@ -93,9 +93,7 @@ func addImageAttachments(llmer *llm.Llmer, attachments []discord.Attachment) {
 
 func addImageLinks(llmer *llm.Llmer, content string) {
 	for _, imageURL := range imageURLsFromContent(content) {
-		if llm.MemoizedImageDataURI(imageURL) != "" {
-			llmer.AddImage(imageURL)
-		}
+		llmer.AddImage(imageURL)
 	}
 }
 

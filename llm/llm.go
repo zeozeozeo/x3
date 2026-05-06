@@ -434,12 +434,12 @@ func (l Llmer) convertMessages(hasVision, supportsImageURL bool, prepend, search
 		if msg.Content == "" && len(msg.Images) == 0 {
 			continue // skip empty messages. HACK: they seem to appear after lobotomy, this is a hack
 		}
-		if len(msg.Images) == 0 || !hasVision || i != imageIdx {
+		if len(msg.Images) == 0 || i != imageIdx || !hasVision {
 			var content strings.Builder
 			content.WriteString(msg.Content)
 
 			// If this message has images but we don't have vision, generate/use descriptions
-			if len(msg.Images) > 0 && !hasVision {
+			if len(msg.Images) > 0 && !hasVision && i == imageIdx {
 				for _, imageURL := range msg.Images {
 					description, err := generateImageDescriptionCallback(imageURL, ctx)
 					if err != nil {
@@ -458,6 +458,19 @@ func (l Llmer) convertMessages(hasVision, supportsImageURL bool, prepend, search
 				Content: content.String(),
 			})
 		} else {
+			imageURL := msg.Images[0]
+			data := gImageCache.MemoizedImageBase64(imageURL)
+			if data == "" {
+				var content strings.Builder
+				content.WriteString(msg.Content)
+				fmt.Fprintf(&content, "\n<failed to fetch image `%s`>", imageURL)
+				messages = append(messages, openai.ChatCompletionMessage{
+					Role:    msg.Role,
+					Content: content.String(),
+				})
+				continue
+			}
+
 			// must structure as a multipart message if we have images
 			parts := []openai.ChatMessagePart{
 				{
@@ -481,22 +494,16 @@ func (l Llmer) convertMessages(hasVision, supportsImageURL bool, prepend, search
 				parts = append(parts, openai.ChatMessagePart{
 					Type: openai.ChatMessagePartTypeImageURL,
 					ImageURL: &openai.ChatMessageImageURL{
-						URL: msg.Images[0],
+						URL: imageURL,
 					},
 				})
 			} else { // api needs base64, will fetch image and store in memory cache
-				data := gImageCache.MemoizedImageBase64(msg.Images[0])
-				if data == "" {
-					slog.Error("failed to fetch image!")
-					parts[0].Text += fmt.Sprintf("\n<failed to fetch image `%s`>", msg.Images[0]) // notify llm
-				} else {
-					parts = append(parts, openai.ChatMessagePart{
-						Type: openai.ChatMessagePartTypeImageURL,
-						ImageURL: &openai.ChatMessageImageURL{
-							URL: data,
-						},
-					})
-				}
+				parts = append(parts, openai.ChatMessagePart{
+					Type: openai.ChatMessagePartTypeImageURL,
+					ImageURL: &openai.ChatMessageImageURL{
+						URL: data,
+					},
+				})
 			}
 
 			messages = append(messages, openai.ChatCompletionMessage{
