@@ -792,19 +792,19 @@ func (b *MatrixBot) handlePersonaCommand(ctx context.Context, msg *matrixMessage
 		return b.sendText(ctx, msg.RoomID, msg.EventID, matrixCommandDiagnostic(diagCtx.Raw(rest), diagCtx.Token(actionToken), "invalid persona command syntax", "use a space between the setting and value, not `=`. Example: `"+b.commandUsage("persona", b.isDMRoom(ctx, msg.RoomID))+" model glm5`"))
 	}
 	if action == "list" {
-		var b strings.Builder
-		b.WriteString("Available personas:\n")
+		var list strings.Builder
+		list.WriteString("Available personas:\n")
 		for i, p := range persona.AllPersonas {
-			fmt.Fprintf(&b, "%d. %s", i+1, p.String())
+			fmt.Fprintf(&list, "%d. %s", i+1, p.String())
 			if p.Name != p.String() {
-				fmt.Fprintf(&b, " (`%s`)", p.Name)
+				fmt.Fprintf(&list, " (`%s`)", p.Name)
 			}
-			b.WriteString("\n")
+			list.WriteString("\n")
 		}
-		b.WriteString("\nSet by number or name, for example:\n")
-		b.WriteString(b.commandUsage("persona", b.isDMRoom(ctx, msg.RoomID)) + " set 1\n")
-		b.WriteString(b.commandUsage("persona", b.isDMRoom(ctx, msg.RoomID)) + " set protogen")
-		return b.sendText(ctx, msg.RoomID, msg.EventID, strings.TrimSpace(b.String()))
+		list.WriteString("\nSet by number or name, for example:\n")
+		list.WriteString(b.commandUsage("persona", b.isDMRoom(ctx, msg.RoomID)) + " set 1\n")
+		list.WriteString(b.commandUsage("persona", b.isDMRoom(ctx, msg.RoomID)) + " set protogen")
+		return b.sendText(ctx, msg.RoomID, msg.EventID, strings.TrimSpace(list.String()))
 	}
 	valueToken := parsed.At(1)
 	value := strings.TrimSpace(valueToken.Text)
