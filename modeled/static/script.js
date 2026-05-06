@@ -124,6 +124,7 @@ function renderModels() {
             </div>
             <div class="model-features">
                 ${model.vision ? '<span class="feature-tag vision">Vision</span>' : ""}
+                ${model.fallback_vision_model ? `<span class="feature-tag vision">Fallback: ${escapeHtml(model.fallback_vision_model)}</span>` : ""}
                 ${model.reasoning ? '<span class="feature-tag reasoning">Reasoning</span>' : ""}
                 ${model.is_markov ? '<span class="feature-tag">Markov</span>' : ""}
                 ${model.is_eliza ? '<span class="feature-tag">Eliza</span>' : ""}
@@ -132,6 +133,11 @@ function renderModels() {
             </div>
             <div style="margin-top: 8px; font-size: 12px; color: #7f8c8d;">
                 Providers: ${Object.keys(model.providers || {}).join(", ")}
+            </div>
+            <div class="item-actions" onclick="event.stopPropagation()">
+                <span class="drag-handle" title="Drag to reorder">Drag</span>
+                <button type="button" class="order-btn" onclick="moveModel(${index}, -1, event)">Up</button>
+                <button type="button" class="order-btn" onclick="moveModel(${index}, 1, event)">Down</button>
             </div>
         </div>
     `,
@@ -173,7 +179,12 @@ function renderProviders() {
     .map(
       (provider) => `
         <li class="sortable-item">
+            <span class="drag-handle" title="Drag to reorder">Drag</span>
             <span>${escapeHtml(provider)}</span>
+            <div class="item-actions">
+                <button type="button" class="order-btn" onclick="moveProvider('${escapeHtml(provider)}', -1, event)">Up</button>
+                <button type="button" class="order-btn" onclick="moveProvider('${escapeHtml(provider)}', 1, event)">Down</button>
+            </div>
             <button class="remove-provider" onclick="removeProvider('${escapeHtml(provider)}')" title="Remove provider">×</button>
         </li>
     `,
@@ -232,8 +243,13 @@ function renderDefaultModels(containerId, models, configKey) {
       const model = currentConfig.models.find((m) => m.name === modelName);
       return `
             <div class="sortable-item">
+                <span class="drag-handle" title="Drag to reorder">Drag</span>
                 <span>${escapeHtml(modelName)}</span>
                 ${model ? `<span style="font-size: 12px; color: #7f8c8d;">/${escapeHtml(model.command)}</span>` : ""}
+                <div class="item-actions">
+                    <button type="button" class="order-btn" onclick="moveDefaultModel('${configKey}', '${escapeHtml(modelName)}', -1, event)">Up</button>
+                    <button type="button" class="order-btn" onclick="moveDefaultModel('${configKey}', '${escapeHtml(modelName)}', 1, event)">Down</button>
+                </div>
                 <button class="remove-default-model" onclick="removeFromDefaultModels('${configKey}', '${escapeHtml(modelName)}')" title="Remove from list">×</button>
             </div>
         `;
@@ -242,9 +258,39 @@ function renderDefaultModels(containerId, models, configKey) {
 
   container.appendChild(listContainer);
 
-  if (containerId === "default-models") {
-    initDefaultModelsSortable();
+  initDefaultModelsSortable();
+}
+
+function destroySortable(element) {
+  const sortable = Sortable.get(element);
+  if (sortable) {
+    sortable.destroy();
   }
+}
+
+function createSortable(element, onEnd) {
+  destroySortable(element);
+  Sortable.create(element, {
+    animation: 150,
+    ghostClass: "sortable-ghost",
+    chosenClass: "sortable-chosen",
+    handle: ".drag-handle",
+    delay: 150,
+    delayOnTouchOnly: true,
+    touchStartThreshold: 5,
+    fallbackTolerance: 5,
+    onEnd,
+  });
+}
+
+function moveItem(list, index, delta) {
+  const target = index + delta;
+  if (index < 0 || target < 0 || target >= list.length) {
+    return false;
+  }
+  const [item] = list.splice(index, 1);
+  list.splice(target, 0, item);
+  return true;
 }
 
 function initProviderSortable() {
@@ -254,22 +300,18 @@ function initProviderSortable() {
   const listContainer = container.querySelector(".sortable-list");
   if (!listContainer) return;
 
-  Sortable.create(listContainer, {
-    animation: 150,
-    ghostClass: "sortable-ghost",
-    chosenClass: "sortable-chosen",
-    onEnd: function (evt) {
+  createSortable(listContainer, function (evt) {
       const newOrder = Array.from(listContainer.children).map(
-        (li) => li.querySelector("span").textContent,
+        (li) => li.querySelector("span:not(.drag-handle)").textContent,
       );
       currentConfig.providers_order = newOrder;
-    },
   });
 }
 
 function openAddProviderModal() {
   const modal = document.createElement("div");
   modal.className = "modal";
+  modal.id = "addProviderModal";
   modal.style.display = "block";
   modal.innerHTML = `
         <div class="modal-content" style="max-width: 400px;">
@@ -301,7 +343,7 @@ function openAddProviderModal() {
 }
 
 function closeAddProviderModal() {
-  const modal = document.querySelector(".modal");
+  const modal = document.getElementById("addProviderModal");
   if (modal) {
     modal.remove();
   }
@@ -343,23 +385,35 @@ function removeProvider(providerName) {
   }
 }
 
+function moveProvider(providerName, delta, event) {
+  event?.stopPropagation();
+  if (!currentConfig.providers_order) return;
+
+  const index = currentConfig.providers_order.indexOf(providerName);
+  if (moveItem(currentConfig.providers_order, index, delta)) {
+    renderConfig();
+  }
+}
+
 function initModelsSortable() {
   const element = document.getElementById("models-list");
   if (!element) return;
 
-  Sortable.create(element, {
-    animation: 150,
-    ghostClass: "sortable-ghost",
-    chosenClass: "sortable-chosen",
-    onEnd: function (evt) {
+  createSortable(element, function (evt) {
       const newOrder = Array.from(element.children).map((card, index) => {
         const modelIndex = parseInt(card.getAttribute("data-index"));
         return currentConfig.models[modelIndex];
       });
       currentConfig.models = newOrder;
       renderModels(); // Re-render to update data-index attributes
-    },
   });
+}
+
+function moveModel(index, delta, event) {
+  event?.stopPropagation();
+  if (moveItem(currentConfig.models, index, delta)) {
+    renderModels();
+  }
 }
 
 function initDefaultModelsSortable() {
@@ -372,14 +426,9 @@ function initDefaultModelsSortable() {
     const listContainer = element.querySelector(".sortable-list");
     if (!listContainer) return;
 
-    Sortable.create(listContainer, {
-      animation: 150,
-      ghostClass: "sortable-ghost",
-      chosenClass: "sortable-chosen",
-      group: containerId,
-      onEnd: function (evt) {
+    createSortable(listContainer, function (evt) {
         const newOrder = Array.from(listContainer.children).map(
-          (div) => div.querySelector("span").textContent,
+          (div) => div.querySelector("span:not(.drag-handle)").textContent,
         );
 
         if (containerId === "default-models") {
@@ -389,7 +438,6 @@ function initDefaultModelsSortable() {
         } else if (containerId === "vision-models") {
           currentConfig.default_vision_models = newOrder;
         }
-      },
     });
   });
 }
@@ -417,7 +465,7 @@ function openAddModelModal(configKey) {
         <div class="modal-content" style="max-width: 400px;">
             <div class="modal-header">
                 <h3>Add Model to ${getListDisplayName(configKey)}</h3>
-                <span class="close" onclick="this.parentElement.parentElement.parentElement.remove()">&times;</span>
+                <span class="close" onclick="this.closest('.modal').remove()">&times;</span>
             </div>
             <div class="modal-body">
                 <div class="form-group">
@@ -434,7 +482,7 @@ function openAddModelModal(configKey) {
             </div>
             <div class="modal-footer">
                 <button type="button" class="btn btn-primary" onclick="addToDefaultModels('${configKey}')">Add Model</button>
-                <button type="button" class="btn btn-secondary" onclick="this.parentElement.parentElement.parentElement.parentElement.remove()">Cancel</button>
+                <button type="button" class="btn btn-secondary" onclick="this.closest('.modal').remove()">Cancel</button>
             </div>
         </div>
     `;
@@ -503,9 +551,33 @@ function addToDefaultModels(configKey) {
   }
 
   // Close modal and refresh
-  document.querySelector(".modal").remove();
+  select.closest(".modal")?.remove();
   renderConfig();
   showStatus("Model added successfully", "success");
+}
+
+function moveDefaultModel(configKey, modelName, delta, event) {
+  event?.stopPropagation();
+
+  const currentList = getCurrentList(configKey);
+  const index = currentList.indexOf(modelName);
+  if (!moveItem(currentList, index, delta)) {
+    return;
+  }
+
+  switch (configKey) {
+    case "default_models":
+      currentConfig.default_models = currentList;
+      break;
+    case "narrator_models":
+      currentConfig.narrator_models = currentList;
+      break;
+    case "default_vision_models":
+      currentConfig.default_vision_models = currentList;
+      break;
+  }
+
+  renderConfig();
 }
 
 function removeFromDefaultModels(configKey, modelName) {
@@ -561,6 +633,7 @@ function closeModelModal() {
 function resetModelForm() {
   document.getElementById("modelForm").reset();
   document.getElementById("providers-container").innerHTML = "";
+  populateFallbackVisionOptions("");
 }
 
 function populateModelForm(model) {
@@ -568,6 +641,7 @@ function populateModelForm(model) {
   document.getElementById("modelCommand").value = model.command || "";
   document.getElementById("modelVision").checked = model.vision || false;
   document.getElementById("modelReasoning").checked = model.reasoning || false;
+  populateFallbackVisionOptions(model.fallback_vision_model || "");
   document.getElementById("modelIsMarkov").checked = model.is_markov || false;
   document.getElementById("modelIsEliza").checked = model.is_eliza || false;
   document.getElementById("modelIsAlice").checked = model.is_alice || false;
@@ -583,6 +657,23 @@ function populateModelForm(model) {
       addProviderField(providerName, provider.codenames?.join(", ") || "");
     });
   }
+}
+
+function populateFallbackVisionOptions(selectedName) {
+  const select = document.getElementById("modelFallbackVision");
+  if (!select) return;
+
+  const visionModels = (currentConfig?.models || []).filter(
+    (model) => model.vision,
+  );
+  select.innerHTML = '<option value="">None</option>';
+  visionModels.forEach((model) => {
+    const option = document.createElement("option");
+    option.value = model.name;
+    option.textContent = `${model.name} (/${model.command || "chat"})`;
+    option.selected = model.name === selectedName;
+    select.appendChild(option);
+  });
 }
 
 function addProviderField(providerName = "", codenames = "") {
@@ -616,6 +707,7 @@ function saveModel() {
     name: formData.get("name"),
     command: formData.get("command"),
     vision: formData.get("vision") === "on",
+    fallback_vision_model: formData.get("fallback_vision_model") || "",
     reasoning: formData.get("reasoning") === "on",
     is_markov: formData.get("is_markov") === "on",
     is_eliza: formData.get("is_eliza") === "on",
@@ -720,6 +812,7 @@ function showStatus(message, type) {
 function openVersionEditModal() {
   const modal = document.createElement("div");
   modal.className = "modal";
+  modal.id = "versionModal";
   modal.style.display = "block";
   modal.innerHTML = `
         <div class="modal-content" style="max-width: 400px;">
@@ -763,8 +856,8 @@ function saveVersion() {
   currentConfig.current_version = newVersion;
 
   // Close the modal
-  const modal = document.querySelector(".modal");
-  if (modal && modal.querySelector("#versionInput")) {
+  const modal = document.getElementById("versionModal");
+  if (modal) {
     modal.remove();
   }
 

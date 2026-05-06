@@ -114,17 +114,18 @@ type ModelProvider struct {
 }
 
 type Model struct {
-	Name        string                   `json:"name,omitempty"`
-	Command     string                   `json:"command,omitempty"`
-	Whitelisted bool                     `json:"whitelisted,omitempty"`
-	Vision      bool                     `json:"vision,omitempty"`
-	Reasoning   bool                     `json:"reasoning,omitempty"`
-	Encoding    tokenizer.Encoding       `json:"encoding,omitempty"`
-	Providers   map[string]ModelProvider `json:"providers,omitempty"`
-	IsMarkov    bool                     `json:"is_markov,omitempty"`
-	IsEliza     bool                     `json:"is_eliza,omitempty"`
-	IsAlice     bool                     `json:"is_alice,omitempty"`
-	Limited     bool                     `json:"limited,omitempty"` // disable custom inference settings
+	Name                string                   `json:"name,omitempty"`
+	Command             string                   `json:"command,omitempty"`
+	Whitelisted         bool                     `json:"whitelisted,omitempty"`
+	Vision              bool                     `json:"vision,omitempty"`
+	FallbackVisionModel string                   `json:"fallback_vision_model,omitempty"`
+	Reasoning           bool                     `json:"reasoning,omitempty"`
+	Encoding            tokenizer.Encoding       `json:"encoding,omitempty"`
+	Providers           map[string]ModelProvider `json:"providers,omitempty"`
+	IsMarkov            bool                     `json:"is_markov,omitempty"`
+	IsEliza             bool                     `json:"is_eliza,omitempty"`
+	IsAlice             bool                     `json:"is_alice,omitempty"`
+	Limited             bool                     `json:"limited,omitempty"` // disable custom inference settings
 }
 
 func (model Model) IsVeryDumb() bool {

@@ -456,6 +456,7 @@ type InferenceSettings struct {
 	TopP             float32 `json:"top_p,omitempty"`
 	FrequencyPenalty float32 `json:"frequency_penalty,omitempty"`
 	Seed             *int    `json:"seed,omitempty"`
+	Reasoning        bool    `json:"reasoning,omitempty"`
 }
 
 func (s *InferenceSettings) Remap() {

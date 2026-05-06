@@ -135,42 +135,49 @@ func validateConfig(config model.ModelsConfig) error {
 	}
 
 	// Check for duplicate model names
-	names := make(map[string]bool)
+	names := make(map[string]model.Model)
 	for _, m := range config.Models {
-		if names[m.Name] {
+		if _, ok := names[m.Name]; ok {
 			return fmt.Errorf("duplicate model name: %s", m.Name)
 		}
-		names[m.Name] = true
+		names[m.Name] = m
 	}
 
 	// Validate default models exist
 	for _, name := range config.DefaultModels {
-		if !names[name] {
+		if _, ok := names[name]; !ok {
 			return fmt.Errorf("default model not found: %s", name)
 		}
 	}
 
 	// Validate narrator models exist
 	for _, name := range config.NarratorModels {
-		if !names[name] {
+		if _, ok := names[name]; !ok {
 			return fmt.Errorf("narrator model not found: %s", name)
 		}
 	}
 
 	// Validate vision models exist and have vision capability
 	for _, name := range config.DefaultVisionModels {
-		found := false
-		for _, m := range config.Models {
-			if m.Name == name {
-				found = true
-				if !m.Vision {
-					return fmt.Errorf("vision model %s does not have vision capability", name)
-				}
-				break
-			}
-		}
+		m, found := names[name]
 		if !found {
 			return fmt.Errorf("vision model not found: %s", name)
+		}
+		if !m.Vision {
+			return fmt.Errorf("vision model %s does not have vision capability", name)
+		}
+	}
+
+	for _, m := range config.Models {
+		if m.FallbackVisionModel == "" {
+			continue
+		}
+		fallback, found := names[m.FallbackVisionModel]
+		if !found {
+			return fmt.Errorf("fallback vision model for %s not found: %s", m.Name, m.FallbackVisionModel)
+		}
+		if !fallback.Vision {
+			return fmt.Errorf("fallback vision model %s for %s does not have vision capability", m.FallbackVisionModel, m.Name)
 		}
 	}
 

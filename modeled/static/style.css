@@ -168,7 +168,7 @@ header h1 {
 }
 
 .model-card.sortable-item {
-  cursor: move;
+  cursor: pointer;
   display: block; /* Override flex display from sortable-item */
 }
 
@@ -272,7 +272,7 @@ header h1 {
   background: white;
   padding: 12px 15px;
   border-bottom: 1px solid #e9ecef;
-  cursor: move;
+  cursor: default;
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -501,4 +501,90 @@ header h1 {
   color: #7f8c8d;
   font-size: 12px;
   flex-shrink: 0;
+}
+
+.sortable-item .drag-handle + span {
+  color: #333;
+  flex: 1;
+  flex-shrink: 1;
+  font-size: 14px;
+}
+
+.drag-handle {
+  background: #edf2f7;
+  border: 1px solid #d8e0e8;
+  border-radius: 999px;
+  color: #52616f;
+  cursor: grab;
+  flex: 0 0 auto !important;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1;
+  padding: 7px 10px;
+  touch-action: none;
+  user-select: none;
+}
+
+.drag-handle:active {
+  cursor: grabbing;
+}
+
+.item-actions {
+  align-items: center;
+  display: flex;
+  flex: 0 0 auto;
+  gap: 6px;
+}
+
+.model-card .item-actions {
+  justify-content: flex-end;
+  margin-top: 12px;
+}
+
+.order-btn {
+  background: #eef6fc;
+  border: 1px solid #cfe6f7;
+  border-radius: 4px;
+  color: #2474a6;
+  cursor: pointer;
+  font-size: 12px;
+  padding: 5px 8px;
+}
+
+.order-btn:hover {
+  background: #dff0fb;
+}
+
+@media (max-width: 640px) {
+  .container {
+    padding: 12px;
+  }
+
+  header {
+    align-items: stretch;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .controls {
+    flex-wrap: wrap;
+  }
+
+  .sortable-item {
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .item-actions {
+    width: 100%;
+  }
+
+  .order-btn {
+    flex: 1;
+    padding: 9px 8px;
+  }
+
+  .drag-handle {
+    padding: 9px 12px;
+  }
 }

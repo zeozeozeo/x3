@@ -109,6 +109,8 @@ type ChatCompletionMessage struct {
 	// the doc from deepseek:
 	// - https://api-docs.deepseek.com/api/create-chat-completion#responses
 	ReasoningContent string `json:"reasoning_content,omitempty"`
+	// Some OpenAI-compatible providers, including OpenRouter, return reasoning text here.
+	Reasoning string `json:"reasoning,omitempty"`
 
 	FunctionCall *FunctionCall `json:"function_call,omitempty"`
 
@@ -131,6 +133,7 @@ func (m ChatCompletionMessage) MarshalJSON() ([]byte, error) {
 			MultiContent     []ChatMessagePart `json:"content,omitempty"`
 			Name             string            `json:"name,omitempty"`
 			ReasoningContent string            `json:"reasoning_content,omitempty"`
+			Reasoning        string            `json:"reasoning,omitempty"`
 			FunctionCall     *FunctionCall     `json:"function_call,omitempty"`
 			ToolCalls        []ToolCall        `json:"tool_calls,omitempty"`
 			ToolCallID       string            `json:"tool_call_id,omitempty"`
@@ -145,6 +148,7 @@ func (m ChatCompletionMessage) MarshalJSON() ([]byte, error) {
 		MultiContent     []ChatMessagePart `json:"-"`
 		Name             string            `json:"name,omitempty"`
 		ReasoningContent string            `json:"reasoning_content,omitempty"`
+		Reasoning        string            `json:"reasoning,omitempty"`
 		FunctionCall     *FunctionCall     `json:"function_call,omitempty"`
 		ToolCalls        []ToolCall        `json:"tool_calls,omitempty"`
 		ToolCallID       string            `json:"tool_call_id,omitempty"`
@@ -160,6 +164,7 @@ func (m *ChatCompletionMessage) UnmarshalJSON(bs []byte) error {
 		MultiContent     []ChatMessagePart
 		Name             string        `json:"name,omitempty"`
 		ReasoningContent string        `json:"reasoning_content,omitempty"`
+		Reasoning        string        `json:"reasoning,omitempty"`
 		FunctionCall     *FunctionCall `json:"function_call,omitempty"`
 		ToolCalls        []ToolCall    `json:"tool_calls,omitempty"`
 		ToolCallID       string        `json:"tool_call_id,omitempty"`
@@ -176,6 +181,7 @@ func (m *ChatCompletionMessage) UnmarshalJSON(bs []byte) error {
 		MultiContent     []ChatMessagePart `json:"content"`
 		Name             string            `json:"name,omitempty"`
 		ReasoningContent string            `json:"reasoning_content,omitempty"`
+		Reasoning        string            `json:"reasoning,omitempty"`
 		FunctionCall     *FunctionCall     `json:"function_call,omitempty"`
 		ToolCalls        []ToolCall        `json:"tool_calls,omitempty"`
 		ToolCallID       string            `json:"tool_call_id,omitempty"`
@@ -271,6 +277,10 @@ type ChatCompletionRequest struct {
 	Store bool `json:"store,omitempty"`
 	// Controls effort on reasoning for reasoning models. It can be set to "low", "medium", or "high".
 	ReasoningEffort string `json:"reasoning_effort,omitempty"`
+	// OpenRouter-style reasoning controls.
+	Reasoning *ReasoningConfig `json:"reasoning,omitempty"`
+	// DeepSeek-style thinking controls.
+	Thinking *ThinkingConfig `json:"thinking,omitempty"`
 	// Metadata to store with the completion.
 	Metadata map[string]string `json:"metadata,omitempty"`
 	// Configuration for a predicted output.
@@ -281,6 +291,17 @@ type ChatCompletionRequest struct {
 	// https://qwen.readthedocs.io/en/latest/deployment/vllm.html#thinking-non-thinking-modes
 	ChatTemplateKwargs map[string]any `json:"chat_template_kwargs,omitempty"`
 	Private            bool           `json:"private,omitempty"`
+}
+
+type ReasoningConfig struct {
+	Enabled   *bool  `json:"enabled,omitempty"`
+	Effort    string `json:"effort,omitempty"`
+	MaxTokens int    `json:"max_tokens,omitempty"`
+	Exclude   *bool  `json:"exclude,omitempty"`
+}
+
+type ThinkingConfig struct {
+	Type string `json:"type"`
 }
 
 type StreamOptions struct {

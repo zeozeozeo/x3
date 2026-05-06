@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"html"
-	"io"
 	"log/slog"
 	"regexp"
 	"strings"
@@ -101,6 +100,19 @@ var (
 
 func ErrNoModelsForCompletion() error {
 	return errNoModelsForCompletion
+}
+
+func boolPtr(v bool) *bool {
+	return &v
+}
+
+func firstNonEmpty(values ...string) string {
+	for _, value := range values {
+		if value != "" {
+			return value
+		}
+	}
+	return ""
 }
 
 type Message struct {
@@ -463,12 +475,8 @@ func (l *Llmer) requestCompletionInternal2(
 		settings = persona.InferenceSettings{}
 	}
 	req := openai.ChatCompletionRequest{
-		Model:    codename,
-		Messages: l.convertMessages(m.Vision, provider != model.ProviderOllama, prepend, searchResults, ctx), // ollama cloud doesn't support fetching from image URLs, how nice :)
-		Stream:   true,
-		StreamOptions: &openai.StreamOptions{
-			IncludeUsage: true,
-		},
+		Model:       codename,
+		Messages:    l.convertMessages(m.Vision, provider != model.ProviderOllama, prepend, searchResults, ctx), // ollama cloud doesn't support fetching from image URLs, how nice :)
 		Temperature: settings.Temperature,
 		TopP:        settings.TopP,
 		// MinP anyone?
@@ -476,54 +484,52 @@ func (l *Llmer) requestCompletionInternal2(
 		Seed:             settings.Seed,
 		Private:          provider == model.ProviderPollinations,
 	}
+	if m.Reasoning {
+		thinkingType := "disabled"
+		if settings.Reasoning {
+			thinkingType = "enabled"
+			req.ReasoningEffort = "high"
+			req.Reasoning = &openai.ReasoningConfig{
+				Enabled: boolPtr(true),
+				Effort:  "high",
+			}
+		} else {
+			req.Reasoning = &openai.ReasoningConfig{Effort: "none"}
+		}
+		req.Thinking = &openai.ThinkingConfig{Type: thinkingType}
+		req.ChatTemplateKwargs = map[string]any{"enable_thinking": settings.Reasoning}
+	}
 
 	completionStart := time.Now()
 	ctx, cancel := context.WithDeadline(ctx, completionStart.Add(5*time.Minute))
 	defer cancel()
 
-	stream, err := client.CreateChatCompletionStream(ctx, req)
+	response, err := client.CreateChatCompletion(ctx, req)
 	if err != nil {
 		return "", Usage{}, err
 	}
-	defer stream.Close()
 
-	var text strings.Builder
-	usage := Usage{}
-
-	//tokens := 0
-	firstTokenTime := time.Time{}
-	for {
-		response, err := stream.Recv()
-		if errors.Is(err, io.EOF) {
-			break
-		}
-		if err != nil {
-			return text.String(), Usage{}, err
-		}
-		if response.Usage != nil {
-			usage = Usage{
-				PromptTokens:   response.Usage.PromptTokens,
-				ResponseTokens: response.Usage.CompletionTokens,
-				TotalTokens:    response.Usage.TotalTokens,
-			}
-		}
-		if len(response.Choices) == 0 {
-			continue
-		}
-		if firstTokenTime.IsZero() {
-			firstTokenTime = time.Now()
-		}
-		//tokens++
-		//if tokens%10 == 0 {
-		//	slog.Debug("stream progress", slog.Int("tokens", tokens), slog.Duration("in", time.Since(completionStart)), "text", text.String())
-		//}
-		text.WriteString(response.Choices[0].Delta.Content)
+	if len(response.Choices) == 0 {
+		return "", Usage{}, errors.New("completion response had no choices")
 	}
 
-	in := time.Since(firstTokenTime)
-	slog.Info("stream closed", "sinceFirst", in, "sinceStart", time.Since(completionStart), "tok/s", float64(usage.ResponseTokens)/in.Seconds())
+	message := response.Choices[0].Message
+	text := message.Content
+	reasoning := strings.TrimSpace(firstNonEmpty(message.ReasoningContent, message.Reasoning))
+	usage := Usage{
+		PromptTokens:   response.Usage.PromptTokens,
+		ResponseTokens: response.Usage.CompletionTokens,
+		TotalTokens:    response.Usage.TotalTokens,
+	}
 
-	unescaped := html.UnescapeString(text.String())
+	elapsed := time.Since(completionStart)
+	tokPerSec := 0.0
+	if elapsed > 0 {
+		tokPerSec = float64(usage.ResponseTokens) / elapsed.Seconds()
+	}
+	slog.Info("completion received", "duration", elapsed, "tok/s", tokPerSec, "has_reasoning", reasoning != "")
+
+	unescaped := html.UnescapeString(text)
 	unescaped = strings.TrimSpace(unescaped)
 	unescaped = weirdEndRegexp.ReplaceAllString(unescaped, "$1<")
 
@@ -577,7 +583,12 @@ func (l *Llmer) requestCompletionInternal2(
 		Content: unescaped,
 	})
 
-	return unescaped, usage, nil
+	display := unescaped
+	if reasoning != "" {
+		display = "<think>" + reasoning + "</think>\n" + display
+	}
+
+	return display, usage, nil
 }
 
 func (l *Llmer) requestCompletionInternal(
@@ -744,22 +755,49 @@ func (l *Llmer) inferAlice() string {
 	return weirdAliceReplacer.Replace(strings.Join(strings.Fields(strings.TrimSpace(response)), " "))
 }
 
-/*
-// shouldSwapToVision returns true if any of the last 4 messages had images sent by user
-func (l Llmer) shouldSwapToVision() bool {
-	numMessages := len(l.Messages)
-
-	for i := max(0, numMessages-4); i < numMessages; i++ {
+// hasRecentUserImage returns true if any of the last 4 non-system messages had user images.
+func (l Llmer) hasRecentUserImage() bool {
+	seen := 0
+	for i := len(l.Messages) - 1; i >= 0 && seen < 4; i-- {
 		message := l.Messages[i]
-		// the message is from the user AND has images
+		if message.Role == RoleSystem {
+			continue
+		}
+		seen++
 		if message.Role == RoleUser && len(message.Images) > 0 {
 			return true
 		}
 	}
-
 	return false
 }
-*/
+
+func (l Llmer) applyFallbackVisionModels(models []model.Model) []model.Model {
+	if !l.hasRecentUserImage() {
+		return models
+	}
+
+	swapped := false
+	modelsToTry := make([]model.Model, 0, len(models))
+	for _, m := range models {
+		if m.FallbackVisionModel == "" {
+			modelsToTry = append(modelsToTry, m)
+			continue
+		}
+		fallback := model.GetModelByName(m.FallbackVisionModel)
+		if !fallback.Vision {
+			slog.Warn("fallback vision model is not vision-capable; keeping original model", "model", m.Name, "fallback", m.FallbackVisionModel)
+			modelsToTry = append(modelsToTry, m)
+			continue
+		}
+		slog.Info("recent image found; swapping to fallback vision model", "model", m.Name, "fallback", fallback.Name)
+		modelsToTry = append(modelsToTry, fallback)
+		swapped = true
+	}
+	if !swapped {
+		return models
+	}
+	return modelsToTry
+}
 
 func (l *Llmer) RequestCompletion(models []model.Model, settings persona.InferenceSettings, prepend string, ctx context.Context) (res string, usage Usage, err error) {
 	if len(models) == 0 {
@@ -788,24 +826,7 @@ func (l *Llmer) RequestCompletion(models []model.Model, settings persona.Inferen
 
 	settings.Remap() // remap values (1.0 temp -> 0.6 temp)
 
-	modelsToTry := models
-
-	/*
-		if l.shouldSwapToVision() {
-			visionModels := []model.Model{}
-			for _, mod := range models {
-				if mod.Vision {
-					visionModels = append(visionModels, mod)
-				}
-			}
-			if len(visionModels) > 0 {
-				modelsToTry = visionModels
-			} else {
-				slog.Info("last message has image, but no vision models provided in the list; swapping to DefaultVisionModels")
-				modelsToTry = model.GetModelsByNames(model.DefaultVisionModels)
-			}
-		}
-	*/
+	modelsToTry := l.applyFallbackVisionModels(models)
 
 	var lastErr error
 
@@ -815,7 +836,7 @@ func (l *Llmer) RequestCompletion(models []model.Model, settings persona.Inferen
 		}
 
 		slog.Info("attempting completion with model", "model", m.Name)
-		for _, provider := range model.ScoreProviders(m.Reasoning) {
+		for _, provider := range model.ScoreProviders(m.Reasoning && settings.Reasoning) {
 			retries := 0
 		retry:
 			if retries >= 3 {

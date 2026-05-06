@@ -140,6 +140,11 @@ var PersonaCommand = discord.SlashCommandCreate{
 			Required:    false,
 		},
 		discord.ApplicationCommandOptionBool{
+			Name:        "reasoning",
+			Description: "Enable model-side reasoning/thinking for compatible APIs",
+			Required:    false,
+		},
+		discord.ApplicationCommandOptionBool{
 			Name:        "html",
 			Description: "Render explicit HTML blocks to image attachments",
 			Required:    false,
@@ -180,7 +185,7 @@ func handlePersonaInfo(event *handler.CommandEvent, ephemeral bool) error {
 		AddField("Description", meta.Desc, true).
 		AddField("Temperature", fmt.Sprintf("%s (remapped to %s)", ftoa(settings.Temperature), ftoa(remappedSettings.Temperature)), true).
 		AddField("Top P", fmt.Sprintf("%s (remapped to %s)", ftoa(settings.TopP), ftoa(remappedSettings.TopP)), true).
-		AddField("Flags", fmt.Sprintf("images: %s", enabledDisabled(cache.PersonaMeta.EnableImages)), true).
+		AddField("Flags", fmt.Sprintf("images: %s, reasoning: %s", enabledDisabled(cache.PersonaMeta.EnableImages), enabledDisabled(cache.PersonaMeta.Settings.Reasoning)), true).
 		AddField("Frequency Penalty", ftoa(settings.FrequencyPenalty), true).
 		AddField("Context length", fmt.Sprintf("%d", cache.ContextLength), true)
 	if cache.Llmer != nil {
@@ -244,10 +249,11 @@ func HandlePersona(event *handler.CommandEvent) error {
 	dataSeed, hasDataSeed := data.OptInt("seed")
 	dataEnableImages, hasEnableImages := data.OptBool("images")
 	thinking, hasThinking := data.OptBool("thinking")
+	reasoning, hasReasoning := data.OptBool("reasoning")
 	renderHTML, hasRenderHTML := data.OptBool("html")
 	ephemeral := data.Bool("ephemeral")
 
-	if dataPersona == "" && dataModel == "" && dataSystem == "" && dataCard == "" && !hasDataCardFile && dataPreset == "" && !hasDataPresetFile && !hasContext && !hasTemperature && !hasTopP && !hasFreqPenalty && !hasDataSeed && !hasEnableImages && !hasThinking && !hasRenderHTML {
+	if dataPersona == "" && dataModel == "" && dataSystem == "" && dataCard == "" && !hasDataCardFile && dataPreset == "" && !hasDataPresetFile && !hasContext && !hasTemperature && !hasTopP && !hasFreqPenalty && !hasDataSeed && !hasEnableImages && !hasThinking && !hasReasoning && !hasRenderHTML {
 		return handlePersonaInfo(event, ephemeral)
 	}
 
@@ -375,6 +381,9 @@ func HandlePersona(event *handler.CommandEvent) error {
 	if hasThinking {
 		cache.PersonaMeta.ThinkingTraces = thinking
 	}
+	if hasReasoning {
+		cache.PersonaMeta.Settings.Reasoning = reasoning
+	}
 	if hasRenderHTML {
 		cache.PersonaMeta.RenderHTML = renderHTML
 	}
@@ -476,6 +485,15 @@ func HandlePersona(event *handler.CommandEvent) error {
 			s = "enabled reasoning.txt"
 		} else {
 			s = "disabled reasoning.txt"
+		}
+		didWhat = append(didWhat, s)
+	}
+	if cache.PersonaMeta.Settings.Reasoning != prevMeta.Settings.Reasoning {
+		var s string
+		if cache.PersonaMeta.Settings.Reasoning {
+			s = "enabled model reasoning"
+		} else {
+			s = "disabled model reasoning"
 		}
 		didWhat = append(didWhat, s)
 	}

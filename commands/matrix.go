@@ -467,7 +467,7 @@ func (b *MatrixBot) helpText(isDM bool) string {
 		b.commandUsage("persona", isDM) + " system <prompt>",
 		b.commandUsage("persona", isDM) + " card <url> | preset <url>",
 		b.commandUsage("persona", isDM) + " context|temperature|top_p|frequency_penalty|seed <value>",
-		b.commandUsage("persona", isDM) + " images|thinking|html on|off",
+		b.commandUsage("persona", isDM) + " images|thinking|reasoning|html on|off",
 		b.commandUsage("context", isDM) + " add|list|clear|delete|get|edit ...",
 		b.commandUsage("lobotomy", isDM) + " [amount] [reset_persona]",
 		b.commandUsage("regenerate", isDM) + " [prepend]",
@@ -572,6 +572,8 @@ func (b *MatrixBot) handlePersonaCommand(ctx context.Context, msg *matrixMessage
 		cache.PersonaMeta.EnableImages = parseOnOff(value)
 	case "thinking":
 		cache.PersonaMeta.ThinkingTraces = parseOnOff(value)
+	case "reasoning":
+		cache.PersonaMeta.Settings.Reasoning = parseOnOff(value)
 	case "html":
 		cache.PersonaMeta.RenderHTML = parseOnOff(value)
 	case "card":
@@ -639,6 +641,9 @@ func (b *MatrixBot) writePersonaUpdate(ctx context.Context, msg *matrixMessage, 
 	if cache.PersonaMeta.EnableImages != prev.EnableImages {
 		changes = append(changes, fmt.Sprintf("images=%t", cache.PersonaMeta.EnableImages))
 	}
+	if cache.PersonaMeta.Settings.Reasoning != prev.Settings.Reasoning {
+		changes = append(changes, fmt.Sprintf("reasoning=%t", cache.PersonaMeta.Settings.Reasoning))
+	}
 	if len(changes) == 0 {
 		changes = append(changes, "settings updated")
 	}
@@ -668,7 +673,7 @@ func matrixPersonaInfo(cache *db.ChannelCache, username string, isDM bool) strin
 	fmt.Fprintf(&b, "Top P: %s (remapped to %s)\n", ftoa(settings.TopP), ftoa(remapped.TopP))
 	fmt.Fprintf(&b, "Frequency penalty: %s\n", ftoa(settings.FrequencyPenalty))
 	fmt.Fprintf(&b, "Context length: %d\n", cache.ContextLength)
-	fmt.Fprintf(&b, "Images: %t\nThinking traces: %t\nHTML rendering: %t\n", cache.PersonaMeta.EnableImages, cache.PersonaMeta.ThinkingTraces, cache.PersonaMeta.RenderHTML)
+	fmt.Fprintf(&b, "Images: %t\nReasoning: %t\nThinking traces: %t\nHTML rendering: %t\n", cache.PersonaMeta.EnableImages, settings.Reasoning, cache.PersonaMeta.ThinkingTraces, cache.PersonaMeta.RenderHTML)
 	if cache.PersonaMeta.ChatPreset != nil {
 		fmt.Fprintf(&b, "SillyTavern preset: %s\n", cache.PersonaMeta.ChatPreset.DisplayName())
 	}
