@@ -5,6 +5,8 @@ package commands
 import (
 	"strings"
 	"testing"
+
+	"github.com/zeozeozeo/x3/persona"
 )
 
 func TestMatrixParseCommandRequiresBotPrefixOutsideDM(t *testing.T) {
@@ -117,5 +119,17 @@ func TestParseMatrixBoolStrict(t *testing.T) {
 	}
 	if _, ok := parseMatrixBool("maybe"); ok {
 		t.Fatalf("maybe unexpectedly parsed")
+	}
+}
+
+func TestFindMatrixPersonaAcceptsNumberAndAlias(t *testing.T) {
+	if got, ok := findMatrixPersona("1"); !ok || got.Name != persona.PersonaProto.Name {
+		t.Fatalf("persona 1 = %#v ok=%v", got, ok)
+	}
+	if got, ok := findMatrixPersona("Protogen"); !ok || got.Name != persona.PersonaProto.Name {
+		t.Fatalf("persona Protogen = %#v ok=%v", got, ok)
+	}
+	if got, ok := findMatrixPersona("Protogen (Default)"); !ok || got.Name != persona.PersonaProto.Name {
+		t.Fatalf("persona Protogen (Default) = %#v ok=%v", got, ok)
 	}
 }

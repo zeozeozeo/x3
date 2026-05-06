@@ -792,11 +792,19 @@ func (b *MatrixBot) handlePersonaCommand(ctx context.Context, msg *matrixMessage
 		return b.sendText(ctx, msg.RoomID, msg.EventID, matrixCommandDiagnostic(diagCtx.Raw(rest), diagCtx.Token(actionToken), "invalid persona command syntax", "use a space between the setting and value, not `=`. Example: `"+b.commandUsage("persona", b.isDMRoom(ctx, msg.RoomID))+" model glm5`"))
 	}
 	if action == "list" {
-		var names []string
-		for _, p := range persona.AllPersonas {
-			names = append(names, p.Name)
+		var b strings.Builder
+		b.WriteString("Available personas:\n")
+		for i, p := range persona.AllPersonas {
+			fmt.Fprintf(&b, "%d. %s", i+1, p.String())
+			if p.Name != p.String() {
+				fmt.Fprintf(&b, " (`%s`)", p.Name)
+			}
+			b.WriteString("\n")
 		}
-		return b.sendText(ctx, msg.RoomID, msg.EventID, "Available personas:\n"+strings.Join(names, ", "))
+		b.WriteString("\nSet by number or name, for example:\n")
+		b.WriteString(b.commandUsage("persona", b.isDMRoom(ctx, msg.RoomID)) + " set 1\n")
+		b.WriteString(b.commandUsage("persona", b.isDMRoom(ctx, msg.RoomID)) + " set protogen")
+		return b.sendText(ctx, msg.RoomID, msg.EventID, strings.TrimSpace(b.String()))
 	}
 	valueToken := parsed.At(1)
 	value := strings.TrimSpace(valueToken.Text)
@@ -815,8 +823,8 @@ func (b *MatrixBot) handlePersonaCommand(ctx context.Context, msg *matrixMessage
 	prev := cache.PersonaMeta.DeepCopy()
 	switch action {
 	case "set":
-		meta, err := persona.GetMetaByName(value)
-		if err != nil {
+		meta, ok := findMatrixPersona(value)
+		if !ok {
 			userCache := db.GetUserCacheByKey(b.userKey(msg.Sender))
 			for i := range userCache.Personas {
 				pName := userCache.Personas[i].PersonaName
@@ -1744,4 +1752,43 @@ func findMatrixModel(value string) (model.Model, bool) {
 		}
 	}
 	return model.Model{}, false
+}
+
+func findMatrixPersona(value string) (persona.PersonaMeta, bool) {
+	query := strings.TrimSpace(value)
+	if query == "" {
+		return persona.PersonaMeta{}, false
+	}
+	if n, err := strconv.Atoi(query); err == nil {
+		idx := n - 1
+		if idx >= 0 && idx < len(persona.AllPersonas) {
+			return persona.AllPersonas[idx], true
+		}
+		return persona.PersonaMeta{}, false
+	}
+	normalizedQuery := normalizeMatrixPersonaName(query)
+	for _, p := range persona.AllPersonas {
+		if normalizeMatrixPersonaName(p.Name) == normalizedQuery ||
+			normalizeMatrixPersonaName(p.String()) == normalizedQuery ||
+			strings.HasPrefix(normalizeMatrixPersonaName(p.Name), normalizedQuery) ||
+			strings.HasPrefix(normalizeMatrixPersonaName(p.String()), normalizedQuery) {
+			return p, true
+		}
+	}
+	return persona.PersonaMeta{}, false
+}
+
+func normalizeMatrixPersonaName(value string) string {
+	value = strings.ToLower(strings.TrimSpace(value))
+	replacer := strings.NewReplacer("(", " ", ")", " ", "[", " ", "]", " ", "-", " ", "_", " ")
+	value = replacer.Replace(value)
+	parts := strings.Fields(value)
+	filtered := parts[:0]
+	for _, part := range parts {
+		if part == "default" || part == "custom" {
+			continue
+		}
+		filtered = append(filtered, part)
+	}
+	return strings.Join(filtered, " ")
 }
