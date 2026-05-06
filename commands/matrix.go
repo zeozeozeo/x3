@@ -72,6 +72,36 @@ type matrixMessage struct {
 	IsBot       bool
 }
 
+type matrixCommandContext struct {
+	Display string
+	Offset  int
+}
+
+func (c matrixCommandContext) Raw(local string) string {
+	if c.Display != "" {
+		return c.Display
+	}
+	return local
+}
+
+func (c matrixCommandContext) Token(token matrixCommandArg) matrixCommandArg {
+	token.Start += c.Offset
+	token.End += c.Offset
+	return token
+}
+
+func (b *MatrixBot) matrixCommandContext(command, rest string, isDM bool) matrixCommandContext {
+	prefix := b.commandUsage(command, isDM)
+	display := prefix
+	if strings.TrimSpace(rest) != "" {
+		display += " " + rest
+	}
+	return matrixCommandContext{
+		Display: display,
+		Offset:  len(prefix) + 1,
+	}
+}
+
 type matrixOutFile struct {
 	Name        string
 	ContentType string
@@ -88,6 +118,12 @@ type matrixCommandArg struct {
 type matrixCommandArgs struct {
 	Raw  string
 	Args []matrixCommandArg
+}
+
+type matrixDiagnosticSpan struct {
+	Token   matrixCommandArg
+	Issue   string
+	Primary bool
 }
 
 func parseMatrixCommandArgs(raw string) matrixCommandArgs {
@@ -152,32 +188,66 @@ func (a matrixCommandArgs) RestAfter(i int) string {
 }
 
 func matrixCommandDiagnostic(raw string, token matrixCommandArg, issue, hint string) string {
+	return matrixCommandDiagnosticMulti(raw, []matrixDiagnosticSpan{{Token: token, Issue: issue, Primary: true}}, hint)
+}
+
+func matrixCommandDiagnosticMulti(raw string, spans []matrixDiagnosticSpan, hint string) string {
 	if raw == "" {
-		raw = token.Text
-		token.Start = 0
-		token.End = len(raw)
+		if len(spans) > 0 {
+			raw = spans[0].Token.Text
+			spans[0].Token.Start = 0
+			spans[0].Token.End = len(raw)
+		}
 	}
-	start := max(token.Start, 0)
-	end := token.End
-	if end <= start {
-		end = start + max(len(token.Text), 1)
+	if len(spans) == 0 {
+		spans = []matrixDiagnosticSpan{{Token: matrixCommandEndToken(raw), Issue: "Invalid command.", Primary: true}}
 	}
-	if end > len(raw) {
-		end = len(raw)
-	}
-	width := max(end-start, 1)
 	var b strings.Builder
-	b.WriteString(issue)
-	if hint != "" {
-		b.WriteString("\n")
-		b.WriteString(hint)
-	}
 	b.WriteString("\n```text\n")
+	for _, span := range spans {
+		if span.Primary {
+			b.WriteString("error: ")
+		} else {
+			b.WriteString("note: ")
+		}
+		b.WriteString(span.Issue)
+		b.WriteString("\n")
+	}
+	if hint != "" {
+		b.WriteString("help: ")
+		b.WriteString(hint)
+		b.WriteString("\n")
+	}
+	b.WriteString("\n")
 	b.WriteString(raw)
 	b.WriteString("\n")
-	b.WriteString(strings.Repeat(" ", start))
-	b.WriteString(strings.Repeat("^", width))
-	b.WriteString("\n```")
+	for _, span := range spans {
+		token := span.Token
+		start := max(token.Start, 0)
+		end := token.End
+		if end <= start {
+			end = start + max(len(token.Text), 1)
+		}
+		if start > len(raw) {
+			start = len(raw)
+		}
+		if end > len(raw) {
+			end = len(raw)
+		}
+		width := max(end-start, 1)
+		marker := "^"
+		if !span.Primary {
+			marker = "-"
+		}
+		b.WriteString(strings.Repeat(" ", start))
+		b.WriteString(strings.Repeat(marker, width))
+		if span.Issue != "" {
+			b.WriteString(" ")
+			b.WriteString(span.Issue)
+		}
+		b.WriteString("\n")
+	}
+	b.WriteString("```")
 	return b.String()
 }
 
@@ -586,7 +656,7 @@ func (b *MatrixBot) handleCommand(ctx context.Context, msg *matrixMessage, raw s
 		copyMsg.Content = rest
 		return b.handleLlm(ctx, &copyMsg, false, "")
 	case "persona":
-		return b.handlePersonaCommand(ctx, msg, rest)
+		return b.handlePersonaCommand(ctx, msg, rest, b.matrixCommandContext("persona", rest, isDM))
 	case "context":
 		return b.handleContextCommand(ctx, msg, rest, isDM)
 	case "lobotomy":
@@ -644,8 +714,8 @@ func (b *MatrixBot) personaHelpText(isDM bool) string {
 		base + " set <name>              set persona",
 		base + " model <model>           set model by name or command",
 		base + " system <prompt>         set custom system prompt",
-		base + " card <url>              import character card",
-		base + " preset <url>            import SillyTavern preset",
+		base + " card [url]              import character card from URL or attachment",
+		base + " preset [url]            import SillyTavern preset from URL or attachment",
 		base + " context <n>             set context message count",
 		base + " temperature <value>     set temperature",
 		base + " top_p <value>           set top_p",
@@ -655,8 +725,6 @@ func (b *MatrixBot) personaHelpText(isDM bool) string {
 		base + " thinking on|off         toggle reasoning.txt attachments",
 		base + " reasoning on|off        toggle model-side reasoning",
 		base + " html on|off             toggle HTML rendering",
-		"",
-		"Use spaces, not key=value. Example: " + base + " model glm5",
 	}, "\n")
 }
 
@@ -708,7 +776,7 @@ func (b *MatrixBot) blacklistHelpText(isDM bool, image bool) string {
 	}, "\n")
 }
 
-func (b *MatrixBot) handlePersonaCommand(ctx context.Context, msg *matrixMessage, rest string) error {
+func (b *MatrixBot) handlePersonaCommand(ctx context.Context, msg *matrixMessage, rest string, diagCtx matrixCommandContext) error {
 	key := b.roomKey(msg.RoomID)
 	cache := db.GetChannelCacheByKey(key)
 	if strings.TrimSpace(rest) == "" {
@@ -721,7 +789,7 @@ func (b *MatrixBot) handlePersonaCommand(ctx context.Context, msg *matrixMessage
 		return b.sendText(ctx, msg.RoomID, msg.EventID, b.personaHelpText(b.isDMRoom(ctx, msg.RoomID)))
 	}
 	if strings.Contains(actionToken.Text, "=") {
-		return b.sendText(ctx, msg.RoomID, msg.EventID, matrixCommandDiagnostic(rest, actionToken, "Invalid persona command syntax.", "Use a space between the setting and value, not `=`. Example: `"+b.commandUsage("persona", b.isDMRoom(ctx, msg.RoomID))+" model glm5`"))
+		return b.sendText(ctx, msg.RoomID, msg.EventID, matrixCommandDiagnostic(diagCtx.Raw(rest), diagCtx.Token(actionToken), "invalid persona command syntax", "use a space between the setting and value, not `=`. Example: `"+b.commandUsage("persona", b.isDMRoom(ctx, msg.RoomID))+" model glm5`"))
 	}
 	if action == "list" {
 		var names []string
@@ -732,11 +800,12 @@ func (b *MatrixBot) handlePersonaCommand(ctx context.Context, msg *matrixMessage
 	}
 	valueToken := parsed.At(1)
 	value := strings.TrimSpace(valueToken.Text)
-	if value == "" && action != "card" && action != "preset" {
-		return b.sendText(ctx, msg.RoomID, msg.EventID, matrixCommandDiagnostic(rest, actionToken, "Missing value for persona action `"+action+"`.", "Expected: `"+b.commandUsage("persona", b.isDMRoom(ctx, msg.RoomID))+" "+action+" <value>`"))
+	attachmentValueActions := action == "card" || action == "preset"
+	if value == "" && !attachmentValueActions {
+		return b.sendText(ctx, msg.RoomID, msg.EventID, matrixCommandDiagnostic(diagCtx.Raw(rest), diagCtx.Token(actionToken), "missing value for persona action `"+action+"`", "expected: `"+b.commandUsage("persona", b.isDMRoom(ctx, msg.RoomID))+" "+action+" <value>`"))
 	}
-	if strings.Contains(valueToken.Text, "=") {
-		return b.sendText(ctx, msg.RoomID, msg.EventID, matrixCommandDiagnostic(rest, valueToken, "Invalid value syntax for persona action `"+action+"`.", "Use spaces instead of key=value syntax."))
+	if valueToken.Text != "" && strings.Contains(valueToken.Text, "=") {
+		return b.sendText(ctx, msg.RoomID, msg.EventID, matrixCommandDiagnostic(diagCtx.Raw(rest), diagCtx.Token(valueToken), "invalid value syntax for persona action `"+action+"`", "use spaces instead of key=value syntax"))
 	}
 	valueRest := parsed.RestAfter(0)
 	if action == "system" {
@@ -782,7 +851,7 @@ func (b *MatrixBot) handlePersonaCommand(ctx context.Context, msg *matrixMessage
 	case "context":
 		n, err := strconv.Atoi(value)
 		if err != nil {
-			return b.sendText(ctx, msg.RoomID, msg.EventID, matrixInvalidIntDiagnostic(rest, valueToken, "persona context"))
+			return b.sendText(ctx, msg.RoomID, msg.EventID, matrixInvalidIntDiagnostic(diagCtx.Raw(rest), diagCtx.Token(valueToken), "persona context"))
 		}
 		if n < 0 {
 			n = db.DefaultContextMessages
@@ -791,25 +860,25 @@ func (b *MatrixBot) handlePersonaCommand(ctx context.Context, msg *matrixMessage
 	case "temperature":
 		v, err := strconv.ParseFloat(value, 32)
 		if err != nil {
-			return b.sendText(ctx, msg.RoomID, msg.EventID, matrixInvalidFloatDiagnostic(rest, valueToken, "persona temperature"))
+			return b.sendText(ctx, msg.RoomID, msg.EventID, matrixInvalidFloatDiagnostic(diagCtx.Raw(rest), diagCtx.Token(valueToken), "persona temperature"))
 		}
 		cache.PersonaMeta.Settings.Temperature = float32(v)
 	case "top_p":
 		v, err := strconv.ParseFloat(value, 32)
 		if err != nil {
-			return b.sendText(ctx, msg.RoomID, msg.EventID, matrixInvalidFloatDiagnostic(rest, valueToken, "persona top_p"))
+			return b.sendText(ctx, msg.RoomID, msg.EventID, matrixInvalidFloatDiagnostic(diagCtx.Raw(rest), diagCtx.Token(valueToken), "persona top_p"))
 		}
 		cache.PersonaMeta.Settings.TopP = float32(v)
 	case "frequency_penalty":
 		v, err := strconv.ParseFloat(value, 32)
 		if err != nil {
-			return b.sendText(ctx, msg.RoomID, msg.EventID, matrixInvalidFloatDiagnostic(rest, valueToken, "persona frequency_penalty"))
+			return b.sendText(ctx, msg.RoomID, msg.EventID, matrixInvalidFloatDiagnostic(diagCtx.Raw(rest), diagCtx.Token(valueToken), "persona frequency_penalty"))
 		}
 		cache.PersonaMeta.Settings.FrequencyPenalty = float32(v)
 	case "seed":
 		n, err := strconv.Atoi(value)
 		if err != nil {
-			return b.sendText(ctx, msg.RoomID, msg.EventID, matrixInvalidIntDiagnostic(rest, valueToken, "persona seed"))
+			return b.sendText(ctx, msg.RoomID, msg.EventID, matrixInvalidIntDiagnostic(diagCtx.Raw(rest), diagCtx.Token(valueToken), "persona seed"))
 		}
 		if n == 0 {
 			cache.PersonaMeta.Settings.Seed = nil
@@ -819,25 +888,25 @@ func (b *MatrixBot) handlePersonaCommand(ctx context.Context, msg *matrixMessage
 	case "images":
 		enabled, ok := parseMatrixBool(value)
 		if !ok {
-			return b.sendText(ctx, msg.RoomID, msg.EventID, matrixInvalidBoolDiagnostic(rest, valueToken, "persona images"))
+			return b.sendText(ctx, msg.RoomID, msg.EventID, matrixInvalidBoolDiagnostic(diagCtx.Raw(rest), diagCtx.Token(valueToken), "persona images"))
 		}
 		cache.PersonaMeta.EnableImages = enabled
 	case "thinking":
 		enabled, ok := parseMatrixBool(value)
 		if !ok {
-			return b.sendText(ctx, msg.RoomID, msg.EventID, matrixInvalidBoolDiagnostic(rest, valueToken, "persona thinking"))
+			return b.sendText(ctx, msg.RoomID, msg.EventID, matrixInvalidBoolDiagnostic(diagCtx.Raw(rest), diagCtx.Token(valueToken), "persona thinking"))
 		}
 		cache.PersonaMeta.ThinkingTraces = enabled
 	case "reasoning":
 		enabled, ok := parseMatrixBool(value)
 		if !ok {
-			return b.sendText(ctx, msg.RoomID, msg.EventID, matrixInvalidBoolDiagnostic(rest, valueToken, "persona reasoning"))
+			return b.sendText(ctx, msg.RoomID, msg.EventID, matrixInvalidBoolDiagnostic(diagCtx.Raw(rest), diagCtx.Token(valueToken), "persona reasoning"))
 		}
 		cache.PersonaMeta.Settings.Reasoning = enabled
 	case "html":
 		enabled, ok := parseMatrixBool(value)
 		if !ok {
-			return b.sendText(ctx, msg.RoomID, msg.EventID, matrixInvalidBoolDiagnostic(rest, valueToken, "persona html"))
+			return b.sendText(ctx, msg.RoomID, msg.EventID, matrixInvalidBoolDiagnostic(diagCtx.Raw(rest), diagCtx.Token(valueToken), "persona html"))
 		}
 		cache.PersonaMeta.RenderHTML = enabled
 	case "card":
@@ -851,7 +920,7 @@ func (b *MatrixBot) handlePersonaCommand(ctx context.Context, msg *matrixMessage
 			body = msg.Attachments[0].Data
 			filename = msg.Attachments[0].Filename
 		} else {
-			return b.sendText(ctx, msg.RoomID, msg.EventID, "Attach a card file or pass a card URL.")
+			return b.sendText(ctx, msg.RoomID, msg.EventID, matrixCommandDiagnostic(diagCtx.Raw(rest), diagCtx.Token(actionToken), "missing character card source", "pass a card URL or attach a card image/JSON file with `"+b.commandUsage("persona", b.isDMRoom(ctx, msg.RoomID))+" card`"))
 		}
 		if err != nil {
 			return err
@@ -869,7 +938,7 @@ func (b *MatrixBot) handlePersonaCommand(ctx context.Context, msg *matrixMessage
 		} else if len(msg.Attachments) > 0 {
 			body = msg.Attachments[0].Data
 		} else {
-			return b.sendText(ctx, msg.RoomID, msg.EventID, "Attach a preset JSON file or pass a preset URL.")
+			return b.sendText(ctx, msg.RoomID, msg.EventID, matrixCommandDiagnostic(diagCtx.Raw(rest), diagCtx.Token(actionToken), "missing preset source", "pass a preset JSON URL or attach a preset JSON file with `"+b.commandUsage("persona", b.isDMRoom(ctx, msg.RoomID))+" preset`"))
 		}
 		if err != nil {
 			return err
@@ -884,7 +953,7 @@ func (b *MatrixBot) handlePersonaCommand(ctx context.Context, msg *matrixMessage
 			cache.PersonaMeta.Prepend = strings.ReplaceAll(preset.AssistantPrefill, "\\n", "\n")
 		}
 	default:
-		return b.sendText(ctx, msg.RoomID, msg.EventID, matrixCommandDiagnostic(rest, actionToken, "Unknown persona action `"+actionToken.Text+"`.", "Run `"+b.commandUsage("persona", b.isDMRoom(ctx, msg.RoomID))+" help` for valid actions."))
+		return b.sendText(ctx, msg.RoomID, msg.EventID, matrixCommandDiagnostic(diagCtx.Raw(rest), diagCtx.Token(actionToken), "unknown persona action `"+actionToken.Text+"`", "run `"+b.commandUsage("persona", b.isDMRoom(ctx, msg.RoomID))+" help` for valid actions"))
 	}
 	cache.PersonaMeta.Settings = cache.PersonaMeta.Settings.Fixup()
 	return b.writePersonaUpdate(ctx, msg, key, cache, prev)

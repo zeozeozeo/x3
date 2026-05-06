@@ -53,7 +53,32 @@ func TestParseMatrixCommandArgsKeepsPositions(t *testing.T) {
 func TestMatrixCommandDiagnosticPointsAtToken(t *testing.T) {
 	parsed := parseMatrixCommandArgs(`model=glm5`)
 	got := matrixCommandDiagnostic(parsed.Raw, parsed.Args[0], "bad syntax", "use spaces")
-	for _, want := range []string{"bad syntax", "use spaces", "model=glm5", "^^^^^^^^^^"} {
+	for _, want := range []string{"error: bad syntax", "help: use spaces", "model=glm5", "^^^^^^^^^^ bad syntax"} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("diagnostic missing %q:\n%s", want, got)
+		}
+	}
+}
+
+func TestMatrixCommandDiagnosticSupportsFullCommandOffset(t *testing.T) {
+	bot := &MatrixBot{prefix: "!x3"}
+	rest := "model=glm5"
+	ctx := bot.matrixCommandContext("persona", rest, true)
+	parsed := parseMatrixCommandArgs(rest)
+	got := matrixCommandDiagnostic(ctx.Raw(rest), ctx.Token(parsed.Args[0]), "invalid persona command syntax", "use spaces")
+	for _, want := range []string{"!persona model=glm5", "         ^^^^^^^^^^ invalid persona command syntax"} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("diagnostic missing %q:\n%s", want, got)
+		}
+	}
+}
+
+func TestMatrixCommandDiagnosticMultipleSpans(t *testing.T) {
+	got := matrixCommandDiagnosticMulti("context edit nope", []matrixDiagnosticSpan{
+		{Token: matrixCommandArg{Text: "edit", Start: 8, End: 12}, Issue: "while parsing edit action", Primary: false},
+		{Token: matrixCommandArg{Text: "nope", Start: 13, End: 17}, Issue: "invalid integer", Primary: true},
+	}, "expected a numeric index")
+	for _, want := range []string{"note: while parsing edit action", "error: invalid integer", "        ---- while parsing edit action", "             ^^^^ invalid integer"} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("diagnostic missing %q:\n%s", want, got)
 		}
