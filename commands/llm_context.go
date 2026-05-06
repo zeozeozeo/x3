@@ -422,15 +422,15 @@ func addContextMessages(
 				lastResponseMessage = &msg
 			}
 
-			// potential message split
-			if isSplitAnyway || strings.HasSuffix(content, "\u200B") {
-				content = content + "\n\n"
-			}
+			splitContinuation := isSplitAnyway || strings.HasSuffix(content, "\u200B")
 			if strings.HasPrefix(content, "\u200B") {
 				// means impersonate message!
 				role = llm.RoleUser
 			}
 			content = strings.ReplaceAll(content, "\u200B", "")
+			if splitContinuation {
+				content = strings.TrimRight(content, "\n") + "\n\n"
+			}
 
 			// remove appends
 			content = strings.TrimSuffix(content, interactionReminder)

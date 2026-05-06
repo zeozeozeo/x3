@@ -111,3 +111,21 @@ func TestReplayMessagesForArchiveIgnoresEmptyDeferredLobotomy(t *testing.T) {
 		t.Fatalf("unexpected assistant message: %#v", got[1])
 	}
 }
+
+func TestReplayMessagesForArchivePreservesAssistantSplitBlankLine(t *testing.T) {
+	botID := snowflake.ID(100)
+	bot := testUser(botID, "x3", true)
+
+	messagesNewestFirst := []discord.Message{
+		testMessage(2, bot, "second"),
+		testMessage(1, bot, "first\u200B"),
+	}
+
+	got := replayMessagesForArchive(messagesNewestFirst, botID)
+	if len(got) != 1 {
+		t.Fatalf("got %d messages, want 1: %#v", len(got), got)
+	}
+	if got[0].Content != "first\n\nsecond" {
+		t.Fatalf("content = %q, want blank-line split", got[0].Content)
+	}
+}

@@ -478,8 +478,9 @@ func replayMessagesForArchive(messages []discord.Message, botID snowflake.ID) []
 
 func appendArchiveMessage(messages []chatArchiveMessage, message chatArchiveMessage) []chatArchiveMessage {
 	if len(messages) > 0 && message.Role == llm.RoleAssistant && messages[len(messages)-1].Role == llm.RoleAssistant {
-		if !strings.HasSuffix(messages[len(messages)-1].Content, "\n") {
-			messages[len(messages)-1].Content += "\n"
+		messages[len(messages)-1].Content = strings.TrimRight(messages[len(messages)-1].Content, "\n")
+		if messages[len(messages)-1].Content != "" {
+			messages[len(messages)-1].Content += "\n\n"
 		}
 		messages[len(messages)-1].Content += message.Content
 		return messages
