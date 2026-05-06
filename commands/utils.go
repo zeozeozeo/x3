@@ -297,6 +297,12 @@ func zifnil(val *int) int {
 
 // ellipsisTrim trims a string to a maximum length, adding an ellipsis if trimmed.
 func ellipsisTrim(s string, length int) string {
+	if length <= 0 {
+		return "…"
+	}
+	if s == "" {
+		return s
+	}
 	r := []rune(s)
 	if len(r) > length {
 		return string(r[:length-1]) + "…"
