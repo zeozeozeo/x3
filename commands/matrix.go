@@ -79,6 +79,158 @@ type matrixOutFile struct {
 	IsImage     bool
 }
 
+type matrixCommandArg struct {
+	Text  string
+	Start int
+	End   int
+}
+
+type matrixCommandArgs struct {
+	Raw  string
+	Args []matrixCommandArg
+}
+
+func parseMatrixCommandArgs(raw string) matrixCommandArgs {
+	var args []matrixCommandArg
+	for i := 0; i < len(raw); {
+		for i < len(raw) && (raw[i] == ' ' || raw[i] == '\t' || raw[i] == '\n' || raw[i] == '\r') {
+			i++
+		}
+		if i >= len(raw) {
+			break
+		}
+		start := i
+		var sb strings.Builder
+		quote := byte(0)
+		for i < len(raw) {
+			ch := raw[i]
+			if quote == 0 && (ch == ' ' || ch == '\t' || ch == '\n' || ch == '\r') {
+				break
+			}
+			if ch == '"' || ch == '\'' {
+				if quote == 0 {
+					quote = ch
+					i++
+					continue
+				}
+				if quote == ch {
+					quote = 0
+					i++
+					continue
+				}
+			}
+			if ch == '\\' && i+1 < len(raw) {
+				i++
+				sb.WriteByte(raw[i])
+				i++
+				continue
+			}
+			sb.WriteByte(ch)
+			i++
+		}
+		args = append(args, matrixCommandArg{Text: sb.String(), Start: start, End: i})
+	}
+	return matrixCommandArgs{Raw: raw, Args: args}
+}
+
+func (a matrixCommandArgs) Empty() bool {
+	return len(a.Args) == 0
+}
+
+func (a matrixCommandArgs) At(i int) matrixCommandArg {
+	if i < 0 || i >= len(a.Args) {
+		return matrixCommandArg{}
+	}
+	return a.Args[i]
+}
+
+func (a matrixCommandArgs) RestAfter(i int) string {
+	if i < 0 || i >= len(a.Args) {
+		return ""
+	}
+	return strings.TrimSpace(a.Raw[a.Args[i].End:])
+}
+
+func matrixCommandDiagnostic(raw string, token matrixCommandArg, issue, hint string) string {
+	if raw == "" {
+		raw = token.Text
+		token.Start = 0
+		token.End = len(raw)
+	}
+	start := max(token.Start, 0)
+	end := token.End
+	if end <= start {
+		end = start + max(len(token.Text), 1)
+	}
+	if end > len(raw) {
+		end = len(raw)
+	}
+	width := max(end-start, 1)
+	var b strings.Builder
+	b.WriteString(issue)
+	if hint != "" {
+		b.WriteString("\n")
+		b.WriteString(hint)
+	}
+	b.WriteString("\n```text\n")
+	b.WriteString(raw)
+	b.WriteString("\n")
+	b.WriteString(strings.Repeat(" ", start))
+	b.WriteString(strings.Repeat("^", width))
+	b.WriteString("\n```")
+	return b.String()
+}
+
+func matrixCommandEndToken(raw string) matrixCommandArg {
+	pos := len(raw)
+	return matrixCommandArg{Text: "<end>", Start: pos, End: pos + 1}
+}
+
+func matrixCommandAction(args matrixCommandArgs, commandName string) (matrixCommandArg, string, *string) {
+	if args.Empty() {
+		msg := matrixCommandDiagnostic(args.Raw, matrixCommandEndToken(args.Raw), "Missing action for `"+commandName+"` command.", "Run `"+commandName+" help` for available actions.")
+		return matrixCommandArg{}, "", &msg
+	}
+	token := args.At(0)
+	if strings.Contains(token.Text, "=") {
+		msg := matrixCommandDiagnostic(args.Raw, token, "Invalid `"+commandName+"` command syntax.", "Use spaces between tokens. Matrix commands do not use key=value syntax.")
+		return matrixCommandArg{}, "", &msg
+	}
+	action := strings.ToLower(strings.TrimSpace(token.Text))
+	return token, action, nil
+}
+
+func matrixMissingValueDiagnostic(raw string, actionToken matrixCommandArg, commandName, action, expected string) string {
+	return matrixCommandDiagnostic(raw, actionToken, "Missing value for `"+commandName+" "+action+"`.", "Expected: `"+expected+"`")
+}
+
+func matrixUnexpectedTokenDiagnostic(raw string, token matrixCommandArg, commandName string) string {
+	return matrixCommandDiagnostic(raw, token, "Unexpected token for `"+commandName+"` command.", "This command does not accept `"+token.Text+"` here. Run `"+commandName+" help` for valid syntax.")
+}
+
+func matrixInvalidIntDiagnostic(raw string, token matrixCommandArg, name string) string {
+	return matrixCommandDiagnostic(raw, token, "Invalid integer for `"+name+"`.", "`"+token.Text+"` is not a base-10 integer.")
+}
+
+func matrixInvalidFloatDiagnostic(raw string, token matrixCommandArg, name string) string {
+	return matrixCommandDiagnostic(raw, token, "Invalid number for `"+name+"`.", "`"+token.Text+"` must be a decimal number.")
+}
+
+func parseMatrixBool(value string) (bool, bool) {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case "1", "true", "yes", "y", "on", "enable", "enabled":
+		return true, true
+	case "0", "false", "no", "n", "off", "disable", "disabled":
+		return false, true
+	default:
+		return false, false
+	}
+}
+
+func matrixInvalidBoolDiagnostic(raw string, token matrixCommandArg, name string) string {
+	return matrixCommandDiagnostic(raw, token, "Invalid boolean for `"+name+"`.", "Expected one of: `on`, `off`, `true`, `false`, `enable`, `disable`.")
+}
+
 func StartMatrixBot(parent context.Context) (*MatrixRuntime, error) {
 	if !truthy(os.Getenv("X3_MATRIX_ENABLED")) {
 		return nil, nil
@@ -417,14 +569,18 @@ func (b *MatrixBot) handleCommand(ctx context.Context, msg *matrixMessage, raw s
 	if raw == "" || raw == "help" {
 		return b.sendText(ctx, msg.RoomID, msg.EventID, b.helpText(isDM))
 	}
-	name, rest, _ := strings.Cut(raw, " ")
-	name = strings.ToLower(strings.TrimSpace(name))
-	rest = strings.TrimSpace(rest)
+	parsed := parseMatrixCommandArgs(raw)
+	nameToken := parsed.At(0)
+	name := strings.ToLower(strings.TrimSpace(nameToken.Text))
+	rest := parsed.RestAfter(0)
+	if strings.Contains(nameToken.Text, "=") {
+		return b.sendText(ctx, msg.RoomID, msg.EventID, matrixCommandDiagnostic(raw, nameToken, "Invalid top-level command syntax.", "Command names cannot contain `=`. Run `"+b.commandUsage("help", isDM)+"` for valid commands."))
+	}
 
 	switch name {
 	case "chat":
 		if rest == "" {
-			return b.sendText(ctx, msg.RoomID, msg.EventID, "Usage: "+b.commandUsage("chat", isDM)+" <prompt>")
+			return b.sendText(ctx, msg.RoomID, msg.EventID, matrixCommandDiagnostic(raw, nameToken, "Missing prompt for `chat` command.", "Expected: `"+b.commandUsage("chat", isDM)+" <prompt>`"))
 		}
 		copyMsg := *msg
 		copyMsg.Content = rest
@@ -436,6 +592,9 @@ func (b *MatrixBot) handleCommand(ctx context.Context, msg *matrixMessage, raw s
 	case "lobotomy":
 		return b.handleLobotomyCommand(ctx, msg, rest)
 	case "regenerate":
+		if rest == "help" || rest == "-h" || rest == "--help" || rest == "?" {
+			return b.sendText(ctx, msg.RoomID, msg.EventID, "Regenerate command:\n"+b.commandUsage("regenerate", isDM)+" [prepend]\n\nRegenerates the last assistant response. Optional text is used as assistant prefill.")
+		}
 		return b.handleLlm(ctx, msg, true, rest)
 	case "stats":
 		return b.handleStatsCommand(ctx, msg)
@@ -446,7 +605,7 @@ func (b *MatrixBot) handleCommand(ctx context.Context, msg *matrixMessage, raw s
 	case "imageblacklist":
 		return b.handleBlacklistCommand(ctx, msg, rest, true)
 	default:
-		return b.sendText(ctx, msg.RoomID, msg.EventID, "Unknown command. Try "+b.commandUsage("help", isDM))
+		return b.sendText(ctx, msg.RoomID, msg.EventID, matrixCommandDiagnostic(raw, nameToken, "Unknown Matrix command `"+nameToken.Text+"`.", "Run `"+b.commandUsage("help", isDM)+"` to see available commands."))
 	}
 }
 
@@ -475,15 +634,95 @@ func (b *MatrixBot) helpText(isDM bool) string {
 	}, "\n")
 }
 
+func (b *MatrixBot) personaHelpText(isDM bool) string {
+	base := b.commandUsage("persona", isDM)
+	return strings.Join([]string{
+		"Persona command:",
+		base + "                         show current persona settings",
+		base + " help                    show this help",
+		base + " list                    list built-in personas",
+		base + " set <name>              set persona",
+		base + " model <model>           set model by name or command",
+		base + " system <prompt>         set custom system prompt",
+		base + " card <url>              import character card",
+		base + " preset <url>            import SillyTavern preset",
+		base + " context <n>             set context message count",
+		base + " temperature <value>     set temperature",
+		base + " top_p <value>           set top_p",
+		base + " frequency_penalty <v>   set frequency penalty",
+		base + " seed <n>                set seed, 0 resets",
+		base + " images on|off           toggle image generation",
+		base + " thinking on|off         toggle reasoning.txt attachments",
+		base + " reasoning on|off        toggle model-side reasoning",
+		base + " html on|off             toggle HTML rendering",
+		"",
+		"Use spaces, not key=value. Example: " + base + " model glm5",
+	}, "\n")
+}
+
+func (b *MatrixBot) contextHelpText(isDM bool) string {
+	base := b.commandUsage("context", isDM)
+	return strings.Join([]string{
+		"Context command:",
+		base + " add <text>       add persistent context",
+		base + " list             list context entries",
+		base + " clear            remove all context entries",
+		base + " get <n>          show one context entry",
+		base + " delete <n>       delete one context entry",
+		base + " edit <n> <text>  replace one context entry",
+	}, "\n")
+}
+
+func (b *MatrixBot) lobotomyHelpText(isDM bool) string {
+	base := b.commandUsage("lobotomy", isDM)
+	return strings.Join([]string{
+		"Lobotomy command:",
+		base + "                  forget all cached messages",
+		base + " <amount>         forget the last N cached messages",
+		base + " reset            also reset persona",
+		base + " <amount> reset   combine both options",
+		"",
+		"Before clearing context, x3 attaches a chatlog archive when one is available.",
+	}, "\n")
+}
+
+func (b *MatrixBot) chatlogHelpText(isDM bool) string {
+	base := b.commandUsage("chatlog", isDM)
+	return strings.Join([]string{
+		"Chatlog command:",
+		base + " export           export cached context as JSON",
+		base + " import           import an attached x3 chatlog JSON file",
+	}, "\n")
+}
+
+func (b *MatrixBot) blacklistHelpText(isDM bool, image bool) string {
+	name := "blacklist"
+	if image {
+		name = "imageblacklist"
+	}
+	base := b.commandUsage(name, isDM)
+	return strings.Join([]string{
+		strings.Title(name) + " command:",
+		base + " on              enable",
+		base + " off             disable",
+	}, "\n")
+}
+
 func (b *MatrixBot) handlePersonaCommand(ctx context.Context, msg *matrixMessage, rest string) error {
 	key := b.roomKey(msg.RoomID)
 	cache := db.GetChannelCacheByKey(key)
 	if strings.TrimSpace(rest) == "" {
 		return b.sendText(ctx, msg.RoomID, msg.EventID, matrixPersonaInfo(cache, msg.Author, b.isDMRoom(ctx, msg.RoomID)))
 	}
-	action, value, _ := strings.Cut(rest, " ")
-	action = strings.ToLower(strings.TrimSpace(action))
-	value = strings.TrimSpace(value)
+	parsed := parseMatrixCommandArgs(rest)
+	actionToken := parsed.At(0)
+	action := strings.ToLower(strings.TrimSpace(actionToken.Text))
+	if action == "help" || action == "-h" || action == "--help" || action == "?" {
+		return b.sendText(ctx, msg.RoomID, msg.EventID, b.personaHelpText(b.isDMRoom(ctx, msg.RoomID)))
+	}
+	if strings.Contains(actionToken.Text, "=") {
+		return b.sendText(ctx, msg.RoomID, msg.EventID, matrixCommandDiagnostic(rest, actionToken, "Invalid persona command syntax.", "Use a space between the setting and value, not `=`. Example: `"+b.commandUsage("persona", b.isDMRoom(ctx, msg.RoomID))+" model glm5`"))
+	}
 	if action == "list" {
 		var names []string
 		for _, p := range persona.AllPersonas {
@@ -491,8 +730,17 @@ func (b *MatrixBot) handlePersonaCommand(ctx context.Context, msg *matrixMessage
 		}
 		return b.sendText(ctx, msg.RoomID, msg.EventID, "Available personas:\n"+strings.Join(names, ", "))
 	}
+	valueToken := parsed.At(1)
+	value := strings.TrimSpace(valueToken.Text)
 	if value == "" && action != "card" && action != "preset" {
-		return b.sendText(ctx, msg.RoomID, msg.EventID, "Missing value for persona command.")
+		return b.sendText(ctx, msg.RoomID, msg.EventID, matrixCommandDiagnostic(rest, actionToken, "Missing value for persona action `"+action+"`.", "Expected: `"+b.commandUsage("persona", b.isDMRoom(ctx, msg.RoomID))+" "+action+" <value>`"))
+	}
+	if strings.Contains(valueToken.Text, "=") {
+		return b.sendText(ctx, msg.RoomID, msg.EventID, matrixCommandDiagnostic(rest, valueToken, "Invalid value syntax for persona action `"+action+"`.", "Use spaces instead of key=value syntax."))
+	}
+	valueRest := parsed.RestAfter(0)
+	if action == "system" {
+		value = valueRest
 	}
 
 	prev := cache.PersonaMeta.DeepCopy()
@@ -534,7 +782,7 @@ func (b *MatrixBot) handlePersonaCommand(ctx context.Context, msg *matrixMessage
 	case "context":
 		n, err := strconv.Atoi(value)
 		if err != nil {
-			return err
+			return b.sendText(ctx, msg.RoomID, msg.EventID, matrixInvalidIntDiagnostic(rest, valueToken, "persona context"))
 		}
 		if n < 0 {
 			n = db.DefaultContextMessages
@@ -543,25 +791,25 @@ func (b *MatrixBot) handlePersonaCommand(ctx context.Context, msg *matrixMessage
 	case "temperature":
 		v, err := strconv.ParseFloat(value, 32)
 		if err != nil {
-			return err
+			return b.sendText(ctx, msg.RoomID, msg.EventID, matrixInvalidFloatDiagnostic(rest, valueToken, "persona temperature"))
 		}
 		cache.PersonaMeta.Settings.Temperature = float32(v)
 	case "top_p":
 		v, err := strconv.ParseFloat(value, 32)
 		if err != nil {
-			return err
+			return b.sendText(ctx, msg.RoomID, msg.EventID, matrixInvalidFloatDiagnostic(rest, valueToken, "persona top_p"))
 		}
 		cache.PersonaMeta.Settings.TopP = float32(v)
 	case "frequency_penalty":
 		v, err := strconv.ParseFloat(value, 32)
 		if err != nil {
-			return err
+			return b.sendText(ctx, msg.RoomID, msg.EventID, matrixInvalidFloatDiagnostic(rest, valueToken, "persona frequency_penalty"))
 		}
 		cache.PersonaMeta.Settings.FrequencyPenalty = float32(v)
 	case "seed":
 		n, err := strconv.Atoi(value)
 		if err != nil {
-			return err
+			return b.sendText(ctx, msg.RoomID, msg.EventID, matrixInvalidIntDiagnostic(rest, valueToken, "persona seed"))
 		}
 		if n == 0 {
 			cache.PersonaMeta.Settings.Seed = nil
@@ -569,17 +817,34 @@ func (b *MatrixBot) handlePersonaCommand(ctx context.Context, msg *matrixMessage
 			cache.PersonaMeta.Settings.Seed = &n
 		}
 	case "images":
-		cache.PersonaMeta.EnableImages = parseOnOff(value)
+		enabled, ok := parseMatrixBool(value)
+		if !ok {
+			return b.sendText(ctx, msg.RoomID, msg.EventID, matrixInvalidBoolDiagnostic(rest, valueToken, "persona images"))
+		}
+		cache.PersonaMeta.EnableImages = enabled
 	case "thinking":
-		cache.PersonaMeta.ThinkingTraces = parseOnOff(value)
+		enabled, ok := parseMatrixBool(value)
+		if !ok {
+			return b.sendText(ctx, msg.RoomID, msg.EventID, matrixInvalidBoolDiagnostic(rest, valueToken, "persona thinking"))
+		}
+		cache.PersonaMeta.ThinkingTraces = enabled
 	case "reasoning":
-		cache.PersonaMeta.Settings.Reasoning = parseOnOff(value)
+		enabled, ok := parseMatrixBool(value)
+		if !ok {
+			return b.sendText(ctx, msg.RoomID, msg.EventID, matrixInvalidBoolDiagnostic(rest, valueToken, "persona reasoning"))
+		}
+		cache.PersonaMeta.Settings.Reasoning = enabled
 	case "html":
-		cache.PersonaMeta.RenderHTML = parseOnOff(value)
+		enabled, ok := parseMatrixBool(value)
+		if !ok {
+			return b.sendText(ctx, msg.RoomID, msg.EventID, matrixInvalidBoolDiagnostic(rest, valueToken, "persona html"))
+		}
+		cache.PersonaMeta.RenderHTML = enabled
 	case "card":
 		var body []byte
 		var filename string
 		var err error
+		value = strings.TrimSpace(valueRest)
 		if value != "" {
 			body, filename, err = fetchPersonaCardData(value, discord.Attachment{})
 		} else if len(msg.Attachments) > 0 {
@@ -598,6 +863,7 @@ func (b *MatrixBot) handlePersonaCommand(ctx context.Context, msg *matrixMessage
 	case "preset":
 		var body []byte
 		var err error
+		value = strings.TrimSpace(valueRest)
 		if value != "" {
 			body, _, err = fetchJSONAttachmentData(value, discord.Attachment{}, "preset")
 		} else if len(msg.Attachments) > 0 {
@@ -618,7 +884,7 @@ func (b *MatrixBot) handlePersonaCommand(ctx context.Context, msg *matrixMessage
 			cache.PersonaMeta.Prepend = strings.ReplaceAll(preset.AssistantPrefill, "\\n", "\n")
 		}
 	default:
-		return b.sendText(ctx, msg.RoomID, msg.EventID, "Unknown persona action.")
+		return b.sendText(ctx, msg.RoomID, msg.EventID, matrixCommandDiagnostic(rest, actionToken, "Unknown persona action `"+actionToken.Text+"`.", "Run `"+b.commandUsage("persona", b.isDMRoom(ctx, msg.RoomID))+" help` for valid actions."))
 	}
 	cache.PersonaMeta.Settings = cache.PersonaMeta.Settings.Fixup()
 	return b.writePersonaUpdate(ctx, msg, key, cache, prev)
@@ -684,20 +950,34 @@ func matrixPersonaInfo(cache *db.ChannelCache, username string, isDM bool) strin
 }
 
 func (b *MatrixBot) handleContextCommand(ctx context.Context, msg *matrixMessage, rest string, isDM bool) error {
-	action, value, _ := strings.Cut(strings.TrimSpace(rest), " ")
-	action = strings.ToLower(strings.TrimSpace(action))
-	value = strings.TrimSpace(value)
+	parsed := parseMatrixCommandArgs(rest)
+	actionToken, action, diag := matrixCommandAction(parsed, "context")
+	if diag != nil {
+		return b.sendText(ctx, msg.RoomID, msg.EventID, *diag+"\n\n"+b.contextHelpText(isDM))
+	}
+	if action == "help" || action == "-h" || action == "--help" || action == "?" {
+		return b.sendText(ctx, msg.RoomID, msg.EventID, b.contextHelpText(isDM))
+	}
+	valueToken := parsed.At(1)
+	value := strings.TrimSpace(valueToken.Text)
+	valueRest := parsed.RestAfter(0)
 	key := b.roomKey(msg.RoomID)
 	cache := db.GetChannelCacheByKey(key)
 	switch action {
 	case "add":
-		if value == "" {
-			return b.sendText(ctx, msg.RoomID, msg.EventID, "Usage: "+b.commandUsage("context", isDM)+" add <text>")
+		if strings.TrimSpace(valueRest) == "" {
+			return b.sendText(ctx, msg.RoomID, msg.EventID, matrixMissingValueDiagnostic(rest, actionToken, "context", action, b.commandUsage("context", isDM)+" add <text>"))
 		}
-		cache.Context = append(cache.Context, value)
+		cache.Context = append(cache.Context, valueRest)
 	case "clear":
+		if len(parsed.Args) > 1 {
+			return b.sendText(ctx, msg.RoomID, msg.EventID, matrixUnexpectedTokenDiagnostic(rest, valueToken, "context clear"))
+		}
 		cache.Context = nil
 	case "list":
+		if len(parsed.Args) > 1 {
+			return b.sendText(ctx, msg.RoomID, msg.EventID, matrixUnexpectedTokenDiagnostic(rest, valueToken, "context list"))
+		}
 		if len(cache.Context) == 0 {
 			return b.sendText(ctx, msg.RoomID, msg.EventID, "No context set for this room.")
 		}
@@ -707,26 +987,47 @@ func (b *MatrixBot) handleContextCommand(ctx context.Context, msg *matrixMessage
 		}
 		return b.sendText(ctx, msg.RoomID, msg.EventID, strings.TrimSpace(sb.String()))
 	case "delete":
+		if value == "" {
+			return b.sendText(ctx, msg.RoomID, msg.EventID, matrixMissingValueDiagnostic(rest, actionToken, "context", action, b.commandUsage("context", isDM)+" delete <n>"))
+		}
 		n, err := strconv.Atoi(value)
-		if err != nil || n < 1 || n > len(cache.Context) {
-			return b.sendText(ctx, msg.RoomID, msg.EventID, "Invalid context index.")
+		if err != nil {
+			return b.sendText(ctx, msg.RoomID, msg.EventID, matrixInvalidIntDiagnostic(rest, valueToken, "context index"))
+		}
+		if n < 1 || n > len(cache.Context) {
+			return b.sendText(ctx, msg.RoomID, msg.EventID, matrixCommandDiagnostic(rest, valueToken, "Context index out of range.", fmt.Sprintf("Expected an index from 1 to %d.", len(cache.Context))))
 		}
 		cache.Context = append(cache.Context[:n-1], cache.Context[n:]...)
 	case "get":
+		if value == "" {
+			return b.sendText(ctx, msg.RoomID, msg.EventID, matrixMissingValueDiagnostic(rest, actionToken, "context", action, b.commandUsage("context", isDM)+" get <n>"))
+		}
 		n, err := strconv.Atoi(value)
-		if err != nil || n < 1 || n > len(cache.Context) {
-			return b.sendText(ctx, msg.RoomID, msg.EventID, "Invalid context index.")
+		if err != nil {
+			return b.sendText(ctx, msg.RoomID, msg.EventID, matrixInvalidIntDiagnostic(rest, valueToken, "context index"))
+		}
+		if n < 1 || n > len(cache.Context) {
+			return b.sendText(ctx, msg.RoomID, msg.EventID, matrixCommandDiagnostic(rest, valueToken, "Context index out of range.", fmt.Sprintf("Expected an index from 1 to %d.", len(cache.Context))))
 		}
 		return b.sendText(ctx, msg.RoomID, msg.EventID, cache.Context[n-1])
 	case "edit":
-		nRaw, newText, _ := strings.Cut(value, " ")
-		n, err := strconv.Atoi(strings.TrimSpace(nRaw))
-		if err != nil || n < 1 || n > len(cache.Context) || strings.TrimSpace(newText) == "" {
-			return b.sendText(ctx, msg.RoomID, msg.EventID, "Usage: "+b.commandUsage("context", isDM)+" edit <n> <new text>")
+		if value == "" {
+			return b.sendText(ctx, msg.RoomID, msg.EventID, matrixMissingValueDiagnostic(rest, actionToken, "context", action, b.commandUsage("context", isDM)+" edit <n> <new text>"))
+		}
+		n, err := strconv.Atoi(value)
+		if err != nil {
+			return b.sendText(ctx, msg.RoomID, msg.EventID, matrixInvalidIntDiagnostic(rest, valueToken, "context index"))
+		}
+		if n < 1 || n > len(cache.Context) {
+			return b.sendText(ctx, msg.RoomID, msg.EventID, matrixCommandDiagnostic(rest, valueToken, "Context index out of range.", fmt.Sprintf("Expected an index from 1 to %d.", len(cache.Context))))
+		}
+		newText := parsed.RestAfter(1)
+		if strings.TrimSpace(newText) == "" {
+			return b.sendText(ctx, msg.RoomID, msg.EventID, matrixCommandDiagnostic(rest, valueToken, "Missing replacement text for `context edit`.", "Expected: `"+b.commandUsage("context", isDM)+" edit <n> <new text>`"))
 		}
 		cache.Context[n-1] = strings.TrimSpace(newText)
 	default:
-		return b.sendText(ctx, msg.RoomID, msg.EventID, "Usage: "+b.commandUsage("context", isDM)+" add|list|clear|delete|get|edit ...")
+		return b.sendText(ctx, msg.RoomID, msg.EventID, matrixCommandDiagnostic(rest, actionToken, "Unknown context action `"+actionToken.Text+"`.", "Valid actions: add, list, clear, delete, get, edit.")+"\n\n"+b.contextHelpText(isDM))
 	}
 	if err := cache.WriteKey(key); err != nil {
 		return err
@@ -735,18 +1036,30 @@ func (b *MatrixBot) handleContextCommand(ctx context.Context, msg *matrixMessage
 }
 
 func (b *MatrixBot) handleLobotomyCommand(ctx context.Context, msg *matrixMessage, rest string) error {
-	parts := strings.Fields(rest)
+	parsed := parseMatrixCommandArgs(rest)
 	amount := 0
 	resetPersona := false
-	if len(parts) > 0 {
-		if n, err := strconv.Atoi(parts[0]); err == nil {
-			amount = n
+	for i, token := range parsed.Args {
+		part := strings.ToLower(token.Text)
+		if i == 0 && (part == "help" || part == "-h" || part == "--help" || part == "?") {
+			return b.sendText(ctx, msg.RoomID, msg.EventID, b.lobotomyHelpText(b.isDMRoom(ctx, msg.RoomID)))
 		}
-	}
-	for _, part := range parts {
+		if strings.Contains(token.Text, "=") {
+			return b.sendText(ctx, msg.RoomID, msg.EventID, matrixCommandDiagnostic(rest, token, "Invalid lobotomy command syntax.", "Use positional arguments, not key=value syntax. Example: `"+b.commandUsage("lobotomy", b.isDMRoom(ctx, msg.RoomID))+" 5 reset`"))
+		}
 		if part == "reset_persona" || part == "reset" {
 			resetPersona = true
+			continue
 		}
+		if i == 0 {
+			n, err := strconv.Atoi(token.Text)
+			if err != nil {
+				return b.sendText(ctx, msg.RoomID, msg.EventID, matrixInvalidIntDiagnostic(rest, token, "lobotomy amount"))
+			}
+			amount = n
+			continue
+		}
+		return b.sendText(ctx, msg.RoomID, msg.EventID, matrixUnexpectedTokenDiagnostic(rest, token, "lobotomy"))
 	}
 	key := b.roomKey(msg.RoomID)
 	cache := db.GetChannelCacheByKey(key)
@@ -813,7 +1126,25 @@ func (b *MatrixBot) handleStatsCommand(ctx context.Context, msg *matrixMessage) 
 }
 
 func (b *MatrixBot) handleBlacklistCommand(ctx context.Context, msg *matrixMessage, rest string, image bool) error {
-	enabled := parseOnOff(rest)
+	commandName := "blacklist"
+	if image {
+		commandName = "imageblacklist"
+	}
+	parsed := parseMatrixCommandArgs(rest)
+	actionToken, action, diag := matrixCommandAction(parsed, commandName)
+	if diag != nil {
+		return b.sendText(ctx, msg.RoomID, msg.EventID, *diag+"\n\n"+b.blacklistHelpText(b.isDMRoom(ctx, msg.RoomID), image))
+	}
+	if action == "help" || action == "-h" || action == "--help" || action == "?" {
+		return b.sendText(ctx, msg.RoomID, msg.EventID, b.blacklistHelpText(b.isDMRoom(ctx, msg.RoomID), image))
+	}
+	enabled, ok := parseMatrixBool(action)
+	if !ok {
+		return b.sendText(ctx, msg.RoomID, msg.EventID, matrixInvalidBoolDiagnostic(rest, actionToken, commandName)+"\n\n"+b.blacklistHelpText(b.isDMRoom(ctx, msg.RoomID), image))
+	}
+	if len(parsed.Args) > 1 {
+		return b.sendText(ctx, msg.RoomID, msg.EventID, matrixUnexpectedTokenDiagnostic(rest, parsed.At(1), commandName))
+	}
 	key := b.roomKey(msg.RoomID)
 	var err error
 	if image {
@@ -836,11 +1167,21 @@ func (b *MatrixBot) handleBlacklistCommand(ctx context.Context, msg *matrixMessa
 }
 
 func (b *MatrixBot) handleChatlogCommand(ctx context.Context, msg *matrixMessage, rest string, isDM bool) error {
-	action := strings.ToLower(strings.TrimSpace(rest))
+	parsed := parseMatrixCommandArgs(rest)
+	actionToken, action, diag := matrixCommandAction(parsed, "chatlog")
+	if diag != nil {
+		return b.sendText(ctx, msg.RoomID, msg.EventID, *diag+"\n\n"+b.chatlogHelpText(isDM))
+	}
+	if action == "help" || action == "-h" || action == "--help" || action == "?" {
+		return b.sendText(ctx, msg.RoomID, msg.EventID, b.chatlogHelpText(isDM))
+	}
 	key := b.roomKey(msg.RoomID)
 	cache := db.GetChannelCacheByKey(key)
 	switch action {
 	case "export":
+		if len(parsed.Args) > 1 {
+			return b.sendText(ctx, msg.RoomID, msg.EventID, matrixUnexpectedTokenDiagnostic(rest, parsed.At(1), "chatlog export"))
+		}
 		archive := buildMatrixChatArchive(msg, cache)
 		data, err := marshalChatArchive(archive)
 		if err != nil {
@@ -849,8 +1190,11 @@ func (b *MatrixBot) handleChatlogCommand(ctx context.Context, msg *matrixMessage
 		_, err = b.sendFiles(ctx, msg.RoomID, msg.EventID, "Exported chatlog.", []matrixOutFile{matrixChatArchiveFile(data, archive.ExportedAt)})
 		return err
 	case "import":
+		if len(parsed.Args) > 1 {
+			return b.sendText(ctx, msg.RoomID, msg.EventID, matrixUnexpectedTokenDiagnostic(rest, parsed.At(1), "chatlog import"))
+		}
 		if len(msg.Attachments) == 0 {
-			return b.sendText(ctx, msg.RoomID, msg.EventID, "Attach an x3-chatlog.json file to import.")
+			return b.sendText(ctx, msg.RoomID, msg.EventID, matrixCommandDiagnostic(rest, actionToken, "Missing chatlog archive attachment.", "Attach an `x3-chatlog-<year>-<month>-<day>.json` file and run `"+b.commandUsage("chatlog", isDM)+" import`."))
 		}
 		var archive chatArchive
 		if err := json.Unmarshal(msg.Attachments[0].Data, &archive); err != nil {
@@ -873,7 +1217,7 @@ func (b *MatrixBot) handleChatlogCommand(ctx context.Context, msg *matrixMessage
 		}
 		return b.sendText(ctx, msg.RoomID, msg.EventID, fmt.Sprintf("Imported %s into cached context.", pluralize(len(importedMessages), "message")))
 	default:
-		return b.sendText(ctx, msg.RoomID, msg.EventID, "Usage: "+b.commandUsage("chatlog", isDM)+" export|import")
+		return b.sendText(ctx, msg.RoomID, msg.EventID, matrixCommandDiagnostic(rest, actionToken, "Unknown chatlog action `"+actionToken.Text+"`.", "Valid actions: export, import.")+"\n\n"+b.chatlogHelpText(isDM))
 	}
 }
 

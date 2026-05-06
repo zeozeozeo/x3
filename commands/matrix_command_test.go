@@ -39,3 +39,58 @@ func TestMatrixHelpUsesShortDMCommands(t *testing.T) {
 		t.Fatalf("DM help unexpectedly contains room prefix:\n%s", got)
 	}
 }
+
+func TestParseMatrixCommandArgsKeepsPositions(t *testing.T) {
+	parsed := parseMatrixCommandArgs(`model=glm5`)
+	if len(parsed.Args) != 1 {
+		t.Fatalf("args = %#v, want one arg", parsed.Args)
+	}
+	if got := parsed.Args[0]; got.Text != "model=glm5" || got.Start != 0 || got.End != len("model=glm5") {
+		t.Fatalf("arg = %#v", got)
+	}
+}
+
+func TestMatrixCommandDiagnosticPointsAtToken(t *testing.T) {
+	parsed := parseMatrixCommandArgs(`model=glm5`)
+	got := matrixCommandDiagnostic(parsed.Raw, parsed.Args[0], "bad syntax", "use spaces")
+	for _, want := range []string{"bad syntax", "use spaces", "model=glm5", "^^^^^^^^^^"} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("diagnostic missing %q:\n%s", want, got)
+		}
+	}
+}
+
+func TestMatrixPersonaHelpText(t *testing.T) {
+	bot := &MatrixBot{prefix: "!x3"}
+	got := bot.personaHelpText(true)
+	for _, want := range []string{"Persona command:", "!persona model <model>", "Use spaces, not key=value"} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("persona help missing %q:\n%s", want, got)
+		}
+	}
+}
+
+func TestParseMatrixCommandArgsQuotedValue(t *testing.T) {
+	parsed := parseMatrixCommandArgs(`edit 2 "new value"`)
+	if len(parsed.Args) != 3 {
+		t.Fatalf("args = %#v, want three args", parsed.Args)
+	}
+	if parsed.Args[2].Text != "new value" {
+		t.Fatalf("quoted arg text = %q", parsed.Args[2].Text)
+	}
+	if got := parsed.RestAfter(1); got != `"new value"` {
+		t.Fatalf("RestAfter(1) = %q", got)
+	}
+}
+
+func TestParseMatrixBoolStrict(t *testing.T) {
+	if got, ok := parseMatrixBool("on"); !ok || !got {
+		t.Fatalf("on parsed as got=%v ok=%v", got, ok)
+	}
+	if got, ok := parseMatrixBool("off"); !ok || got {
+		t.Fatalf("off parsed as got=%v ok=%v", got, ok)
+	}
+	if _, ok := parseMatrixBool("maybe"); ok {
+		t.Fatalf("maybe unexpectedly parsed")
+	}
+}
