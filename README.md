@@ -28,12 +28,15 @@ A Discord LLM roleplay and utility bot
 - Extensive LLM model selection (GLM-5.1, DeepSeek V4, GPT-5, Llama, etcetc)
 - Supports vision models, and automatically generates text descriptions for text-only models
 - It has an extremely overcomplicated internal model router - it constantly juggles between vision and text models in a conversation (balancing between vision quality and response style consistency), in a very configurable manner
+- It is optimized for the lowest running cost possible, aiming for maximum cache hits and routing to the cheapest providers
+- Has a self-maintained toolcalling format that works even on providers that don't support the OpenAI one
+- Aims to be compatible with every OpenAI API, even those with obscure nonstandard parameters (looking at you DeepSeek)
 - Subpar $\LaTeX$ rendering
 - Models can run websearches (grounding) and discord server searches
 - `/antiscam` to patch up Discord's incompetent spammer problem (if you're a mod)
 - Automatically preserves longer context history by summarizing previous messages
 - Ability to export and import conversations `/chatlog export`, `/chatlog import`, `/lobotomy`
-- Can render & embed HTML blocks (like SillyTavern's frontend does, but in Discord) with [Gotenberg](https://gotenberg.dev/)
+- Can render & embed HTML/SVG blocks (like SillyTavern's frontend does, but in Discord) with [Gotenberg](https://gotenberg.dev/)
 - Free and Discord based, [add it](https://discord.com/oauth2/authorize?client_id=1307635432632094740)
 - Also is a Matrix bot: [@x3_bot:matrix.org](https://matrix.to/#/@x3_bot:matrix.org)
 
