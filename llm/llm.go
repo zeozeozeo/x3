@@ -117,6 +117,37 @@ func firstNonEmpty(values ...string) string {
 	return ""
 }
 
+func applyReasoningSettings(req *openai.ChatCompletionRequest, provider string, reasoning bool) {
+	thinkingType := "disabled"
+	reasoningEffort := "none"
+	if reasoning {
+		thinkingType = "enabled"
+		reasoningEffort = "medium"
+	}
+
+	req.ReasoningEffort = reasoningEffort
+	req.Reasoning = &openai.ReasoningConfig{
+		Enabled: &reasoning,
+		Effort:  reasoningEffort,
+	}
+	if provider != model.ProviderVercel || reasoning {
+		req.Reasoning.Exclude = boolPtr(!reasoning)
+	}
+	req.Thinking = &openai.ThinkingConfig{Type: thinkingType}
+	req.ChatTemplateKwargs = map[string]any{"enable_thinking": reasoning}
+	req.ProviderOptions = map[string]any{
+		"zai": map[string]any{
+			"thinking": req.Thinking,
+		},
+		"openai": map[string]any{
+			"reasoningEffort": reasoningEffort,
+		},
+		"deepseek": map[string]any{
+			"thinking": req.Thinking,
+		},
+	}
+}
+
 func imageFilename(imageURL string) string {
 	parsed, err := url.Parse(imageURL)
 	if err == nil {
@@ -587,32 +618,7 @@ func (l *Llmer) requestCompletionInternal2(
 		Private:          provider == model.ProviderPollinations,
 	}
 	if m.Reasoning {
-		thinkingType := "disabled"
-		reasoningEffort := "none"
-		reasoningEnabled := settings.Reasoning
-		if settings.Reasoning {
-			thinkingType = "enabled"
-			reasoningEffort = "medium"
-		}
-		req.ReasoningEffort = reasoningEffort
-		req.Reasoning = &openai.ReasoningConfig{
-			Enabled: &reasoningEnabled,
-			Effort:  reasoningEffort,
-			Exclude: boolPtr(!settings.Reasoning),
-		}
-		req.Thinking = &openai.ThinkingConfig{Type: thinkingType}
-		req.ChatTemplateKwargs = map[string]any{"enable_thinking": settings.Reasoning}
-		req.ProviderOptions = map[string]any{
-			"zai": map[string]any{
-				"thinking": req.Thinking,
-			},
-			"openai": map[string]any{
-				"reasoningEffort": reasoningEffort,
-			},
-			"deepseek": map[string]any{
-				"thinking": req.Thinking,
-			},
-		}
+		applyReasoningSettings(&req, provider, settings.Reasoning)
 	}
 
 	completionStart := time.Now()
