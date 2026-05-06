@@ -172,6 +172,12 @@ func validateConfig(config model.ModelsConfig) error {
 		if m.FallbackVisionModel == "" {
 			continue
 		}
+		if m.FallbackVisionModel == "Default" {
+			if len(config.DefaultVisionModels) == 0 {
+				return fmt.Errorf("fallback vision model for %s is Default, but no default vision models are configured", m.Name)
+			}
+			continue
+		}
 		fallback, found := names[m.FallbackVisionModel]
 		if !found {
 			return fmt.Errorf("fallback vision model for %s not found: %s", m.Name, m.FallbackVisionModel)

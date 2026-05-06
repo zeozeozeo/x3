@@ -783,6 +783,26 @@ func (l Llmer) applyFallbackVisionModels(models []model.Model) []model.Model {
 			modelsToTry = append(modelsToTry, m)
 			continue
 		}
+		if strings.EqualFold(m.FallbackVisionModel, "Default") {
+			fallbacks := model.GetModelsByNames(model.DefaultVisionModels)
+			validFallbacks := make([]model.Model, 0, len(fallbacks))
+			for _, fallback := range fallbacks {
+				if fallback.Vision {
+					validFallbacks = append(validFallbacks, fallback)
+				} else {
+					slog.Warn("default vision model is not vision-capable; skipping", "model", fallback.Name)
+				}
+			}
+			if len(validFallbacks) == 0 {
+				slog.Warn("fallback vision model is Default, but no valid default vision models are configured", "model", m.Name)
+				modelsToTry = append(modelsToTry, m)
+				continue
+			}
+			slog.Info("recent image found; swapping to default vision models", "model", m.Name, "fallbacks", model.DefaultVisionModels)
+			modelsToTry = append(modelsToTry, validFallbacks...)
+			swapped = true
+			continue
+		}
 		fallback := model.GetModelByName(m.FallbackVisionModel)
 		if !fallback.Vision {
 			slog.Warn("fallback vision model is not vision-capable; keeping original model", "model", m.Name, "fallback", m.FallbackVisionModel)

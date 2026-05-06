@@ -667,6 +667,11 @@ function populateFallbackVisionOptions(selectedName) {
     (model) => model.vision,
   );
   select.innerHTML = '<option value="">None</option>';
+  const defaultOption = document.createElement("option");
+  defaultOption.value = "Default";
+  defaultOption.textContent = "Default Vision Models";
+  defaultOption.selected = selectedName === "Default";
+  select.appendChild(defaultOption);
   visionModels.forEach((model) => {
     const option = document.createElement("option");
     option.value = model.name;
