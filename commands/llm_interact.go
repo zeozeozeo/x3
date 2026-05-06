@@ -294,7 +294,7 @@ func handleLlmInteraction2(
 			msg.MessageID = messageID.String()
 		}
 	}
-	addImageAttachments(llmer, attachments)
+	addImageSources(llmer, content, attachments)
 
 	if isRegenerate {
 		// remove messages up to (but not including) the message being regenerated

@@ -5,7 +5,9 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"os"
+	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
@@ -21,6 +23,17 @@ import (
 )
 
 var lobotomyMessagesRegex = regexp.MustCompile(`Removed last (\d+) messages from the context`)
+
+var imageURLRegexp = regexp.MustCompile(`https?://[^\s<>"']+`)
+
+var imageURLExtensions = map[string]struct{}{
+	".png":  {},
+	".jpg":  {},
+	".jpeg": {},
+	".webp": {},
+	".gif":  {},
+	".avif": {},
+}
 
 func getLobotomyAmountFromMessage(msg discord.Message) int {
 	matches := lobotomyMessagesRegex.FindStringSubmatch(msg.Content)
@@ -65,16 +78,62 @@ func formatMsg(msg, username string, reference *discord.Message) string {
 	return msg
 }
 
-// addImageAttachments adds image URLs from attachments
+// addImageAttachments adds image URLs from attachments after fetching them into
+// the shared image cache. The conversation history still stores compact URLs.
 func addImageAttachments(llmer *llm.Llmer, attachments []discord.Attachment) {
 	if attachments == nil {
 		return
 	}
 	for _, attachment := range attachments {
-		if isImageAttachment(attachment) {
+		if isImageAttachment(attachment) && llm.MemoizedImageDataURI(attachment.URL) != "" {
 			llmer.AddImage(attachment.URL)
 		}
 	}
+}
+
+func addImageLinks(llmer *llm.Llmer, content string) {
+	for _, imageURL := range imageURLsFromContent(content) {
+		if llm.MemoizedImageDataURI(imageURL) != "" {
+			llmer.AddImage(imageURL)
+		}
+	}
+}
+
+func addImageSources(llmer *llm.Llmer, content string, attachments []discord.Attachment) {
+	addImageAttachments(llmer, attachments)
+	addImageLinks(llmer, content)
+}
+
+func imageURLsFromContent(content string) []string {
+	matches := imageURLRegexp.FindAllString(content, -1)
+	if len(matches) == 0 {
+		return nil
+	}
+
+	var out []string
+	seen := make(map[string]struct{}, len(matches))
+	for _, raw := range matches {
+		raw = strings.TrimRight(raw, ".,!?;:)]}")
+		if !isLikelyImageURL(raw) {
+			continue
+		}
+		if _, ok := seen[raw]; ok {
+			continue
+		}
+		seen[raw] = struct{}{}
+		out = append(out, raw)
+	}
+	return out
+}
+
+func isLikelyImageURL(raw string) bool {
+	parsed, err := url.Parse(raw)
+	if err != nil || parsed.Scheme == "" || parsed.Host == "" {
+		return false
+	}
+	ext := strings.ToLower(filepath.Ext(parsed.Path))
+	_, ok := imageURLExtensions[ext]
+	return ok
 }
 
 func setLatestAssistantMessageMetadata(llmer *llm.Llmer, message *discord.Message) {
@@ -354,15 +413,11 @@ func addContextMessages(
 		return 0, make(map[string]struct{}), nil, 0, 0
 	}
 
-	latestImageAttachmentIdx := -1
+	latestImageIdx := -1
 	for i, msg := range messages { // newest to oldest
-		if len(msg.Attachments) > 0 {
-			if slices.ContainsFunc(msg.Attachments, isImageAttachment) {
-				latestImageAttachmentIdx = i
-			}
-			if latestImageAttachmentIdx == i {
-				break // found the newest image
-			}
+		if slices.ContainsFunc(msg.Attachments, isImageAttachment) || len(imageURLsFromContent(msg.Content)) > 0 {
+			latestImageIdx = i
+			break // found the newest image
 		}
 	}
 
@@ -467,9 +522,9 @@ func addContextMessages(
 			usernames[msg.Author.EffectiveName()] = struct{}{} // track username
 		}
 
-		// add image attachments if this is the newest message containing one
-		if i == latestImageAttachmentIdx {
-			addImageAttachments(llmer, msg.Attachments)
+		// add image sources if this is the newest message containing one
+		if i == latestImageIdx {
+			addImageSources(llmer, content, msg.Attachments)
 		}
 	}
 

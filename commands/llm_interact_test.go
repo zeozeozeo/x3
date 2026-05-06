@@ -46,3 +46,21 @@ func TestSplitLlmTagsLegacyTag(t *testing.T) {
 		t.Fatalf("got %#v, want %#v", got, want)
 	}
 }
+
+func TestImageURLsFromContentDiscordCDNWithQuery(t *testing.T) {
+	input := "look https://cdn.discordapp.com/attachments/1311367819128213554/1499764784336474222/20260412_103431.jpg?ex=1&is=2&hm=abc"
+	got := imageURLsFromContent(input)
+	want := []string{"https://cdn.discordapp.com/attachments/1311367819128213554/1499764784336474222/20260412_103431.jpg?ex=1&is=2&hm=abc"}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("got %#v, want %#v", got, want)
+	}
+}
+
+func TestImageURLsFromContentTrimsPunctuationAndIgnoresNonImages(t *testing.T) {
+	input := "a https://example.com/cat.png), b https://example.com/page.txt c https://example.com/dog.webp."
+	got := imageURLsFromContent(input)
+	want := []string{"https://example.com/cat.png", "https://example.com/dog.webp"}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("got %#v, want %#v", got, want)
+	}
+}

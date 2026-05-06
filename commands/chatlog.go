@@ -469,7 +469,7 @@ func replayMessagesForArchive(messages []discord.Message, botID snowflake.ID) []
 			Author:    msg.Author.EffectiveName(),
 			MessageID: msg.ID.String(),
 			Timestamp: msg.CreatedAt,
-			Images:    imageAttachmentURLs(msg.Attachments),
+			Images:    messageImageURLs(content, msg.Attachments),
 		})
 	}
 
@@ -495,6 +495,12 @@ func imageAttachmentURLs(attachments []discord.Attachment) []string {
 			urls = append(urls, attachment.URL)
 		}
 	}
+	return urls
+}
+
+func messageImageURLs(content string, attachments []discord.Attachment) []string {
+	urls := imageAttachmentURLs(attachments)
+	urls = append(urls, imageURLsFromContent(content)...)
 	return urls
 }
 

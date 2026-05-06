@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"html"
 	"log/slog"
+	"net/url"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"time"
@@ -113,6 +115,25 @@ func firstNonEmpty(values ...string) string {
 		}
 	}
 	return ""
+}
+
+func imageFilename(imageURL string) string {
+	parsed, err := url.Parse(imageURL)
+	if err == nil {
+		if filename := filepath.Base(parsed.Path); filename != "." && filename != "/" && filename != "" {
+			return filename
+		}
+	}
+	if idx := strings.LastIndex(imageURL, "/"); idx != -1 {
+		filename := imageURL[idx+1:]
+		if qIdx := strings.Index(filename, "?"); qIdx != -1 {
+			filename = filename[:qIdx]
+		}
+		if filename != "" {
+			return filename
+		}
+	}
+	return "image.png"
 }
 
 type Message struct {
@@ -426,16 +447,7 @@ func (l Llmer) convertMessages(hasVision, supportsImageURL bool, prepend, search
 						continue
 					}
 					if description != "" {
-						// Extract filename from URL
-						filename := "image.png"
-						if idx := strings.LastIndex(imageURL, "/"); idx != -1 {
-							filename = imageURL[idx+1:]
-							// Remove query parameters if any
-							if qIdx := strings.Index(filename, "?"); qIdx != -1 {
-								filename = filename[:qIdx]
-							}
-						}
-						fmt.Fprintf(&content, "\n[attached %s: %s]", filename, description)
+						fmt.Fprintf(&content, "\n[attached %s: %s]", imageFilename(imageURL), description)
 					}
 				}
 			}

@@ -15,6 +15,12 @@ import (
 	"time"
 )
 
+const maxFetchedImageBytes = 10 * 1024 * 1024
+
+var imageFetchClient = &http.Client{
+	Timeout: 10 * time.Second,
+}
+
 type cacheEntry struct {
 	uri       string
 	dataURI   string
@@ -106,25 +112,49 @@ func buildDataURI(data []byte, sourceURL string) (string, error) {
 
 // fetchImage retrieves an image from a URL, restricted to a 10MB limit.
 func fetchImage(uri string) []byte {
-	const maxLimit = 10 * 1024 * 1024 // 10MB
+	req, err := http.NewRequest(http.MethodGet, uri, nil)
+	if err != nil {
+		return nil
+	}
+	req.Header.Set("User-Agent", "x3/1.0")
 
-	resp, err := http.Get(uri)
+	resp, err := imageFetchClient.Do(req)
 	if err != nil {
 		return nil
 	}
 	defer resp.Body.Close()
 
-	if resp.ContentLength > maxLimit {
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return nil
+	}
+	if resp.ContentLength > maxFetchedImageBytes {
 		return nil
 	}
 
-	lr := io.LimitReader(resp.Body, maxLimit+1)
+	lr := io.LimitReader(resp.Body, maxFetchedImageBytes+1)
 	data, err := io.ReadAll(lr)
-	if err != nil || len(data) > maxLimit {
+	if err != nil || len(data) > maxFetchedImageBytes {
+		return nil
+	}
+	contentType := strings.ToLower(resp.Header.Get("Content-Type"))
+	if idx := strings.Index(contentType, ";"); idx >= 0 {
+		contentType = strings.TrimSpace(contentType[:idx])
+	}
+	if contentType != "" && !strings.HasPrefix(contentType, "image/") {
+		return nil
+	}
+	if contentType == "" || contentType == "application/octet-stream" {
+		contentType = strings.ToLower(http.DetectContentType(data))
+	}
+	if !strings.HasPrefix(contentType, "image/") {
 		return nil
 	}
 
 	return data
+}
+
+func MemoizedImageDataURI(uri string) string {
+	return gImageCache.MemoizedImageBase64(uri)
 }
 
 func (ic *imageCache) MemoizedImageBase64(uri string) string {
