@@ -27,6 +27,7 @@ A Discord LLM roleplay and utility bot
 - Works in DM, app and server contexts
 - Extensive LLM model selection (GLM-5.1, DeepSeek V4, GPT-5, Llama, etcetc)
 - Supports vision models, and automatically generates text descriptions for text-only models
+- It has an extremely overcomplicated internal model router - it constantly juggles between vision and text models in a conversation (balancing between vision quality and response style consistency), in a very configurable manner
 - Subpar $\LaTeX$ rendering
 - Models can run websearches (grounding) and discord server searches
 - `/antiscam` to patch up Discord's incompetent spammer problem (if you're a mod)

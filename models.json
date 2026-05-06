@@ -3,6 +3,7 @@
     {
       "name": "GLM 5",
       "command": "glm5",
+      "fallback_vision_model": "Default",
       "reasoning": true,
       "providers": {
         "vercel": {
@@ -13,6 +14,7 @@
     {
       "name": "GLM 5.1",
       "command": "glm",
+      "fallback_vision_model": "Default",
       "reasoning": true,
       "providers": {
         "vercel": {
@@ -34,6 +36,7 @@
     {
       "name": "DeepSeek V4 Flash",
       "command": "deepseek",
+      "fallback_vision_model": "Default",
       "reasoning": true,
       "providers": {
         "deepseek": {
@@ -53,6 +56,7 @@
     {
       "name": "DeepSeek V4 Pro",
       "command": "deepseekpro",
+      "fallback_vision_model": "Default",
       "reasoning": true,
       "providers": {
         "deepseek": {
@@ -120,6 +124,7 @@
     {
       "name": "Gemma 4 31B",
       "command": "gemma",
+      "vision": true,
       "providers": {
         "ollama": {
           "codenames": ["gemma4:31b-cloud"]
@@ -304,6 +309,7 @@
     {
       "name": "GLM 4.7",
       "command": "glm47",
+      "fallback_vision_model": "Default",
       "reasoning": true,
       "providers": {
         "vercel": {
@@ -344,8 +350,8 @@
     "Meta Llama 4 Maverick 400B/17A"
   ],
   "default_vision_models": [
-    "NVIDIA Nemotron 3 Nano Omni 30B/A3B",
     "Xiaomi MiMo V2.5",
+    "NVIDIA Nemotron 3 Nano Omni 30B/A3B",
     "Meta Llama 4 Maverick 400B/17A",
     "Meta Llama 4 Scout 109B/17A"
   ],
