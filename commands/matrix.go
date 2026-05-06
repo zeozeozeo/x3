@@ -1699,7 +1699,7 @@ func matrixFilesFromDiscordFiles(files []*discord.File) ([]matrixOutFile, error)
 
 func matrixFormatMsg(content, username string, reference *matrixMessage) string {
 	if reference != nil && strings.TrimSpace(reference.Content) != "" {
-		return fmt.Sprintf("<in reply to %s: \"%s\">\n%s: %s", reference.Author, strings.TrimSpace(reference.Content), username, content)
+		return fmt.Sprintf("<in reply to %s: \"%s\">\n%s: %s", reference.Author, ellipsisTrim(strings.TrimSpace(reference.Content), 64), username, content)
 	}
 	if username != "" {
 		return fmt.Sprintf("%s: %s", username, content)
