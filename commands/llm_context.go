@@ -48,6 +48,7 @@ func formatMsg(msg, username string, reference *discord.Message) string {
 	if reference != nil {
 		trimmedRefContent = strings.TrimSuffix(reference.Content, "\u200B")
 	}
+	trimmedRefContent = ellipsisTrim(trimmedRefContent, 64)
 
 	if reference != nil && trimmedRefContent != "" {
 		return fmt.Sprintf(
