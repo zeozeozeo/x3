@@ -81,3 +81,54 @@ func TestApplyFallbackVisionModelsUsesDefaultVisionModels(t *testing.T) {
 		t.Fatalf("fallback models = %#v, want Vision 1 then Vision 2", got)
 	}
 }
+
+func TestContextHardMessageLimitOvershootsSoftLimit(t *testing.T) {
+	if got := ContextHardMessageLimit(150); got != 225 {
+		t.Fatalf("hard limit = %d, want 225", got)
+	}
+	if got := ContextHardMessageLimit(10); got != 42 {
+		t.Fatalf("hard limit = %d, want 42", got)
+	}
+	if got := ContextHardMessageLimit(450); got != 500 {
+		t.Fatalf("hard limit = %d, want 500", got)
+	}
+}
+
+func TestTrimCacheFriendlyContextKeepsOvershootBand(t *testing.T) {
+	l := Llmer{}
+	for i := 0; i < ContextHardMessageLimit(100); i++ {
+		l.AddMessage(RoleUser, "msg", 0)
+	}
+
+	if l.TrimCacheFriendlyContext(100) {
+		t.Fatal("expected no trim while at hard limit")
+	}
+
+	l.AddMessage(RoleUser, "one more", 0)
+	if !l.TrimCacheFriendlyContext(100) {
+		t.Fatal("expected trim after exceeding hard limit")
+	}
+	if got := l.NonSystemMessageCount(); got != 100 {
+		t.Fatalf("non-system messages = %d, want 100", got)
+	}
+}
+
+func TestTrimCacheFriendlyContextPreservesSystemPrompt(t *testing.T) {
+	l := Llmer{Messages: []Message{{Role: RoleSystem, Content: "system"}}}
+	for i := 0; i < ContextHardMessageLimit(10)+1; i++ {
+		l.AddMessage(RoleUser, "msg", 0)
+	}
+
+	if !l.TrimCacheFriendlyContext(10) {
+		t.Fatal("expected trim")
+	}
+	if len(l.Messages) != 11 {
+		t.Fatalf("messages = %d, want 11", len(l.Messages))
+	}
+	if l.Messages[0].Role != RoleSystem || l.Messages[0].Content != "system" {
+		t.Fatalf("first message = %#v, want system prompt", l.Messages[0])
+	}
+	if got := l.NonSystemMessageCount(); got != 10 {
+		t.Fatalf("non-system messages = %d, want 10", got)
+	}
+}

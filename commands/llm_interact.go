@@ -23,6 +23,7 @@ import (
 	"github.com/zeozeozeo/x3/db"
 	"github.com/zeozeozeo/x3/horder"
 	"github.com/zeozeozeo/x3/llm"
+	"github.com/zeozeozeo/x3/model"
 	"github.com/zeozeozeo/x3/persona"
 )
 
@@ -216,6 +217,30 @@ func handleLlmInteraction2(
 		llmer.Messages = append([]llm.Message(nil), cache.ImportedHistory.Messages...)
 		numCtxMessages = len(llmer.Messages)
 		usernames = defaultKnownUsernames()
+	} else if cache.Llmer != nil && !isRegenerate && ctxLen > 0 {
+		llmer.Messages = append([]llm.Message(nil), cache.Llmer.Messages...)
+		numCtxMessages = len(llmer.Messages)
+		usernames = defaultKnownUsernames()
+		probe := llm.NewLlmer(channelID)
+		probeLimit := llm.ContextHardMessageLimit(ctxLen)
+		if probeLimit <= 0 {
+			probeLimit = ctxLen
+		}
+		_, probeUsernames, probeLastResponse, probeLastAssistantID, probeLastUserID := addContextMessages(
+			client,
+			probe,
+			channelID,
+			messageID,
+			probeLimit,
+		)
+		appendMissingMessages(llmer, probe.Messages)
+		numCtxMessages = llmer.NonSystemMessageCount()
+		for name := range probeUsernames {
+			usernames[name] = struct{}{}
+		}
+		lastResponseMessage = probeLastResponse
+		lastAssistantMessageID = probeLastAssistantID
+		lastUserID = probeLastUserID
 	} else {
 		numCtxMessages, usernames, lastResponseMessage, lastAssistantMessageID, lastUserID = addContextMessages(
 			client,
@@ -296,7 +321,7 @@ func handleLlmInteraction2(
 		"prepend", prepend,
 		"isDM", isDM,
 	)
-	response, usage, err := llmer.RequestCompletion(models, cache.PersonaMeta.Settings, prepend, ctx)
+	response, usage, err := requestCompletionCacheFriendly(llmer, models, cache.PersonaMeta.Settings, prepend, ctxLen, ctx)
 	if err != nil {
 		slog.Error("LLM request failed", "err", err)
 		return "", 0, fmt.Errorf("LLM request failed: %w", err)
@@ -449,7 +474,7 @@ func handleLlmInteraction2(
 
 	cache.IsLastRandomDM = timeInteraction
 	setLatestAssistantMessageMetadata(llmer, botMessage)
-	if (cache.ImportedHistory != nil || isDM) && !isRegenerate {
+	if !isRegenerate {
 		cache.Llmer = llmer
 		if cache.ImportedHistory != nil {
 			cache.ImportedHistory.Messages = append([]llm.Message(nil), llmer.Messages...)
@@ -492,6 +517,34 @@ func handleLlmInteraction2(
 }
 
 const stableNarratorPrepend = "```json\n{\n  \"tags\":"
+
+func requestCompletionCacheFriendly(
+	llmer *llm.Llmer,
+	models []model.Model,
+	settings persona.InferenceSettings,
+	prepend string,
+	softMessageLimit int,
+	ctx context.Context,
+) (string, llm.Usage, error) {
+	llmer.TrimCacheFriendlyContext(softMessageLimit)
+	response, usage, err := llmer.RequestCompletion(models, settings, prepend, ctx)
+	if err == nil || !llm.IsContextLengthError(err) || softMessageLimit <= 0 {
+		return response, usage, err
+	}
+
+	keep := softMessageLimit
+	for attempts := 0; attempts < 4 && keep > 1; attempts++ {
+		keep = max(keep/2, 1)
+		if !llmer.TrimNonSystemMessages(keep) {
+			break
+		}
+		response, usage, err = llmer.RequestCompletion(models, settings, prepend, ctx)
+		if err == nil || !llm.IsContextLengthError(err) {
+			return response, usage, err
+		}
+	}
+	return response, usage, err
+}
 
 func parseStableNarratorTags(response string) (string, error) {
 	// remove garbage from response

@@ -298,6 +298,42 @@ func defaultKnownUsernames() map[string]struct{} {
 	}
 }
 
+func appendMissingMessages(dst *llm.Llmer, src []llm.Message) int {
+	if dst == nil || len(src) == 0 {
+		return 0
+	}
+	seen := make(map[string]struct{}, len(dst.Messages))
+	for _, msg := range dst.Messages {
+		key := msg.MessageID
+		if key == "" && msg.ID != 0 {
+			key = msg.ID.String()
+		}
+		if key != "" {
+			seen[key] = struct{}{}
+		}
+	}
+
+	added := 0
+	for _, msg := range src {
+		if msg.Role == llm.RoleSystem {
+			continue
+		}
+		key := msg.MessageID
+		if key == "" && msg.ID != 0 {
+			key = msg.ID.String()
+		}
+		if key != "" {
+			if _, ok := seen[key]; ok {
+				continue
+			}
+			seen[key] = struct{}{}
+		}
+		dst.Messages = append(dst.Messages, msg)
+		added++
+	}
+	return added
+}
+
 // Returns number of messages fetched, map of usernames, last assistant response message, last assistant message ID, last user ID
 // (this way of restoring context is pretty hacky since we use \u200B to indicate splits/impersonations, but that way we don't have to
 // rely on a db)

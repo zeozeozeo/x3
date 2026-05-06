@@ -180,6 +180,89 @@ func (l *Llmer) NumMessages() int {
 	return len(l.Messages)
 }
 
+const (
+	contextOvershootMin = 32
+	contextOvershootMax = 128
+	contextMessageMax   = 500
+)
+
+func ContextHardMessageLimit(softLimit int) int {
+	if softLimit <= 0 {
+		return 0
+	}
+	overshoot := softLimit / 2
+	if overshoot < contextOvershootMin {
+		overshoot = contextOvershootMin
+	}
+	if overshoot > contextOvershootMax {
+		overshoot = contextOvershootMax
+	}
+	hardLimit := softLimit + overshoot
+	if hardLimit > contextMessageMax {
+		hardLimit = contextMessageMax
+	}
+	return hardLimit
+}
+
+func (l *Llmer) NonSystemMessageCount() int {
+	count := 0
+	for _, msg := range l.Messages {
+		if msg.Role != RoleSystem {
+			count++
+		}
+	}
+	return count
+}
+
+func (l *Llmer) TrimNonSystemMessages(keep int) bool {
+	if keep < 0 {
+		keep = 0
+	}
+	if l.NonSystemMessageCount() <= keep {
+		return false
+	}
+
+	newMessages := make([]Message, 0, min(len(l.Messages), keep+1))
+	if len(l.Messages) > 0 && l.Messages[0].Role == RoleSystem {
+		newMessages = append(newMessages, l.Messages[0])
+	}
+
+	toKeep := make([]Message, 0, keep)
+	for i := len(l.Messages) - 1; i >= 0 && len(toKeep) < keep; i-- {
+		if l.Messages[i].Role == RoleSystem {
+			continue
+		}
+		toKeep = append(toKeep, l.Messages[i])
+	}
+	for i := len(toKeep) - 1; i >= 0; i-- {
+		newMessages = append(newMessages, toKeep[i])
+	}
+
+	l.Messages = newMessages
+	return true
+}
+
+func (l *Llmer) TrimCacheFriendlyContext(softLimit int) bool {
+	hardLimit := ContextHardMessageLimit(softLimit)
+	if hardLimit <= 0 || l.NonSystemMessageCount() <= hardLimit {
+		return false
+	}
+	return l.TrimNonSystemMessages(softLimit)
+}
+
+func IsContextLengthError(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := strings.ToLower(err.Error())
+	return strings.Contains(msg, "context") && strings.Contains(msg, "length") ||
+		strings.Contains(msg, "context_length_exceeded") ||
+		strings.Contains(msg, "maximum context") ||
+		strings.Contains(msg, "too many tokens") ||
+		strings.Contains(msg, "token limit") ||
+		strings.Contains(msg, "tokens exceed")
+}
+
 // LobotomizeKeepLast removes messages in a way that the last n messages and the system prompt are kept
 func (l *Llmer) LobotomizeKeepLast(n int) {
 	numMessages := len(l.Messages)

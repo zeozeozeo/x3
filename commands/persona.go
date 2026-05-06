@@ -100,7 +100,7 @@ var PersonaCommand = discord.SlashCommandCreate{
 		},
 		discord.ApplicationCommandOptionInt{
 			Name:        "context",
-			Description: "Amount of surrounding messages to use as context. Pass a negative number to reset",
+			Description: "Soft target for retained context messages. Pass a negative number to reset",
 			Required:    false,
 		},
 		discord.ApplicationCommandOptionFloat{

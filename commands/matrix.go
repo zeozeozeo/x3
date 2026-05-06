@@ -716,7 +716,7 @@ func (b *MatrixBot) personaHelpText(isDM bool) string {
 		base + " system <prompt>         set custom system prompt",
 		base + " card [url]              import character card from URL or attachment",
 		base + " preset [url]            import SillyTavern preset from URL or attachment",
-		base + " context <n>             set context message count",
+		base + " context <n>             set soft context message target",
 		base + " temperature <value>     set temperature",
 		base + " top_p <value>           set top_p",
 		base + " frequency_penalty <v>   set frequency penalty",
@@ -1406,7 +1406,7 @@ func (b *MatrixBot) handleLlm(ctx context.Context, msg *matrixMessage, isRegener
 		"num_messages", llmer.NumMessages(),
 		"is_regenerate", isRegenerate,
 	)
-	response, usage, err := llmer.RequestCompletion(models, cache.PersonaMeta.Settings, prepend, ctx)
+	response, usage, err := requestCompletionCacheFriendly(llmer, models, cache.PersonaMeta.Settings, prepend, cache.ContextLength, ctx)
 	if err != nil {
 		return err
 	}
