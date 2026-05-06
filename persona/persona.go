@@ -38,7 +38,8 @@ hey uwu"""
 what is it"""
 
 """tell me
-damn"""
+damn
+gg"""
 
 """i forgot about that"""
 
@@ -548,13 +549,15 @@ func (meta PersonaMeta) DeepCopy() PersonaMeta {
 
 var (
 	PersonaDefault = PersonaMeta{
-		Name: "Default",
-		Desc: "Use the default system prompt of a model",
+		Name:     "Default",
+		Desc:     "Use the default system prompt of a model",
+		Settings: InferenceSettings{Reasoning: true},
 	}
 	PersonaProto = PersonaMeta{
 		Name:          "Protogen (Default)",
 		Desc:          "Freaking clanker",
 		Models:        clone(model.DefaultModels),
+		Settings:      InferenceSettings{Reasoning: true},
 		NeedSummaries: true,
 		RenderHTML:    true,
 	}
@@ -562,6 +565,7 @@ var (
 		Name:          "Yapper",
 		Desc:          "Brainrotted blud",
 		Models:        clone(model.DefaultModels),
+		Settings:      InferenceSettings{Reasoning: true},
 		NeedSummaries: true,
 		RenderHTML:    true,
 	}

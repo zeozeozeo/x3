@@ -83,11 +83,14 @@ func TestApplyFallbackVisionModelsUsesDefaultVisionModels(t *testing.T) {
 }
 
 func TestContextHardMessageLimitOvershootsSoftLimit(t *testing.T) {
-	if got := ContextHardMessageLimit(150); got != 225 {
-		t.Fatalf("hard limit = %d, want 225", got)
+	if got := ContextHardMessageLimit(150); got != 300 {
+		t.Fatalf("hard limit = %d, want 300", got)
 	}
-	if got := ContextHardMessageLimit(10); got != 42 {
-		t.Fatalf("hard limit = %d, want 42", got)
+	if got := ContextHardMessageLimit(10); got != 74 {
+		t.Fatalf("hard limit = %d, want 74", got)
+	}
+	if got := ContextHardMessageLimit(300); got != 500 {
+		t.Fatalf("hard limit = %d, want 500", got)
 	}
 	if got := ContextHardMessageLimit(450); got != 500 {
 		t.Fatalf("hard limit = %d, want 500", got)

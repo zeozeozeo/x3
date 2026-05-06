@@ -181,8 +181,8 @@ func (l *Llmer) NumMessages() int {
 }
 
 const (
-	contextOvershootMin = 32
-	contextOvershootMax = 128
+	contextOvershootMin = 64
+	contextOvershootMax = 200
 	contextMessageMax   = 500
 )
 
@@ -190,7 +190,7 @@ func ContextHardMessageLimit(softLimit int) int {
 	if softLimit <= 0 {
 		return 0
 	}
-	overshoot := softLimit / 2
+	overshoot := softLimit
 	if overshoot < contextOvershootMin {
 		overshoot = contextOvershootMin
 	}
