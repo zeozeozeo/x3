@@ -12,7 +12,6 @@ RUN --mount=type=cache,target=/root/.cache/go-build \
 # Final Stage
 FROM alpine:3.23
 
-# 1. Install dependencies + the Alpine-native ONNX runtime from edge repositories
 RUN apk add --no-cache \
     exiftool \
     libgcc \
@@ -20,13 +19,10 @@ RUN apk add --no-cache \
     --repository=http://dl-cdn.alpinelinux.org/alpine/edge/testing/ \
     onnxruntime
 
-# 2. Create the /app directory and set up the library
 WORKDIR /app
-COPY --from=builder /x3 /x3
 
-# 3. Create a symlink or copy the library to the specific path your Go app expects
-# Alpine installs it to /usr/lib/libonnxruntime.so.X.X.X
-# We ensure a copy exists at /app/libonnxruntime.so to satisfy your error message
-RUN cp /usr/lib/libonnxruntime.so* /app/libonnxruntime.so
+RUN find /usr/lib/ -name "libonnxruntime.so*" -type f -exec cp {} /app/libonnxruntime.so \;
+
+COPY --from=builder /x3 /x3
 
 CMD ["/x3"]
