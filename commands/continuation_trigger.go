@@ -30,7 +30,7 @@ func shouldTriggerContinuation(cache *db.ChannelCache, content string) bool {
 		History:         cacheHistoryForContinuation(cache),
 		Config:          cfg,
 	})
-	slog.Debug("continuation trigger decision", "trigger", decision.Trigger, "reason", decision.Reason, "score", decision.Score)
+	slog.Info("continuation trigger decision", "trigger", decision.Trigger, "reason", decision.Reason, "score", decision.Score)
 	return decision.Trigger
 }
 
