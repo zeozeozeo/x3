@@ -35,6 +35,20 @@ var embeddingCache = struct {
 	entries: make(map[string][]float32),
 }
 
+var defaultContinuationPrompts = []string{
+	"are you listening to me",
+	"are you there",
+	"are you still there",
+	"can you hear me",
+	"did you hear me",
+	"did you see my message",
+	"please answer me",
+	"answer me",
+	"respond to me",
+	"why are you ignoring me",
+	"hello are you there",
+}
+
 func ShouldTrigger(input DecisionInput) Decision {
 	if !input.Enabled {
 		return Decision{Reason: "disabled"}
@@ -42,6 +56,9 @@ func ShouldTrigger(input DecisionInput) Decision {
 	cfg := input.Config
 	if cfg.GraceWindow == 0 {
 		cfg = LoadConfig()
+	}
+	if cfg.DefaultSimilarity == 0 {
+		cfg.DefaultSimilarity = defaultDefaultSimilarity
 	}
 	if input.Now.IsZero() {
 		input.Now = time.Now()
@@ -66,11 +83,6 @@ func ShouldTrigger(input DecisionInput) Decision {
 		return Decision{Reason: "empty_or_low_signal"}
 	}
 
-	refs := continuationReferences(input.History)
-	if len(refs) == 0 {
-		return Decision{Reason: "no_reference"}
-	}
-
 	embedder := input.Embedder
 	if embedder == nil {
 		var err error
@@ -88,6 +100,7 @@ func ShouldTrigger(input DecisionInput) Decision {
 	}
 
 	var best float32
+	refs := continuationReferences(input.History)
 	for _, ref := range refs {
 		refEmbedding, err := embedCached(embedder, ref)
 		if err != nil {
@@ -101,6 +114,25 @@ func ShouldTrigger(input DecisionInput) Decision {
 
 	if best >= cfg.Similarity {
 		return Decision{Trigger: true, Reason: "similarity", Score: best}
+	}
+
+	var bestDefault float32
+	for _, ref := range defaultContinuationPrompts {
+		refEmbedding, err := embedCached(embedder, ref)
+		if err != nil {
+			slog.Warn("MiniLM default continuation embedding failed", "err", err)
+			continue
+		}
+		if score := Cosine(candidateEmbedding, refEmbedding); score > bestDefault {
+			bestDefault = score
+		}
+	}
+	if bestDefault >= cfg.DefaultSimilarity {
+		return Decision{Trigger: true, Reason: "default_similarity", Score: bestDefault}
+	}
+
+	if len(refs) == 0 {
+		return Decision{Reason: "no_reference", Score: bestDefault}
 	}
 	return Decision{Reason: "below_threshold", Score: best}
 }

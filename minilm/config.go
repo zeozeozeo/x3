@@ -12,6 +12,7 @@ const (
 	defaultGraceWindow        = 20 * time.Second
 	defaultContinuationWindow = 10 * time.Minute
 	defaultSimilarity         = 0.3
+	defaultDefaultSimilarity  = 0.55
 	defaultModelPath          = "models/minilm/all-MiniLM-L6-v2.onnx"
 )
 
@@ -19,6 +20,7 @@ type Config struct {
 	GraceWindow        time.Duration
 	ContinuationWindow time.Duration
 	Similarity         float32
+	DefaultSimilarity  float32
 	ModelPath          string
 	RuntimeLibraryPath string
 }
@@ -28,6 +30,7 @@ func LoadConfig() Config {
 		GraceWindow:        envDuration("X3_CONTINUATION_GRACE", defaultGraceWindow),
 		ContinuationWindow: envDuration("X3_CONTINUATION_WINDOW", defaultContinuationWindow),
 		Similarity:         envFloat32("X3_MINILM_SIMILARITY", defaultSimilarity),
+		DefaultSimilarity:  envFloat32("X3_MINILM_DEFAULT_SIMILARITY", defaultDefaultSimilarity),
 		ModelPath:          envString("X3_MINILM_MODEL_PATH", defaultModelPath),
 		RuntimeLibraryPath: firstNonEmpty(strings.TrimSpace(os.Getenv("X3_MINILM_ONNX_RUNTIME_LIB")), strings.TrimSpace(os.Getenv("ONNXRUNTIME_LIB_PATH"))),
 	}
