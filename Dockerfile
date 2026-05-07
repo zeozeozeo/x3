@@ -29,7 +29,4 @@ COPY --from=builder /x3 /x3
 # We ensure a copy exists at /app/libonnxruntime.so to satisfy your error message
 RUN cp /usr/lib/libonnxruntime.so /app/libonnxruntime.so
 
-# Ensure the app can find the library in /app
-ENV LD_LIBRARY_PATH=/app:$LD_LIBRARY_PATH
-
 CMD ["/x3"]
