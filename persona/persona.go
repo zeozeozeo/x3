@@ -484,23 +484,24 @@ func (s InferenceSettings) Fixup() InferenceSettings {
 }
 
 type PersonaMeta struct {
-	Name           string            `json:"name,omitempty"`
-	Desc           string            `json:"-"`
-	Models         []string          `json:"model,omitempty"`
-	System         string            `json:"system,omitempty"`
-	FirstMes       []string          `json:"first_mes,omitempty"`
-	NextMes        *int              `json:"next_mes,omitempty"`
-	IsFirstMes     bool              `json:"is_first_mes,omitempty"`
-	Settings       InferenceSettings `json:"settings"`
-	Prepend        string            `json:"prepend,omitempty"`         // prefill assistant response
-	EnableImages   bool              `json:"enable_images"`             // disable random image narrations
-	ExcessiveSplit bool              `json:"excessive_split,omitempty"` // model produces too much <new_message> tags, punish it
-	ThinkingTraces bool              `json:"thinking_traces,omitempty"` // Whether reasoning.txt should be attached
-	Version        int               `json:"version,omitempty"`
-	NeedSummaries  bool              `json:"need_summaries,omitempty"` // Whether summaries should be generated
-	TavernCard     *TavernCardV2     `json:"tavern_card,omitempty"`    // Current SillyTavern character card
-	ChatPreset     *STChatPreset     `json:"chat_preset,omitempty"`    // Imported SillyTavern chat-completion preset
-	RenderHTML     bool              `json:"render_html,omitempty"`    // Whether LLM-authored HTML blocks should render to image attachments
+	Name                      string            `json:"name,omitempty"`
+	Desc                      string            `json:"-"`
+	Models                    []string          `json:"model,omitempty"`
+	System                    string            `json:"system,omitempty"`
+	FirstMes                  []string          `json:"first_mes,omitempty"`
+	NextMes                   *int              `json:"next_mes,omitempty"`
+	IsFirstMes                bool              `json:"is_first_mes,omitempty"`
+	Settings                  InferenceSettings `json:"settings"`
+	Prepend                   string            `json:"prepend,omitempty"`         // prefill assistant response
+	EnableImages              bool              `json:"enable_images"`             // disable random image narrations
+	EnableMiniLMContinuations bool              `json:"minilm_continuations"`      // Whether MiniLM should classify extended continuation triggers
+	ExcessiveSplit            bool              `json:"excessive_split,omitempty"` // model produces too much <new_message> tags, punish it
+	ThinkingTraces            bool              `json:"thinking_traces,omitempty"` // Whether reasoning.txt should be attached
+	Version                   int               `json:"version,omitempty"`
+	NeedSummaries             bool              `json:"need_summaries,omitempty"` // Whether summaries should be generated
+	TavernCard                *TavernCardV2     `json:"tavern_card,omitempty"`    // Current SillyTavern character card
+	ChatPreset                *STChatPreset     `json:"chat_preset,omitempty"`    // Imported SillyTavern chat-completion preset
+	RenderHTML                bool              `json:"render_html,omitempty"`    // Whether LLM-authored HTML blocks should render to image attachments
 }
 
 // this is kinda hacky, but this is just so i can update the default models
@@ -554,25 +555,28 @@ func (meta PersonaMeta) DeepCopy() PersonaMeta {
 
 var (
 	PersonaDefault = PersonaMeta{
-		Name:     "Default",
-		Desc:     "Use the default system prompt of a model",
-		Settings: InferenceSettings{Reasoning: true},
+		Name:                      "Default",
+		Desc:                      "Use the default system prompt of a model",
+		Settings:                  InferenceSettings{Reasoning: true},
+		EnableMiniLMContinuations: true,
 	}
 	PersonaProto = PersonaMeta{
-		Name:          "Protogen (Default)",
-		Desc:          "Freaking clanker",
-		Models:        clone(model.DefaultModels),
-		Settings:      InferenceSettings{Reasoning: true},
-		NeedSummaries: true,
-		RenderHTML:    true,
+		Name:                      "Protogen (Default)",
+		Desc:                      "Freaking clanker",
+		Models:                    clone(model.DefaultModels),
+		Settings:                  InferenceSettings{Reasoning: true},
+		NeedSummaries:             true,
+		RenderHTML:                true,
+		EnableMiniLMContinuations: true,
 	}
 	PersonaYapper = PersonaMeta{
-		Name:          "Yapper",
-		Desc:          "Brainrotted blud",
-		Models:        clone(model.DefaultModels),
-		Settings:      InferenceSettings{Reasoning: true},
-		NeedSummaries: true,
-		RenderHTML:    true,
+		Name:                      "Yapper",
+		Desc:                      "Brainrotted blud",
+		Models:                    clone(model.DefaultModels),
+		Settings:                  InferenceSettings{Reasoning: true},
+		NeedSummaries:             true,
+		RenderHTML:                true,
+		EnableMiniLMContinuations: true,
 	}
 	PersonaStableNarrator = PersonaMeta{
 		Name:   "Stable Narrator",

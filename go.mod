@@ -6,10 +6,12 @@ require (
 	github.com/PuerkitoBio/goquery v1.11.0
 	github.com/disgoorg/disgo v0.19.3
 	github.com/microcosm-cc/bluemonday v1.0.27
+	github.com/yalue/onnxruntime_go v1.25.0
 	github.com/yuin/goldmark v1.8.2
 	github.com/zeozeozeo/aihorde-go v0.0.0-20250402140353-8cc7927c847f
 	github.com/zeozeozeo/go-aiml v0.0.0-20260127140045-3d97ed2cc746
 	golang.org/x/net v0.53.0
+	golang.org/x/text v0.36.0
 	maunium.net/go/mautrix v0.27.0
 )
 
@@ -34,7 +36,6 @@ require (
 	github.com/tidwall/sjson v1.2.5 // indirect
 	go.mau.fi/util v0.9.8 // indirect
 	golang.org/x/exp v0.0.0-20260410095643-746e56fc9e2f // indirect
-	golang.org/x/text v0.36.0 // indirect
 )
 
 require (

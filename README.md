@@ -61,6 +61,19 @@ For encrypted rooms, keep `X3_MATRIX_DEVICE_ID` and `X3_MATRIX_CRYPTO_DB` stable
 > [!NOTE]
 > Currently LaTeX rendering in Matrix is only supported by a couple clients; develop.element.io, SchildiChat and Nheko should work with the experimental feature enabled.
 
+## Smart continuation triggers
+
+x3 can optionally use [MiniLM](https://huggingface.co/sentence-transformers/all-MiniLM-L6-v2) locally to determine whether a message in a server is a continuation of the previous topic.
+
+The ONNX model is loaded from disk but not included in the repo. Download a Sentence Transformers ONNX export, for example:
+
+```console
+cd models/minilm
+curl -L -o models/minilm/all-MiniLM-L6-v2.onnx https://huggingface.co/sentence-transformers/all-MiniLM-L6-v2/resolve/main/onnx/model_qint8_arm64.onnx
+```
+
+Set `X3_MINILM_MODEL_PATH` if you use another filename. ONNX Runtime must also be available as a shared library; set `X3_MINILM_ONNX_RUNTIME_LIB` or `ONNXRUNTIME_LIB_PATH` to its full path when it is not discoverable.
+
 ## Run in Docker (or Podman)
 
 ```console

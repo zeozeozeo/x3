@@ -417,11 +417,12 @@ func HandlePersonaNewSetButton(data discord.ButtonInteractionData, event *handle
 
 		personaName := cache.PersonaNewFlow.Card.PersonaName
 		cache.PersonaMeta = persona.PersonaMeta{
-			Name:          personaName,
-			TavernCard:    v1ToV2(cache.PersonaNewFlow.Card),
-			Models:        persona.PersonaProto.Models,
-			Settings:      persona.PersonaProto.Settings,
-			NeedSummaries: true,
+			Name:                      personaName,
+			TavernCard:                v1ToV2(cache.PersonaNewFlow.Card),
+			Models:                    persona.PersonaProto.Models,
+			Settings:                  persona.PersonaProto.Settings,
+			NeedSummaries:             true,
+			EnableMiniLMContinuations: persona.PersonaProto.EnableMiniLMContinuations,
 		}
 		flowMsgID := cache.PersonaNewFlow.FlowMessageID
 		cache.PersonaNewFlow = nil

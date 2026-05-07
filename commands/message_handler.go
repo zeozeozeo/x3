@@ -264,7 +264,7 @@ func OnMessageCreate(event *events.MessageCreate) {
 	// recent interaction?
 	if !shouldTriggerLlm && event.Message.ReferencedMessage == nil {
 		cache := db.GetChannelCache(event.ChannelID)
-		if time.Since(cache.LastInteraction) < 30*time.Second {
+		if shouldTriggerContinuation(cache, getMessageContent(event.Message)) {
 			shouldTriggerLlm = true
 		}
 	}
