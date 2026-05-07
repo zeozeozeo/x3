@@ -58,6 +58,20 @@ type linkMetadata struct {
 	Tags        []string `json:"tags,omitempty"`
 }
 
+type oEmbedResponse struct {
+	Title           string `json:"title"`
+	URL             string `json:"url"`
+	AuthorName      string `json:"author_name"`
+	AuthorURL       string `json:"author_url"`
+	HTML            string `json:"html"`
+	Type            string `json:"type"`
+	ProviderName    string `json:"provider_name"`
+	ProviderURL     string `json:"provider_url"`
+	ThumbnailURL    string `json:"thumbnail_url"`
+	ThumbnailWidth  int    `json:"thumbnail_width"`
+	ThumbnailHeight int    `json:"thumbnail_height"`
+}
+
 func augmentContentWithLinkMetadata(content string) string {
 	summaries := linkMetadataSummaries(content)
 	for _, summary := range summaries {
@@ -135,7 +149,8 @@ func getCachedLinkMetadataSummary(ctx context.Context, raw string) (string, erro
 		if entry.Error != "" {
 			ttl = linkMetadataFailureTTL
 		}
-		if now.Sub(entry.FetchedAt) < ttl {
+		staleKnownSiteFailure := entry.Error != "" && entry.Metadata == "" && shouldBypassCachedFailure(raw)
+		if !staleKnownSiteFailure && now.Sub(entry.FetchedAt) < ttl {
 			return entry.Metadata, nil
 		}
 	} else if !errors.Is(err, sql.ErrNoRows) {
@@ -166,11 +181,27 @@ func fetchLinkMetadataSummary(ctx context.Context, raw string) (string, error) {
 		return "", err
 	}
 
+	if isYouTubeURL(raw) {
+		if summary, err := fetchYouTubeOEmbedSummary(ctx, raw); err == nil && summary != "" {
+			return summary, nil
+		} else if err != nil {
+			slog.Debug("youtube oembed metadata failed, falling back to html", "err", err, "url", raw)
+		}
+	}
+	if isTwitterURL(raw) {
+		if summary, err := fetchTwitterOEmbedSummary(ctx, raw); err == nil && summary != "" {
+			return summary, nil
+		} else if err != nil {
+			slog.Debug("twitter oembed metadata failed, falling back to html", "err", err, "url", raw)
+		}
+	}
+
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, parsed.String(), nil)
 	if err != nil {
 		return "", err
 	}
-	req.Header.Set("User-Agent", "x3 link metadata fetcher")
+	req.Header.Set("User-Agent", "Mozilla/5.0 (compatible; x3bot/1.0)")
+	req.Header.Set("Accept-Language", "en-US,en;q=0.9")
 	req.Header.Set("Accept", "text/html,application/xhtml+xml,application/json;q=0.5,*/*;q=0.1")
 
 	resp, err := linkMetadataClient.Do(req)
@@ -204,6 +235,143 @@ func fetchLinkMetadataSummary(ctx context.Context, raw string) (string, error) {
 		return "", err
 	}
 	return formatLinkMetadata(meta), nil
+}
+
+func fetchYouTubeOEmbedSummary(ctx context.Context, raw string) (string, error) {
+	endpoint, err := url.Parse("https://www.youtube.com/oembed")
+	if err != nil {
+		return "", err
+	}
+	q := endpoint.Query()
+	q.Set("url", raw)
+	q.Set("format", "json")
+	endpoint.RawQuery = q.Encode()
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint.String(), nil)
+	if err != nil {
+		return "", err
+	}
+	req.Header.Set("User-Agent", "Mozilla/5.0 (compatible; x3bot/1.0)")
+	req.Header.Set("Accept", "application/json")
+	req.Header.Set("Accept-Language", "en-US,en;q=0.9")
+
+	resp, err := linkMetadataClient.Do(req)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return "", fmt.Errorf("oembed HTTP %d", resp.StatusCode)
+	}
+	var payload oEmbedResponse
+	if err := json.NewDecoder(io.LimitReader(resp.Body, 64*1024)).Decode(&payload); err != nil {
+		return "", err
+	}
+	meta := linkMetadata{
+		URL:      raw,
+		FinalURL: raw,
+		Title:    payload.Title,
+		SiteName: firstNonEmpty(payload.ProviderName, "YouTube"),
+		Type:     payload.Type,
+		Image:    payload.ThumbnailURL,
+		Author:   payload.AuthorName,
+	}
+	return formatLinkMetadata(meta), nil
+}
+
+func isYouTubeURL(raw string) bool {
+	parsed, err := url.Parse(raw)
+	if err != nil {
+		return false
+	}
+	host := strings.ToLower(parsed.Hostname())
+	return host == "youtube.com" ||
+		host == "www.youtube.com" ||
+		host == "m.youtube.com" ||
+		host == "youtu.be" ||
+		strings.HasSuffix(host, ".youtube.com")
+}
+
+func fetchTwitterOEmbedSummary(ctx context.Context, raw string) (string, error) {
+	endpoint, err := url.Parse("https://publish.twitter.com/oembed")
+	if err != nil {
+		return "", err
+	}
+	q := endpoint.Query()
+	q.Set("url", raw)
+	q.Set("omit_script", "true")
+	endpoint.RawQuery = q.Encode()
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint.String(), nil)
+	if err != nil {
+		return "", err
+	}
+	req.Header.Set("User-Agent", "Mozilla/5.0 (compatible; x3bot/1.0)")
+	req.Header.Set("Accept", "application/json")
+	req.Header.Set("Accept-Language", "en-US,en;q=0.9")
+
+	resp, err := linkMetadataClient.Do(req)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return "", fmt.Errorf("oembed HTTP %d", resp.StatusCode)
+	}
+	var payload oEmbedResponse
+	if err := json.NewDecoder(io.LimitReader(resp.Body, 128*1024)).Decode(&payload); err != nil {
+		return "", err
+	}
+	text, published := parseTwitterOEmbedHTML(payload.HTML)
+	meta := linkMetadata{
+		URL:         raw,
+		FinalURL:    payload.URL,
+		Title:       twitterTitle(payload),
+		Description: text,
+		SiteName:    firstNonEmpty(payload.ProviderName, "Twitter/X"),
+		Type:        payload.Type,
+		Author:      payload.AuthorName,
+		PublishedAt: published,
+	}
+	return formatLinkMetadata(meta), nil
+}
+
+func parseTwitterOEmbedHTML(raw string) (text, published string) {
+	doc, err := goquery.NewDocumentFromReader(strings.NewReader(raw))
+	if err != nil {
+		return "", ""
+	}
+	text = cleanMetadataValue(doc.Find("blockquote.twitter-tweet p").First().Text())
+	doc.Find("blockquote.twitter-tweet > a").EachWithBreak(func(_ int, s *goquery.Selection) bool {
+		published = cleanMetadataValue(s.Text())
+		return published == ""
+	})
+	return text, published
+}
+
+func twitterTitle(payload oEmbedResponse) string {
+	if payload.AuthorName == "" {
+		return firstNonEmpty(payload.ProviderName, "X post")
+	}
+	return payload.AuthorName + " on X"
+}
+
+func isTwitterURL(raw string) bool {
+	parsed, err := url.Parse(raw)
+	if err != nil {
+		return false
+	}
+	host := strings.ToLower(parsed.Hostname())
+	return host == "x.com" ||
+		host == "www.x.com" ||
+		host == "twitter.com" ||
+		host == "www.twitter.com" ||
+		host == "mobile.twitter.com" ||
+		strings.HasSuffix(host, ".twitter.com")
+}
+
+func shouldBypassCachedFailure(raw string) bool {
+	return isYouTubeURL(raw) || isTwitterURL(raw)
 }
 
 func parseLinkMetadata(r io.Reader, sourceURL, finalURL string) (linkMetadata, error) {
