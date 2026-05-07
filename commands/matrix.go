@@ -699,7 +699,7 @@ func (b *MatrixBot) helpText(isDM bool) string {
 		b.commandUsage("persona", isDM) + " card <url> | preset <url>",
 		b.commandUsage("persona", isDM) + " context|temperature|top_p|frequency_penalty|seed <value>",
 		b.commandUsage("persona", isDM) + " images|thinking|reasoning|html on|off",
-		b.commandUsage("models", isDM) + "                 list available model short names",
+		b.commandUsage("models", isDM) + " list available model short names",
 		b.commandUsage("context", isDM) + " add|list|clear|delete|get|edit ...",
 		b.commandUsage("lobotomy", isDM) + " [amount] [reset_persona]",
 		b.commandUsage("regenerate", isDM) + " [prepend]",
