@@ -72,7 +72,7 @@ cd models/minilm
 curl -L -o models/minilm/all-MiniLM-L6-v2.onnx https://huggingface.co/sentence-transformers/all-MiniLM-L6-v2/resolve/main/onnx/model_qint8_arm64.onnx
 ```
 
-Set `X3_MINILM_MODEL_PATH` if you use another filename. ONNX Runtime must also be available as a shared library; set `X3_MINILM_ONNX_RUNTIME_LIB` or `ONNXRUNTIME_LIB_PATH` to its full path when it is not discoverable.
+Set `X3_MINILM_MODEL_PATH` if you use another filename. ONNX Runtime must also be available as a shared library; set `X3_MINILM_ONNX_RUNTIME_LIB` or `ONNXRUNTIME_LIB_PATH` to its full path when it is not discoverable (But if you use the Alpine docker image, it already installs it for you, so you only need to fetch the model).
 
 ## Run in Docker (or Podman)
 
