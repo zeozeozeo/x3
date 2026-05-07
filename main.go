@@ -52,6 +52,13 @@ func main() {
 	slog.Info("x3 booting up...")
 	slog.Info("disgo version", "version", disgo.Version)
 
+	stopDotEnvWatcher, err := startDotEnvWatcher(".env")
+	if err != nil {
+		slog.Warn("failed to start .env watcher", "err", err)
+	} else {
+		defer stopDotEnvWatcher()
+	}
+
 	if err := db.InitDB(dbPath); err != nil {
 		slog.Error("error while initializing database", "err", err)
 		panic(err)
