@@ -37,6 +37,7 @@ A Discord LLM roleplay and utility bot
 - Automatically preserves longer context history by summarizing previous messages
 - Ability to export and import conversations `/chatlog export`, `/chatlog import`, `/lobotomy`
 - Can render & embed HTML/SVG blocks (like SillyTavern's frontend does, but in Discord) with [Gotenberg](https://gotenberg.dev/)
+- Has a small local embeddings model that determines whether the model should respond after an interaction for some time (10min by default)
 - Free and Discord based, [add it](https://discord.com/oauth2/authorize?client_id=1307635432632094740)
 - Also is a Matrix bot: [@x3_bot:matrix.org](https://matrix.to/#/@x3_bot:matrix.org)
 
@@ -63,7 +64,7 @@ For encrypted rooms, keep `X3_MATRIX_DEVICE_ID` and `X3_MATRIX_CRYPTO_DB` stable
 
 ## Smart continuation triggers
 
-x3 can optionally use [MiniLM](https://huggingface.co/sentence-transformers/all-MiniLM-L6-v2) locally to determine whether a message in a server is a continuation of the previous topic.
+x3 can optionally use [MiniLM](https://huggingface.co/sentence-transformers/all-MiniLM-L6-v2) locally to determine whether a message in a server is a continuation of the previous topic. MiniLM is ~20MB in size and can run practically realtime on my RPi 4's CPU.
 
 The ONNX model is loaded from disk but not included in the repo. Download a Sentence Transformers ONNX export, for example:
 
