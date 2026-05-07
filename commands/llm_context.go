@@ -191,6 +191,16 @@ func getMessageContent(message discord.Message) string {
 
 	content = sb.String()
 
+	for _, sticker := range message.StickerItems {
+		if sticker.Name == "" {
+			continue
+		}
+		if content != "" {
+			content += "\n"
+		}
+		content += fmt.Sprintf("sent a sticker: %q", sticker.Name)
+	}
+
 	// process text attachments
 	if !message.Author.Bot {
 		for i, attachment := range message.Attachments {
