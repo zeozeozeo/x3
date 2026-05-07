@@ -11,6 +11,6 @@ RUN --mount=type=cache,target=/root/.cache/go-build \
 
 # Final Stage
 FROM alpine:3.23
-RUN apk add --no-cache exiftool libgcc
+RUN apk add --no-cache exiftool libgcc libstdc++
 COPY --from=builder /x3 /x3
 CMD ["/x3"]
