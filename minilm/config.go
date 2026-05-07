@@ -29,7 +29,7 @@ func LoadConfig() Config {
 		ContinuationWindow: envDuration("X3_CONTINUATION_WINDOW", defaultContinuationWindow),
 		Similarity:         envFloat32("X3_MINILM_SIMILARITY", defaultSimilarity),
 		ModelPath:          envString("X3_MINILM_MODEL_PATH", defaultModelPath),
-		RuntimeLibraryPath: firstNonEmpty(strings.TrimSpace(os.Getenv("X3_MINILM_ONNX_RUNTIME_LIB")), strings.TrimSpace(os.Getenv("ONNXRUNTIME_LIB_PATH")), "libonnxruntime.so"),
+		RuntimeLibraryPath: firstNonEmpty(strings.TrimSpace(os.Getenv("X3_MINILM_ONNX_RUNTIME_LIB")), strings.TrimSpace(os.Getenv("ONNXRUNTIME_LIB_PATH"))),
 	}
 }
 
