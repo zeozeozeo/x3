@@ -101,6 +101,45 @@ func addImageSources(llmer *llm.Llmer, content string, attachments []discord.Att
 	addImageLinks(llmer, content)
 }
 
+func appendContextLine(content, line string) string {
+	if line == "" {
+		return content
+	}
+	if content != "" {
+		content += "\n"
+	}
+	return content + line
+}
+
+func messageReactionEmoji(reaction discord.MessageReaction) string {
+	if reaction.Emoji.Name == "" {
+		return ""
+	}
+	if reaction.Emoji.ID == 0 {
+		return reaction.Emoji.Name
+	}
+	return reaction.Emoji.Reaction()
+}
+
+func messageReactionsContext(reactions []discord.MessageReaction) string {
+	if len(reactions) == 0 {
+		return ""
+	}
+
+	parts := make([]string, 0, len(reactions))
+	for _, reaction := range reactions {
+		emoji := messageReactionEmoji(reaction)
+		if emoji == "" || reaction.Count <= 0 {
+			continue
+		}
+		parts = append(parts, fmt.Sprintf("%s (%d)", emoji, reaction.Count))
+	}
+	if len(parts) == 0 {
+		return ""
+	}
+	return "reactions: " + strings.Join(parts, ", ")
+}
+
 func imageURLsFromContent(content string) []string {
 	matches := imageURLRegexp.FindAllString(content, -1)
 	if len(matches) == 0 {
@@ -195,11 +234,10 @@ func getMessageContent(message discord.Message) string {
 		if sticker.Name == "" {
 			continue
 		}
-		if content != "" {
-			content += "\n"
-		}
-		content += fmt.Sprintf("sent a sticker: %q", sticker.Name)
+		content = appendContextLine(content, fmt.Sprintf("sent a sticker: %q", sticker.Name))
 	}
+
+	content = appendContextLine(content, messageReactionsContext(message.Reactions))
 
 	// process text attachments
 	if !message.Author.Bot {
