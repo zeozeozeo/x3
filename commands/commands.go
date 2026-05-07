@@ -7,8 +7,6 @@ import (
 	"github.com/disgoorg/disgo/discord"
 	"github.com/disgoorg/disgo/handler"
 	"github.com/zeozeozeo/x3/model"
-
-	_ "github.com/mattn/go-sqlite3"
 )
 
 var AllCommands []discord.ApplicationCommandCreate = []discord.ApplicationCommandCreate{

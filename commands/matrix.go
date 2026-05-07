@@ -1415,7 +1415,7 @@ func (b *MatrixBot) handleLlm(ctx context.Context, msg *matrixMessage, isRegener
 		promptContext := matrixPromptContext(cache)
 		p := persona.GetPersonaByMeta(cache.PersonaMeta, msg.Author, b.isDMRoom(ctx, msg.RoomID), promptContext)
 		llmer.SetPersona(p, &cache.PersonaMeta.ExcessiveSplit)
-		content := matrixFormatMsg(msg.Content, msg.Author, msg.ReplyTo)
+		content := matrixFormatMsg(augmentContentWithLinkMetadata(msg.Content), msg.Author, msg.ReplyTo)
 		llmer.AddMessageWithID(llm.RoleUser, content, 0, msg.EventID.String())
 		if len(llmer.Messages) > 0 {
 			added := &llmer.Messages[len(llmer.Messages)-1]

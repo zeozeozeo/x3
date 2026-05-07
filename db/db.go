@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+
+	_ "github.com/mattn/go-sqlite3"
 )
 
 // DB is the global database connection pool for the commands package.
@@ -24,6 +26,17 @@ func InitDB(dataSourceName string) error {
 	}
 	slog.Info("Database connection established", slog.String("dataSource", dataSourceName))
 
+	pragmas := []string{
+		`PRAGMA journal_mode=WAL`,
+		`PRAGMA synchronous=NORMAL`,
+		`PRAGMA busy_timeout=5000`,
+	}
+	for i, pragma := range pragmas {
+		if _, err = DB.Exec(pragma); err != nil {
+			return fmt.Errorf("failed to execute pragma %d: %w", i+1, err)
+		}
+	}
+
 	// Run migrations/table creations
 	migrations := []string{
 		`CREATE TABLE IF NOT EXISTS whitelist ( user_id TEXT PRIMARY KEY )`,
@@ -38,6 +51,7 @@ func InitDB(dataSourceName string) error {
 		`CREATE TABLE IF NOT EXISTS antiscam_servers ( server_id TEXT PRIMARY KEY )`,
 		`CREATE TABLE IF NOT EXISTS image_descriptions ( image_url TEXT PRIMARY KEY, description TEXT, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP )`,
 		`CREATE TABLE IF NOT EXISTS user_cache ( user_id TEXT PRIMARY KEY, cache BLOB )`,
+		`CREATE TABLE IF NOT EXISTS link_metadata ( url TEXT PRIMARY KEY, metadata BLOB, fetched_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP )`,
 	}
 
 	for i, migration := range migrations {

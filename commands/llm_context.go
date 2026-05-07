@@ -549,6 +549,7 @@ func addContextMessages(
 			} else {
 				content = getMessageContent(msg)
 			}
+			content = augmentContentWithLinkMetadata(content)
 
 			reference := msg.ReferencedMessage
 			// don't format reply if it refers to the immediately preceding assistant message

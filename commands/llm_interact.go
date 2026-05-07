@@ -285,7 +285,8 @@ func handleLlmInteraction2(
 	if reference != nil && reference.ID == lastAssistantMessageID {
 		reference = nil
 	}
-	llmer.AddMessage(llm.RoleUser, formatMsg(content, username, reference), messageID)
+	contentWithLinks := augmentContentWithLinkMetadata(content)
+	llmer.AddMessage(llm.RoleUser, formatMsg(contentWithLinks, username, reference), messageID)
 	if len(llmer.Messages) > 0 {
 		msg := &llmer.Messages[len(llmer.Messages)-1]
 		msg.Author = username
