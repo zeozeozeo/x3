@@ -668,6 +668,8 @@ func (b *MatrixBot) handleCommand(ctx context.Context, msg *matrixMessage, raw s
 		return b.handleLlm(ctx, msg, true, rest)
 	case "stats":
 		return b.handleStatsCommand(ctx, msg)
+	case "models":
+		return b.sendText(ctx, msg.RoomID, msg.EventID, b.matrixModelListText(isDM))
 	case "chatlog":
 		return b.handleChatlogCommand(ctx, msg, rest, isDM)
 	case "blacklist":
@@ -697,6 +699,7 @@ func (b *MatrixBot) helpText(isDM bool) string {
 		b.commandUsage("persona", isDM) + " card <url> | preset <url>",
 		b.commandUsage("persona", isDM) + " context|temperature|top_p|frequency_penalty|seed <value>",
 		b.commandUsage("persona", isDM) + " images|thinking|reasoning|html on|off",
+		b.commandUsage("models", isDM) + "                 list available model short names",
 		b.commandUsage("context", isDM) + " add|list|clear|delete|get|edit ...",
 		b.commandUsage("lobotomy", isDM) + " [amount] [reset_persona]",
 		b.commandUsage("regenerate", isDM) + " [prepend]",
@@ -711,6 +714,7 @@ func (b *MatrixBot) personaHelpText(isDM bool) string {
 		base + "                         show current persona settings",
 		base + " help                    show this help",
 		base + " list                    list built-in personas",
+		base + " models                  list available model short names",
 		base + " set <name>              set persona",
 		base + " model <model>           set model by name or command",
 		base + " system <prompt>         set custom system prompt",
@@ -726,6 +730,37 @@ func (b *MatrixBot) personaHelpText(isDM bool) string {
 		base + " reasoning on|off        toggle model-side reasoning",
 		base + " html on|off             toggle HTML rendering",
 	}, "\n")
+}
+
+func (b *MatrixBot) matrixModelListText(isDM bool) string {
+	var list strings.Builder
+	list.WriteString("Available models:\n")
+	for _, m := range model.AllModels {
+		if strings.TrimSpace(m.Command) == "" {
+			continue
+		}
+		fmt.Fprintf(&list, "%s - %s", m.Command, m.Name)
+		flags := make([]string, 0, 4)
+		if m.Name == model.DefaultModel {
+			flags = append(flags, "default")
+		}
+		if m.Whitelisted {
+			flags = append(flags, "whitelist")
+		}
+		if m.Vision {
+			flags = append(flags, "vision")
+		}
+		if m.Reasoning {
+			flags = append(flags, "reasoning")
+		}
+		if len(flags) > 0 {
+			fmt.Fprintf(&list, " (%s)", strings.Join(flags, ", "))
+		}
+		list.WriteString("\n")
+	}
+	list.WriteString("\nSet one with:\n")
+	list.WriteString(b.commandUsage("persona", isDM) + " model <short name>")
+	return strings.TrimSpace(list.String())
 }
 
 func (b *MatrixBot) contextHelpText(isDM bool) string {
@@ -790,6 +825,9 @@ func (b *MatrixBot) handlePersonaCommand(ctx context.Context, msg *matrixMessage
 	}
 	if strings.Contains(actionToken.Text, "=") {
 		return b.sendText(ctx, msg.RoomID, msg.EventID, matrixCommandDiagnostic(diagCtx.Raw(rest), diagCtx.Token(actionToken), "invalid persona command syntax", "use a space between the setting and value, not `=`. Example: `"+b.commandUsage("persona", b.isDMRoom(ctx, msg.RoomID))+" model glm5`"))
+	}
+	if action == "models" {
+		return b.sendText(ctx, msg.RoomID, msg.EventID, b.matrixModelListText(b.isDMRoom(ctx, msg.RoomID)))
 	}
 	if action == "list" {
 		var list strings.Builder
