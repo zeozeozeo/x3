@@ -193,6 +193,11 @@ func (lhs Usage) Add(rhs Usage) Usage {
 	}
 }
 
+func (u Usage) WithTotal() Usage {
+	u.TotalTokens = u.PromptTokens + u.ResponseTokens
+	return u
+}
+
 func (u Usage) IsEmpty() bool {
 	return u.PromptTokens == 0 && u.ResponseTokens == 0 && u.TotalTokens == 0
 }
@@ -557,33 +562,85 @@ func (l Llmer) convertMessages(hasVision, supportsImageURL bool, prepend, search
 	return messages
 }
 
+func tokenCount(m model.Model, s string) int {
+	if s == "" {
+		return 0
+	}
+	count, err := m.Tokenizer().Count(s)
+	if err == nil {
+		return count
+	}
+	ids, _, err := m.Tokenizer().Encode(s)
+	if err != nil {
+		return 0
+	}
+	return len(ids)
+}
+
+func estimateChatMessageTokens(m model.Model, msg openai.ChatCompletionMessage) int {
+	tokens := tokenCount(m, msg.Content)
+	for _, part := range msg.MultiContent {
+		if part.Type == openai.ChatMessagePartTypeText {
+			tokens += tokenCount(m, part.Text)
+		}
+	}
+	return tokens
+}
+
+func estimateChatPromptTokens(m model.Model, messages []openai.ChatCompletionMessage) int {
+	tokens := 0
+	for _, msg := range messages {
+		tokens += estimateChatMessageTokens(m, msg)
+	}
+	return tokens
+}
+
+func estimateCompletionUsage(m model.Model, messages []openai.ChatCompletionMessage, response string) Usage {
+	start := time.Now()
+	usage := Usage{
+		PromptTokens:   estimateChatPromptTokens(m, messages),
+		ResponseTokens: tokenCount(m, response),
+	}.WithTotal()
+	slog.Debug("estimated completion token usage", slog.String("usage", usage.String()), slog.Duration("in", time.Since(start)))
+	return usage
+}
+
+func completionTextForUsage(reasoning, text string) string {
+	reasoning = strings.TrimSpace(reasoning)
+	text = strings.TrimSpace(text)
+	if reasoning == "" {
+		return text
+	}
+	if text == "" {
+		return reasoning
+	}
+	return reasoning + "\n" + text
+}
+
 func (l Llmer) estimateUsage(m model.Model) Usage {
 	start := time.Now()
 	var usage Usage
-	codec := m.Tokenizer()
-
-	var responseMsg *Message
+	responseIdx := -1
 	numImages := 0
-	for _, msg := range l.Messages {
-		if msg.Role == RoleAssistant {
-			responseMsg = &msg
-			continue
-		}
-		if ids, _, err := codec.Encode(msg.Content); err == nil {
-			usage.PromptTokens += len(ids)
-			if len(msg.Images) > 0 {
-				numImages = len(msg.Images)
-			}
+	for i := len(l.Messages) - 1; i >= 0; i-- {
+		if l.Messages[i].Role == RoleAssistant {
+			responseIdx = i
+			break
 		}
 	}
 
-	if responseMsg != nil {
-		if ids, _, err := codec.Encode(responseMsg.Content); err == nil {
-			usage.ResponseTokens = len(ids)
+	for i, msg := range l.Messages {
+		if i == responseIdx {
+			usage.ResponseTokens = tokenCount(m, msg.Content)
+		} else {
+			usage.PromptTokens += tokenCount(m, msg.Content)
+		}
+		if len(msg.Images) > 0 {
+			numImages += len(msg.Images)
 		}
 	}
 
-	usage.TotalTokens = usage.PromptTokens + usage.ResponseTokens
+	usage = usage.WithTotal()
 	slog.Debug("estimated token usage", slog.String("usage", usage.String()), slog.Duration("in", time.Since(start)), slog.Int("images", numImages))
 	return usage
 }
@@ -643,6 +700,20 @@ func (l *Llmer) requestCompletionInternal2(
 		ResponseTokens: response.Usage.CompletionTokens,
 		TotalTokens:    response.Usage.TotalTokens,
 	}
+	estimatedUsage := estimateCompletionUsage(m, req.Messages, completionTextForUsage(reasoning, text))
+	if usage.IsEmpty() {
+		usage = estimatedUsage
+	} else {
+		if usage.PromptTokens <= 0 {
+			usage.PromptTokens = estimatedUsage.PromptTokens
+		}
+		if usage.ResponseTokens <= 1 {
+			usage.ResponseTokens = estimatedUsage.ResponseTokens
+		}
+		if usage.TotalTokens <= 0 || usage.TotalTokens < usage.PromptTokens+usage.ResponseTokens {
+			usage = usage.WithTotal()
+		}
+	}
 
 	elapsed := time.Since(completionStart)
 	tokPerSec := 0.0
@@ -658,33 +729,19 @@ func (l *Llmer) requestCompletionInternal2(
 	if searchDepth < 4 {
 		if search := extractDiscordSearch(unescaped); search != "" {
 			results, citemap := l.getDiscordSearchResults(ctx, search)
-			return l.requestCompletionInternal2(
-				m,
-				codename,
-				provider,
-				settings,
-				client,
-				prepend,
-				ctx,
-				searchDepth+1,
-				citemap,
-				results,
+			nextRes, nextUsage, nextErr := l.requestCompletionInternal2(
+				m, codename, provider, settings, client, prepend, ctx,
+				searchDepth+1, citemap, results,
 			)
+			return nextRes, usage.Add(nextUsage), nextErr
 		}
 		if search := extractSearch(unescaped); search != "" {
 			results, citemap := getSearchResults(search)
-			return l.requestCompletionInternal2(
-				m,
-				codename,
-				provider,
-				settings,
-				client,
-				prepend,
-				ctx,
-				searchDepth+1,
-				citemap,
-				results,
+			nextRes, nextUsage, nextErr := l.requestCompletionInternal2(
+				m, codename, provider, settings, client, prepend, ctx,
+				searchDepth+1, citemap, results,
 			)
+			return nextRes, usage.Add(nextUsage), nextErr
 		}
 	}
 
@@ -1016,6 +1073,9 @@ func (l *Llmer) RequestCompletion(models []model.Model, settings persona.Inferen
 				// unrealistic
 				estimatedUsage := l.estimateUsage(m)
 				usage.ResponseTokens = estimatedUsage.ResponseTokens
+				usage = usage.WithTotal()
+			} else if usage.TotalTokens <= 0 || usage.TotalTokens < usage.PromptTokens+usage.ResponseTokens {
+				usage = usage.WithTotal()
 			}
 
 			slog.Info("request successful", "model", m.Name, "provider", provider.Name, "usage", usage.String())
