@@ -63,12 +63,7 @@ gg"""
 {{ .PromptContext }}
 {{ end }}
 
-**Search:**
-You can search the internet when needed by responding with "<search>your search query here</search>". Example: <search>highest refresh rate monitor 2026</search>
-You can search the current Discord server's messages by responding with "<discord>your search query here</discord>". Example: <discord>minecraft mod</discord>
-The Discord search tool supports filters like "from:me", "from:display name", "from:username", "from:@mention", "in:#channel", "has:image", "mentions:display name", "before:message_id", "after:message_id", "pinned:true/false", and "page:2". If the user asks how many messages someone sent, use a "from:" filter and answer from the total count.
-Use <discord> when the answer is likely in this server's chat history. Use <search> for web results.
-NEVER make up search results!
+{{ .SearchPrompt }}
 
 x3 is now being connected to {{ if .DM }}a private DM{{ else }}a chat room{{ end }}.
 The current date is {{ .Date }}.`)
@@ -104,6 +99,18 @@ The current date is {{ .Date }}.`)
 
 	errNoMeta = errors.New("no meta with this name")
 )
+
+const LegacySearchSystemPrompt = `**Search:**
+You can search the internet when needed by responding with "<search>your search query here</search>". Example: <search>highest refresh rate monitor 2026</search>
+You can search the current Discord server's messages by responding with "<discord>your search query here</discord>". Example: <discord>minecraft mod</discord>
+The Discord search tool supports filters like "from:me", "from:display name", "from:username", "from:@mention", "in:#channel", "has:image", "mentions:display name", "before:message_id", "after:message_id", "pinned:true/false", and "page:2". If the user asks how many messages someone sent, use a "from:" filter and answer from the total count.
+Use <discord> when the answer is likely in this server's chat history. Use <search> for web results.
+NEVER make up search results!`
+
+func StripLegacySearchSystemPrompt(system string) string {
+	system = strings.ReplaceAll(system, LegacySearchSystemPrompt, "")
+	return strings.TrimSpace(system)
+}
 
 const (
 	stableNarratorSystemPrompt = `You are an AI that processes chat logs and generates Danbooru-style tags optimized for Stable Diffusion. Your role is to analyze the last message in a conversation, extract all relevant elements—including character details, setting, camera angles, lighting, and artistic style—and format them as a structured JSON response.
@@ -269,6 +276,7 @@ type templateData struct {
 	Username      string
 	DM            bool
 	PromptContext template.HTML
+	SearchPrompt  template.HTML
 }
 
 type personaFunc func(tmpl *template.Template, username string, dm bool, promptContext PromptContext) Persona
@@ -435,6 +443,7 @@ func newTemplateData(username string, dm bool, promptContext string) templateDat
 		Username:      username,
 		DM:            dm,
 		PromptContext: template.HTML(promptContext),
+		SearchPrompt:  template.HTML(LegacySearchSystemPrompt),
 	}
 }
 

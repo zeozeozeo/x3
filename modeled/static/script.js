@@ -126,6 +126,7 @@ function renderModels() {
                 ${model.vision ? '<span class="feature-tag vision">Vision</span>' : ""}
                 ${model.fallback_vision_model ? `<span class="feature-tag vision">Fallback: ${escapeHtml(model.fallback_vision_model)}</span>` : ""}
                 ${model.reasoning ? '<span class="feature-tag reasoning">Reasoning</span>' : ""}
+                ${Object.values(model.providers || {}).some((provider) => provider.native_tool_calling) ? '<span class="feature-tag tools">Native Tools</span>' : ""}
                 ${model.is_markov ? '<span class="feature-tag">Markov</span>' : ""}
                 ${model.is_eliza ? '<span class="feature-tag">Eliza</span>' : ""}
                 ${model.is_alice ? '<span class="feature-tag">Alice</span>' : ""}
@@ -654,7 +655,11 @@ function populateModelForm(model) {
 
   if (model.providers) {
     Object.entries(model.providers).forEach(([providerName, provider]) => {
-      addProviderField(providerName, provider.codenames?.join(", ") || "");
+      addProviderField(
+        providerName,
+        provider.codenames?.join(", ") || "",
+        provider.native_tool_calling || false,
+      );
     });
   }
 }
@@ -681,7 +686,7 @@ function populateFallbackVisionOptions(selectedName) {
   });
 }
 
-function addProviderField(providerName = "", codenames = "") {
+function addProviderField(providerName = "", codenames = "", nativeToolCalling = false) {
   const container = document.getElementById("providers-container");
 
   const html = `
@@ -691,6 +696,10 @@ function addProviderField(providerName = "", codenames = "") {
                 <button type="button" class="remove-provider" onclick="removeProviderField(this)">x</button>
             </div>
             <input type="text" class="codenames-input" placeholder="Codenames (comma-separated)" value="${escapeHtml(codenames)}">
+            <label class="provider-option">
+                <input type="checkbox" class="native-tool-calling-input" ${nativeToolCalling ? "checked" : ""}>
+                Native tool calling
+            </label>
         </div>
     `;
 
@@ -727,6 +736,9 @@ function saveModel() {
   providerElements.forEach((element) => {
     const providerName = element.querySelector(".provider-name").value.trim();
     const codenames = element.querySelector(".codenames-input").value.trim();
+    const nativeToolCalling = element.querySelector(
+      ".native-tool-calling-input",
+    ).checked;
 
     if (providerName) {
       model.providers[providerName] = {
@@ -737,6 +749,9 @@ function saveModel() {
               .filter((s) => s)
           : [],
       };
+      if (nativeToolCalling) {
+        model.providers[providerName].native_tool_calling = true;
+      }
     }
   });
 

@@ -241,6 +241,11 @@ header h1 {
   color: #f39c12;
 }
 
+.feature-tag.tools {
+  background: #eef3ff;
+  color: #3454d1;
+}
+
 .feature-tag.llama {
   background: #f4ecf7;
   color: #8e44ad;
@@ -431,6 +436,15 @@ header h1 {
 
 .codenames-input::placeholder {
   color: #95a5a6;
+}
+
+.provider-option {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+  font-size: 13px;
+  color: #34495e;
 }
 
 .status-message {

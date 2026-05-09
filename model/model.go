@@ -110,7 +110,8 @@ const (
 )
 
 type ModelProvider struct {
-	Codenames []string `json:"codenames"`
+	Codenames         []string `json:"codenames"`
+	NativeToolCalling bool     `json:"native_tool_calling,omitempty"`
 }
 
 type Model struct {

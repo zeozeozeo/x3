@@ -3,6 +3,7 @@ package llm
 import (
 	"context"
 	"embed"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"html"
@@ -647,6 +648,95 @@ func (l Llmer) estimateUsage(m model.Model) Usage {
 
 var weirdEndRegexp = regexp.MustCompile(`(>[\./w]+)$`)
 
+const (
+	toolNameWebSearch     = "web_search"
+	toolNameDiscordSearch = "discord_search"
+)
+
+var searchTools = []openai.Tool{
+	{
+		Type: openai.ToolTypeFunction,
+		Function: &openai.FunctionDefinition{
+			Name:        toolNameWebSearch,
+			Description: "Search the web for current or external information. Use this for web results. Returns numbered sources that can be cited as [1], [2], etc.",
+			Parameters: map[string]any{
+				"type":     "object",
+				"required": []string{"query"},
+				"properties": map[string]any{
+					"query": map[string]any{
+						"type":        "string",
+						"description": "The web search query.",
+					},
+				},
+				"additionalProperties": false,
+			},
+		},
+	},
+	{
+		Type: openai.ToolTypeFunction,
+		Function: &openai.FunctionDefinition{
+			Name:        toolNameDiscordSearch,
+			Description: "Search messages in the current Discord server. Use this when the answer is likely in this server's chat history. Supports filters like from:, in:#channel, has:image, mentions:, before:, after:, pinned:, and page:. If the user asks how many messages someone sent, use a from: filter and answer from the total count.",
+			Parameters: map[string]any{
+				"type":     "object",
+				"required": []string{"query"},
+				"properties": map[string]any{
+					"query": map[string]any{
+						"type":        "string",
+						"description": "The Discord server search query.",
+					},
+				},
+				"additionalProperties": false,
+			},
+		},
+	},
+}
+
+type toolArguments struct {
+	Query string `json:"query"`
+}
+
+func modelUsesNativeToolCalling(m model.Model, provider string) bool {
+	p, ok := m.Providers[provider]
+	return ok && p.NativeToolCalling
+}
+
+func toolCallID(call openai.ToolCall, index int) string {
+	if call.ID != "" {
+		return call.ID
+	}
+	return fmt.Sprintf("call_%d", index)
+}
+
+func parseToolQuery(arguments string) string {
+	var args toolArguments
+	if err := json.Unmarshal([]byte(arguments), &args); err == nil && strings.TrimSpace(args.Query) != "" {
+		return strings.TrimSpace(args.Query)
+	}
+	var raw string
+	if err := json.Unmarshal([]byte(arguments), &raw); err == nil {
+		return strings.TrimSpace(raw)
+	}
+	return strings.TrimSpace(arguments)
+}
+
+func (l *Llmer) executeSearchTool(ctx context.Context, name, query string, searchCitemap map[int]string) (string, map[int]string) {
+	query = strings.TrimSpace(query)
+	var results string
+	var citemap map[int]string
+	switch name {
+	case toolNameWebSearch:
+		results, citemap = getSearchResults(query)
+	case toolNameDiscordSearch:
+		results, citemap = l.getDiscordSearchResults(ctx, query)
+	default:
+		return fmt.Sprintf("<unknown tool %q>", name), searchCitemap
+	}
+
+	results, citemap = remapSearchCites(results, citemap, maxCiteID(searchCitemap))
+	return results, mergeCitemaps(searchCitemap, citemap)
+}
+
 func (l *Llmer) requestCompletionInternal2(
 	m model.Model,
 	codename,
@@ -675,44 +765,96 @@ func (l *Llmer) requestCompletionInternal2(
 	if m.Reasoning {
 		applyReasoningSettings(&req, provider, settings.Reasoning)
 	}
+	if modelUsesNativeToolCalling(m, provider) {
+		req.Tools = searchTools
+		req.ToolChoice = "auto"
+		for i := range req.Messages {
+			if req.Messages[i].Role == RoleSystem {
+				req.Messages[i].Content = persona.StripLegacySearchSystemPrompt(req.Messages[i].Content)
+				break
+			}
+		}
+	}
 
 	completionStart := time.Now()
 	ctx, cancel := context.WithDeadline(ctx, completionStart.Add(5*time.Minute))
 	defer cancel()
 
-	response, err := client.CreateChatCompletion(ctx, req)
-	if err != nil {
-		return "", Usage{}, err
+	var message openai.ChatCompletionMessage
+	var response openai.ChatCompletionResponse
+	var usage Usage
+	for toolDepth := 0; ; toolDepth++ {
+		var err error
+		response, err = client.CreateChatCompletion(ctx, req)
+		if err != nil {
+			return "", Usage{}, err
+		}
+
+		if len(response.Choices) == 0 {
+			return "", Usage{}, errors.New("completion response had no choices")
+		}
+
+		message = response.Choices[0].Message
+		text := message.Content
+		reasoning := ""
+		if settings.Reasoning {
+			reasoning = strings.TrimSpace(firstNonEmpty(message.ReasoningContent, message.Reasoning))
+		}
+		currentUsage := Usage{
+			PromptTokens:   response.Usage.PromptTokens,
+			ResponseTokens: response.Usage.CompletionTokens,
+			TotalTokens:    response.Usage.TotalTokens,
+		}
+		estimatedUsage := estimateCompletionUsage(m, req.Messages, completionTextForUsage(reasoning, text))
+		if currentUsage.IsEmpty() {
+			currentUsage = estimatedUsage
+		} else {
+			if currentUsage.PromptTokens <= 0 {
+				currentUsage.PromptTokens = estimatedUsage.PromptTokens
+			}
+			if currentUsage.ResponseTokens <= 1 {
+				currentUsage.ResponseTokens = estimatedUsage.ResponseTokens
+			}
+			if currentUsage.TotalTokens <= 0 || currentUsage.TotalTokens < currentUsage.PromptTokens+currentUsage.ResponseTokens {
+				currentUsage = currentUsage.WithTotal()
+			}
+		}
+		usage = usage.Add(currentUsage)
+
+		if !modelUsesNativeToolCalling(m, provider) || len(message.ToolCalls) == 0 {
+			break
+		}
+		if toolDepth >= 3 {
+			slog.Warn("native tool call depth limit reached", "model", m.Name, "provider", provider)
+			break
+		}
+
+		toolCalls := append([]openai.ToolCall(nil), message.ToolCalls...)
+		for i := range toolCalls {
+			toolCalls[i].ID = toolCallID(toolCalls[i], i)
+		}
+
+		req.Messages = append(req.Messages, openai.ChatCompletionMessage{
+			Role:      RoleAssistant,
+			Content:   message.Content,
+			ToolCalls: toolCalls,
+		})
+		for i, call := range toolCalls {
+			query := parseToolQuery(call.Function.Arguments)
+			results, updatedCitemap := l.executeSearchTool(ctx, call.Function.Name, query, searchCitemap)
+			searchCitemap = updatedCitemap
+			req.Messages = append(req.Messages, openai.ChatCompletionMessage{
+				Role:       openai.ChatMessageRoleTool,
+				Content:    results,
+				ToolCallID: toolCallID(call, i),
+			})
+		}
 	}
 
-	if len(response.Choices) == 0 {
-		return "", Usage{}, errors.New("completion response had no choices")
-	}
-
-	message := response.Choices[0].Message
 	text := message.Content
 	reasoning := ""
 	if settings.Reasoning {
 		reasoning = strings.TrimSpace(firstNonEmpty(message.ReasoningContent, message.Reasoning))
-	}
-	usage := Usage{
-		PromptTokens:   response.Usage.PromptTokens,
-		ResponseTokens: response.Usage.CompletionTokens,
-		TotalTokens:    response.Usage.TotalTokens,
-	}
-	estimatedUsage := estimateCompletionUsage(m, req.Messages, completionTextForUsage(reasoning, text))
-	if usage.IsEmpty() {
-		usage = estimatedUsage
-	} else {
-		if usage.PromptTokens <= 0 {
-			usage.PromptTokens = estimatedUsage.PromptTokens
-		}
-		if usage.ResponseTokens <= 1 {
-			usage.ResponseTokens = estimatedUsage.ResponseTokens
-		}
-		if usage.TotalTokens <= 0 || usage.TotalTokens < usage.PromptTokens+usage.ResponseTokens {
-			usage = usage.WithTotal()
-		}
 	}
 
 	elapsed := time.Since(completionStart)
@@ -749,7 +891,7 @@ func (l *Llmer) requestCompletionInternal2(
 	unescaped = strings.ReplaceAll(unescaped, "<new_message]", "<new_message>")
 
 	// cites like [1] get turned into [1](<https://google.com/>)
-	if searchDepth > 0 {
+	if searchDepth > 0 || len(searchCitemap) > 0 {
 		unescaped = formatCites(unescaped, searchCitemap)
 	}
 

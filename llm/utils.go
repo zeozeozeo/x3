@@ -85,6 +85,51 @@ func formatCites(response string, citemap map[int]string) string {
 	})
 }
 
+func remapSearchCites(text string, citemap map[int]string, offset int) (string, map[int]string) {
+	if offset <= 0 || len(citemap) == 0 {
+		return text, citemap
+	}
+
+	remapped := make(map[int]string, len(citemap))
+	for id, url := range citemap {
+		remapped[id+offset] = url
+	}
+
+	re := regexp.MustCompile(`\[(\d+)\]`)
+	text = re.ReplaceAllStringFunc(text, func(match string) string {
+		var id int
+		if _, err := fmt.Sscanf(match, "[%d]", &id); err != nil {
+			return match
+		}
+		if _, exists := citemap[id]; !exists {
+			return match
+		}
+		return fmt.Sprintf("[%d]", id+offset)
+	})
+
+	return text, remapped
+}
+
+func mergeCitemaps(dst, src map[int]string) map[int]string {
+	if dst == nil {
+		dst = make(map[int]string, len(src))
+	}
+	for id, url := range src {
+		dst[id] = url
+	}
+	return dst
+}
+
+func maxCiteID(citemap map[int]string) int {
+	maxID := 0
+	for id := range citemap {
+		if id > maxID {
+			maxID = id
+		}
+	}
+	return maxID
+}
+
 func getSearchResults(search string) (string, map[int]string) {
 	citemap := make(map[int]string)
 	slog.Info("running search")
