@@ -709,15 +709,35 @@ func toolCallID(call openai.ToolCall, index int) string {
 }
 
 func parseToolQuery(arguments string) string {
+	arguments = strings.TrimSpace(arguments)
 	var args toolArguments
 	if err := json.Unmarshal([]byte(arguments), &args); err == nil && strings.TrimSpace(args.Query) != "" {
 		return strings.TrimSpace(args.Query)
+	}
+	var obj map[string]any
+	if err := json.Unmarshal([]byte(arguments), &obj); err == nil {
+		for _, key := range []string{"query", "q", "search", "search_query", "content"} {
+			if value, ok := obj[key].(string); ok && strings.TrimSpace(value) != "" {
+				return strings.TrimSpace(value)
+			}
+		}
+		var onlyString string
+		stringFields := 0
+		for _, value := range obj {
+			if s, ok := value.(string); ok && strings.TrimSpace(s) != "" {
+				onlyString = strings.TrimSpace(s)
+				stringFields++
+			}
+		}
+		if stringFields == 1 {
+			return onlyString
+		}
 	}
 	var raw string
 	if err := json.Unmarshal([]byte(arguments), &raw); err == nil {
 		return strings.TrimSpace(raw)
 	}
-	return strings.TrimSpace(arguments)
+	return arguments
 }
 
 func (l *Llmer) executeSearchTool(ctx context.Context, name, query string, searchCitemap map[int]string) (string, map[int]string) {
@@ -841,6 +861,7 @@ func (l *Llmer) requestCompletionInternal2(
 		})
 		for i, call := range toolCalls {
 			query := parseToolQuery(call.Function.Arguments)
+			slog.Info("executing native tool call", "tool", call.Function.Name, "query", query, "arguments", call.Function.Arguments)
 			results, updatedCitemap := l.executeSearchTool(ctx, call.Function.Name, query, searchCitemap)
 			searchCitemap = updatedCitemap
 			req.Messages = append(req.Messages, openai.ChatCompletionMessage{

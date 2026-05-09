@@ -132,7 +132,12 @@ func maxCiteID(citemap map[int]string) int {
 
 func getSearchResults(search string) (string, map[int]string) {
 	citemap := make(map[int]string)
-	slog.Info("running search")
+	search = strings.TrimSpace(search)
+	if search == "" {
+		return "<search query was empty>", citemap
+	}
+
+	slog.Info("running search", "query", search)
 	var err error
 	var results []ddg.Result
 	for range 3 {
@@ -144,7 +149,10 @@ func getSearchResults(search string) (string, map[int]string) {
 	if err != nil {
 		return fmt.Sprintf("<failed to search for '%s': %v>", search, err), citemap
 	}
-	slog.Info("search: got results", "results", len(results))
+	slog.Info("search: got results", "query", search, "results", len(results))
+	if len(results) == 0 {
+		return fmt.Sprintf("<The search for '%s' completed, but returned no results. Try a shorter or different query if the answer requires search.>", search), citemap
+	}
 
 	var sb strings.Builder
 	fmt.Fprintf(&sb, "\n<You ran a search for '%s', here are the 10 search results. If these are not useful, you may run a new search. Make sure to use citing in your response when using relevant sources, e.g. [1]>\n", search)
