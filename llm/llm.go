@@ -697,8 +697,8 @@ type toolArguments struct {
 }
 
 func modelUsesNativeToolCalling(m model.Model, provider string) bool {
-	p, ok := m.Providers[provider]
-	return ok && p.NativeToolCalling
+	_, ok := m.Providers[provider]
+	return ok && model.ProviderUsesNativeToolCalling(provider)
 }
 
 func toolCallID(call openai.ToolCall, index int) string {

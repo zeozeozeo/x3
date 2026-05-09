@@ -110,8 +110,7 @@ const (
 )
 
 type ModelProvider struct {
-	Codenames         []string `json:"codenames"`
-	NativeToolCalling bool     `json:"native_tool_calling,omitempty"`
+	Codenames []string `json:"codenames"`
 }
 
 type Model struct {
@@ -147,6 +146,8 @@ var (
 	DefaultVisionModels []string
 
 	modelByName = map[string]Model{}
+
+	providerSettings = map[string]ProviderSettings{}
 
 	// default errors are set for default order of trial
 	allProviders = []*ScoredProvider{
@@ -192,12 +193,17 @@ var (
 )
 
 type ModelsConfig struct {
-	Models              []Model  `json:"models"`
-	DefaultModels       []string `json:"default_models"`
-	NarratorModels      []string `json:"narrator_models"`
-	DefaultVisionModels []string `json:"default_vision_models"`
-	ProvidersOrder      []string `json:"providers_order"`
-	CurrentVersion      int      `json:"current_version"`
+	Models              []Model                     `json:"models"`
+	DefaultModels       []string                    `json:"default_models"`
+	NarratorModels      []string                    `json:"narrator_models"`
+	DefaultVisionModels []string                    `json:"default_vision_models"`
+	ProvidersOrder      []string                    `json:"providers_order"`
+	ProviderSettings    map[string]ProviderSettings `json:"provider_settings,omitempty"`
+	CurrentVersion      int                         `json:"current_version"`
+}
+
+type ProviderSettings struct {
+	NativeToolCalling bool `json:"native_tool_calling,omitempty"`
 }
 
 func LoadModelsFromJSON() error {
@@ -247,6 +253,10 @@ func LoadModelsFromJSONData(data []byte) error {
 	}
 	NarratorModels = config.NarratorModels
 	DefaultVisionModels = config.DefaultVisionModels
+	providerSettings = config.ProviderSettings
+	if providerSettings == nil {
+		providerSettings = map[string]ProviderSettings{}
+	}
 
 	if len(config.ProvidersOrder) > 0 {
 		allProviders = make([]*ScoredProvider, len(config.ProvidersOrder))
@@ -262,6 +272,10 @@ func LoadModelsFromJSONData(data []byte) error {
 	}
 
 	return nil
+}
+
+func ProviderUsesNativeToolCalling(provider string) bool {
+	return providerSettings[provider].NativeToolCalling
 }
 
 func resetProviderScore() {

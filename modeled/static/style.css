@@ -447,6 +447,12 @@ header h1 {
   color: #34495e;
 }
 
+.provider-global-option {
+  flex: none;
+  margin-top: 0;
+  white-space: nowrap;
+}
+
 .status-message {
   padding: 10px;
   border-radius: 4px;
