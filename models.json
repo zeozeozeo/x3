@@ -3,7 +3,6 @@
     {
       "name": "GLM 5",
       "command": "glm5",
-      "fallback_vision_model": "Default",
       "reasoning": true,
       "providers": {
         "vercel": {
@@ -14,7 +13,6 @@
     {
       "name": "GLM 5.1",
       "command": "glm",
-      "fallback_vision_model": "Default",
       "reasoning": true,
       "providers": {
         "vercel": {
@@ -36,7 +34,6 @@
     {
       "name": "DeepSeek V4 Flash",
       "command": "deepseek",
-      "fallback_vision_model": "Default",
       "reasoning": true,
       "providers": {
         "deepseek": {
@@ -56,7 +53,6 @@
     {
       "name": "DeepSeek V4 Pro",
       "command": "deepseekpro",
-      "fallback_vision_model": "Default",
       "reasoning": true,
       "providers": {
         "deepseek": {
@@ -131,35 +127,6 @@
         },
         "openrouter": {
           "codenames": ["google/gemma-4-31b-it:free"]
-        }
-      }
-    },
-    {
-      "name": "OpenAI GPT-5.2",
-      "command": "gpt",
-      "vision": true,
-      "encoding": "o200k_base",
-      "providers": {
-        "electronhub": {
-          "codenames": ["gpt-5.2-chat"]
-        },
-        "g4f": {
-          "codenames": ["gpt-5.2-chat"]
-        },
-        "github": {
-          "codenames": ["openai/gpt-5.2-chat"]
-        },
-        "hcap": {
-          "codenames": ["gpt-5.2-chat"]
-        },
-        "helixmind": {
-          "codenames": ["gpt-5.2-chat"]
-        },
-        "mnn": {
-          "codenames": ["gpt-5.2-chat"]
-        },
-        "zukijourney": {
-          "codenames": ["gpt-5.2-chat"]
         }
       }
     },
@@ -307,17 +274,6 @@
       }
     },
     {
-      "name": "GLM 4.7",
-      "command": "glm47",
-      "fallback_vision_model": "Default",
-      "reasoning": true,
-      "providers": {
-        "vercel": {
-          "codenames": ["zai/glm-4.7"]
-        }
-      }
-    },
-    {
       "name": "Markov Chain (not an LLM)",
       "command": "markov",
       "is_markov": true
@@ -335,9 +291,9 @@
   ],
   "default_models": [
     "GLM 5",
+    "DeepSeek V4 Flash",
     "GLM 5.1",
     "Xiaomi MiMo V2.5",
-    "DeepSeek V4 Flash",
     "DeepSeek V3.2",
     "GLM 4.5 Air",
     "GLM 4.7 Flash"
@@ -350,8 +306,8 @@
     "Meta Llama 4 Maverick 400B/17A"
   ],
   "default_vision_models": [
-    "Xiaomi MiMo V2.5",
     "NVIDIA Nemotron 3 Nano Omni 30B/A3B",
+    "Xiaomi MiMo V2.5",
     "Meta Llama 4 Maverick 400B/17A",
     "Meta Llama 4 Scout 109B/17A"
   ],
@@ -387,5 +343,19 @@
     "perplexity",
     "atlas"
   ],
+  "provider_settings": {
+    "cloudflare": {
+      "native_tool_calling": true
+    },
+    "deepseek": {
+      "native_tool_calling": true
+    },
+    "ollama": {
+      "native_tool_calling": true
+    },
+    "vercel": {
+      "native_tool_calling": true
+    }
+  },
   "current_version": 34
 }
