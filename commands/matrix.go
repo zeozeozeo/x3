@@ -698,7 +698,7 @@ func (b *MatrixBot) helpText(isDM bool) string {
 		b.commandUsage("persona", isDM) + " system <prompt>",
 		b.commandUsage("persona", isDM) + " card <url> | preset <url>",
 		b.commandUsage("persona", isDM) + " context|temperature|top_p|frequency_penalty|seed <value>",
-		b.commandUsage("persona", isDM) + " images|thinking|reasoning|html|continuations on|off",
+		b.commandUsage("persona", isDM) + " images|thinking|reasoning|html|continuations|tools on|off",
 		b.commandUsage("models", isDM) + " list available model short names",
 		b.commandUsage("context", isDM) + " add|list|clear|delete|get|edit ...",
 		b.commandUsage("lobotomy", isDM) + " [amount] [reset_persona]",
@@ -730,6 +730,7 @@ func (b *MatrixBot) personaHelpText(isDM bool) string {
 		base + " reasoning on|off        toggle model-side reasoning",
 		base + " html on|off             toggle HTML rendering",
 		base + " continuations           on|off toggle smart continuation trigger",
+		base + " tools on|off            toggle web and Discord search tools",
 	}, "\n")
 }
 
@@ -963,6 +964,12 @@ func (b *MatrixBot) handlePersonaCommand(ctx context.Context, msg *matrixMessage
 			return b.sendText(ctx, msg.RoomID, msg.EventID, matrixInvalidBoolDiagnostic(diagCtx.Raw(rest), diagCtx.Token(valueToken), "persona continuations"))
 		}
 		cache.PersonaMeta.EnableMiniLMContinuations = enabled
+	case "tools":
+		enabled, ok := parseMatrixBool(value)
+		if !ok {
+			return b.sendText(ctx, msg.RoomID, msg.EventID, matrixInvalidBoolDiagnostic(diagCtx.Raw(rest), diagCtx.Token(valueToken), "persona tools"))
+		}
+		cache.PersonaMeta.Tools = &enabled
 	case "card":
 		var body []byte
 		var filename string
@@ -1036,6 +1043,9 @@ func (b *MatrixBot) writePersonaUpdate(ctx context.Context, msg *matrixMessage, 
 	if cache.PersonaMeta.EnableMiniLMContinuations != prev.EnableMiniLMContinuations {
 		changes = append(changes, fmt.Sprintf("continuations=%t", cache.PersonaMeta.EnableMiniLMContinuations))
 	}
+	if cache.PersonaMeta.ToolsEnabled() != prev.ToolsEnabled() {
+		changes = append(changes, fmt.Sprintf("tools=%t", cache.PersonaMeta.ToolsEnabled()))
+	}
 	if len(changes) == 0 {
 		changes = append(changes, "settings updated")
 	}
@@ -1065,7 +1075,7 @@ func matrixPersonaInfo(cache *db.ChannelCache, username string, isDM bool) strin
 	fmt.Fprintf(&b, "Top P: %s (remapped to %s)\n", ftoa(settings.TopP), ftoa(remapped.TopP))
 	fmt.Fprintf(&b, "Frequency penalty: %s\n", ftoa(settings.FrequencyPenalty))
 	fmt.Fprintf(&b, "Context length: %d\n", cache.ContextLength)
-	fmt.Fprintf(&b, "Images: %t\nReasoning: %t\nThinking traces: %t\nHTML rendering: %t\nMiniLM continuations: %t\n", cache.PersonaMeta.EnableImages, settings.Reasoning, cache.PersonaMeta.ThinkingTraces, cache.PersonaMeta.RenderHTML, cache.PersonaMeta.EnableMiniLMContinuations)
+	fmt.Fprintf(&b, "Images: %t\nReasoning: %t\nThinking traces: %t\nHTML rendering: %t\nMiniLM continuations: %t\nTools: %t\n", cache.PersonaMeta.EnableImages, settings.Reasoning, cache.PersonaMeta.ThinkingTraces, cache.PersonaMeta.RenderHTML, cache.PersonaMeta.EnableMiniLMContinuations, cache.PersonaMeta.ToolsEnabled())
 	if cache.PersonaMeta.ChatPreset != nil {
 		fmt.Fprintf(&b, "SillyTavern preset: %s\n", cache.PersonaMeta.ChatPreset.DisplayName())
 	}

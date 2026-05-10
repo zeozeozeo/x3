@@ -16,7 +16,7 @@ import (
 
 const (
 	// DefaultContextMessages is the default number of surrounding messages used for LLM context.
-	DefaultContextMessages = 100
+	DefaultContextMessages = 75
 	maxChatMemories        = 67
 	maxChatMemoryRunes     = 500
 )
@@ -139,7 +139,9 @@ func unmarshalChannelCache(data []byte) (*ChannelCache, error) {
 		cache.PersonaMeta.Settings = cache.PersonaMeta.Settings.Fixup()
 	}
 
-	cache.PersonaMeta.Migrate()
+	if cache.PersonaMeta.Migrate() {
+		cache.ContextLength = DefaultContextMessages
+	}
 
 	return &cache, err
 }

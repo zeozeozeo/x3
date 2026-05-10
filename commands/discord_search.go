@@ -72,7 +72,7 @@ func getDiscordSearchResults(ctx context.Context, client *bot.Client, guildID sn
 		return fmt.Sprintf("<could not resolve mention filter(s): %s>", strings.Join(unresolvedMentionFilters, ", ")), citemap
 	}
 
-	const searchPageSize = 25
+	const searchPageSize = 10
 	page := spec.Page
 	if page <= 0 {
 		page = 1
@@ -162,7 +162,7 @@ func getDiscordSearchResults(ctx context.Context, client *bot.Client, guildID sn
 			channelName = message.ChannelID.String()
 		}
 		content := strings.Join(strings.Fields(message.Content), " ")
-		content = ellipsisTrim(content, 300)
+		content = ellipsisTrim(content, 180)
 		if content == "" {
 			content = "[no text content]"
 		}
@@ -380,12 +380,33 @@ func resolveDiscordChannelIDs(client *bot.Client, guildID snowflake.ID, filters 
 
 		matched := false
 		nameFilter := strings.TrimPrefix(filter, "#")
-		nameFilter = strings.ToLower(nameFilter)
+		nameFilter = strings.ToLower(strings.TrimSpace(nameFilter))
 		for _, channel := range channels {
 			if strings.ToLower(strings.TrimSpace(channel.Name())) == nameFilter {
 				add(channel.ID())
 				matched = true
 			}
+		}
+		if matched {
+			continue
+		}
+
+		normalizedFilter := normalizeDiscordName(nameFilter)
+		var partialMatches []snowflake.ID
+		if normalizedFilter != "" {
+			for _, channel := range channels {
+				normalizedName := normalizeDiscordName(strings.ToLower(strings.TrimSpace(channel.Name())))
+				if normalizedName == "" {
+					continue
+				}
+				if normalizedName == normalizedFilter || strings.Contains(normalizedName, normalizedFilter) || strings.Contains(normalizedFilter, normalizedName) {
+					partialMatches = append(partialMatches, channel.ID())
+				}
+			}
+		}
+		if len(partialMatches) == 1 {
+			add(partialMatches[0])
+			continue
 		}
 		if !matched {
 			unresolved = append(unresolved, raw)

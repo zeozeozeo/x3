@@ -79,6 +79,7 @@ func buildDiscordEnvironmentFresh(client *bot.Client, channelID snowflake.ID, gu
 
 	channel, resolvedGuildID, err := getDiscordChannelSnapshot(client, channelID)
 	if err == nil && channel != nil {
+		env.ChannelID = channel.ID().String()
 		env.ChannelName, env.ChannelDescription = summarizeDiscordChannel(channel)
 		if guildID == nil && resolvedGuildID != 0 {
 			guildID = &resolvedGuildID

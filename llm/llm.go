@@ -208,6 +208,7 @@ type Llmer struct {
 	ChannelID             snowflake.ID                                                                           `json:"channel_id"`
 	ConversationID        string                                                                                 `json:"conversation_id,omitempty"`
 	GuildID               *snowflake.ID                                                                          `json:"guild_id,omitempty"`
+	ToolsEnabled          *bool                                                                                  `json:"tools_enabled,omitempty"`
 	DiscordSearchCallback func(ctx context.Context, guildID snowflake.ID, query string) (string, map[int]string) `json:"-"`
 }
 
@@ -411,6 +412,8 @@ func (l *Llmer) AddMessageWithID(role, content string, id snowflake.ID, messageI
 }
 
 func (l *Llmer) SetPersona(persona persona.Persona, punishExcessiveSplit *bool) {
+	l.ToolsEnabled = persona.Tools
+
 	// remove system prompt if there is one
 	if len(l.Messages) > 0 && l.Messages[0].Role == RoleSystem {
 		l.Messages = l.Messages[1:]
@@ -653,41 +656,40 @@ const (
 	toolNameDiscordSearch = "discord_search"
 )
 
-var searchTools = []openai.Tool{
-	{
-		Type: openai.ToolTypeFunction,
-		Function: &openai.FunctionDefinition{
-			Name:        toolNameWebSearch,
-			Description: "Search the web for current or external information. Use this for web results. Returns numbered sources that can be cited as [1], [2], etc.",
-			Parameters: map[string]any{
-				"type":     "object",
-				"required": []string{"query"},
-				"properties": map[string]any{
-					"query": map[string]any{
-						"type":        "string",
-						"description": "The web search query.",
-					},
+var webSearchTool = openai.Tool{
+	Type: openai.ToolTypeFunction,
+	Function: &openai.FunctionDefinition{
+		Name:        toolNameWebSearch,
+		Description: "Search the web for current or external information. Use this for web results. Returns numbered sources that can be cited as [1], [2], etc.",
+		Parameters: map[string]any{
+			"type":     "object",
+			"required": []string{"query"},
+			"properties": map[string]any{
+				"query": map[string]any{
+					"type":        "string",
+					"description": "The web search query.",
 				},
-				"additionalProperties": false,
 			},
+			"additionalProperties": false,
 		},
 	},
-	{
-		Type: openai.ToolTypeFunction,
-		Function: &openai.FunctionDefinition{
-			Name:        toolNameDiscordSearch,
-			Description: "Search messages in the current Discord server. Use this when the answer is likely in this server's chat history. Supports filters like from:, in:#channel, has:image, mentions:, before:, after:, pinned:, and page:. If the user asks how many messages someone sent, use a from: filter and answer from the total count.",
-			Parameters: map[string]any{
-				"type":     "object",
-				"required": []string{"query"},
-				"properties": map[string]any{
-					"query": map[string]any{
-						"type":        "string",
-						"description": "The Discord server search query.",
-					},
+}
+
+var discordSearchTool = openai.Tool{
+	Type: openai.ToolTypeFunction,
+	Function: &openai.FunctionDefinition{
+		Name:        toolNameDiscordSearch,
+		Description: "Search messages in the current Discord server. Use this when the answer is likely in this server's chat history. Supports filters like from:, in:#channel, in:channel_id, has:image, mentions:, before:, after:, pinned:, and page:. If the user asks how many messages someone sent, use a from: filter and answer from the total count.",
+		Parameters: map[string]any{
+			"type":     "object",
+			"required": []string{"query"},
+			"properties": map[string]any{
+				"query": map[string]any{
+					"type":        "string",
+					"description": "The Discord server search query.",
 				},
-				"additionalProperties": false,
 			},
+			"additionalProperties": false,
 		},
 	},
 }
@@ -699,6 +701,22 @@ type toolArguments struct {
 func modelUsesNativeToolCalling(m model.Model, provider string) bool {
 	_, ok := m.Providers[provider]
 	return ok && model.ProviderUsesNativeToolCalling(provider)
+}
+
+func (l Llmer) searchToolsEnabled() bool {
+	return l.ToolsEnabled == nil || *l.ToolsEnabled
+}
+
+func (l Llmer) availableSearchTools() []openai.Tool {
+	if !l.searchToolsEnabled() {
+		return nil
+	}
+
+	tools := []openai.Tool{webSearchTool}
+	if l.GuildID != nil && l.DiscordSearchCallback != nil {
+		tools = append(tools, discordSearchTool)
+	}
+	return tools
 }
 
 func toolCallID(call openai.ToolCall, index int) string {
@@ -785,8 +803,10 @@ func (l *Llmer) requestCompletionInternal2(
 	if m.Reasoning {
 		applyReasoningSettings(&req, provider, settings.Reasoning)
 	}
-	if modelUsesNativeToolCalling(m, provider) {
-		req.Tools = searchTools
+	nativeSearchTools := l.availableSearchTools()
+	nativeToolCalling := modelUsesNativeToolCalling(m, provider) && len(nativeSearchTools) > 0
+	if nativeToolCalling {
+		req.Tools = nativeSearchTools
 		req.ToolChoice = "auto"
 		for i := range req.Messages {
 			if req.Messages[i].Role == RoleSystem {
@@ -841,7 +861,7 @@ func (l *Llmer) requestCompletionInternal2(
 		}
 		usage = usage.Add(currentUsage)
 
-		if !modelUsesNativeToolCalling(m, provider) || len(message.ToolCalls) == 0 {
+		if !nativeToolCalling || len(message.ToolCalls) == 0 {
 			break
 		}
 		if toolDepth >= 3 {
@@ -859,6 +879,9 @@ func (l *Llmer) requestCompletionInternal2(
 			Content:   message.Content,
 			ToolCalls: toolCalls,
 		})
+		req.Tools = nil
+		req.ToolChoice = nil
+		nativeToolCalling = false
 		for i, call := range toolCalls {
 			query := parseToolQuery(call.Function.Arguments)
 			slog.Info("executing native tool call", "tool", call.Function.Name, "query", query, "arguments", call.Function.Arguments)
@@ -889,7 +912,7 @@ func (l *Llmer) requestCompletionInternal2(
 	unescaped = strings.TrimSpace(unescaped)
 	unescaped = weirdEndRegexp.ReplaceAllString(unescaped, "$1<")
 
-	if searchDepth < 4 {
+	if searchDepth < 4 && l.searchToolsEnabled() {
 		if search := extractDiscordSearch(unescaped); search != "" {
 			results, citemap := l.getDiscordSearchResults(ctx, search)
 			nextRes, nextUsage, nextErr := l.requestCompletionInternal2(

@@ -103,7 +103,7 @@ The current date is {{ .Date }}.`)
 const LegacySearchSystemPrompt = `**Search:**
 You can search the internet when needed by responding with "<search>your search query here</search>". Example: <search>highest refresh rate monitor 2026</search>
 You can search the current Discord server's messages by responding with "<discord>your search query here</discord>". Example: <discord>minecraft mod</discord>
-The Discord search tool supports filters like "from:me", "from:display name", "from:username", "from:@mention", "in:#channel", "has:image", "mentions:display name", "before:message_id", "after:message_id", "pinned:true/false", and "page:2". If the user asks how many messages someone sent, use a "from:" filter and answer from the total count.
+The Discord search tool supports filters like "from:me", "from:display name", "from:username", "from:@mention", "in:#channel", "in:channel_id", "has:image", "mentions:display name", "before:message_id", "after:message_id", "pinned:true/false", and "page:2". If the user asks how many messages someone sent, use a "from:" filter and answer from the total count.
 Use <discord> when the answer is likely in this server's chat history. Use <search> for web results.
 NEVER make up search results!`
 
@@ -245,6 +245,7 @@ Output the description directly, without any preamble or formatting.`
 
 type Persona struct {
 	System string // System prompt
+	Tools  *bool  // Whether search/grounding tools are enabled. nil means enabled.
 }
 
 const htmlRenderingSystemPrompt = `**HTML rendering:**
@@ -447,6 +448,10 @@ func newTemplateData(username string, dm bool, promptContext string) templateDat
 	}
 }
 
+func (p Persona) ToolsEnabled() bool {
+	return p.Tools == nil || *p.Tools
+}
+
 func newPersona(tmpl *template.Template, username string, dm bool, promptContext PromptContext) Persona {
 	var tpl bytes.Buffer
 	if err := tmpl.Execute(&tpl, newTemplateData(username, dm, promptContext.BuildBlock())); err != nil {
@@ -511,15 +516,22 @@ type PersonaMeta struct {
 	TavernCard                *TavernCardV2     `json:"tavern_card,omitempty"`    // Current SillyTavern character card
 	ChatPreset                *STChatPreset     `json:"chat_preset,omitempty"`    // Imported SillyTavern chat-completion preset
 	RenderHTML                bool              `json:"render_html,omitempty"`    // Whether LLM-authored HTML blocks should render to image attachments
+	Tools                     *bool             `json:"tools,omitempty"`          // Whether grounding/search tools are available. nil means enabled.
 }
 
 // this is kinda hacky, but this is just so i can update the default models
-func (meta *PersonaMeta) Migrate() {
+func (meta *PersonaMeta) Migrate() bool {
 	curVer := model.CurrentVersion
 	if meta.Version < curVer {
 		meta.Models = clone(model.DefaultModels)
 		meta.Version = curVer
+		return true
 	}
+	return false
+}
+
+func (meta PersonaMeta) ToolsEnabled() bool {
+	return meta.Tools == nil || *meta.Tools
 }
 
 func (meta PersonaMeta) GetModels() []model.Model {
@@ -558,6 +570,10 @@ func (meta PersonaMeta) DeepCopy() PersonaMeta {
 	}
 	if meta.ChatPreset != nil {
 		copied.ChatPreset = meta.ChatPreset.DeepCopy()
+	}
+	if meta.Tools != nil {
+		tools := *meta.Tools
+		copied.Tools = &tools
 	}
 	return copied
 }
@@ -653,13 +669,13 @@ func GetPersonaByMeta(meta PersonaMeta, username string, dm bool, promptContext 
 	if meta.ChatPreset != nil {
 		system := meta.ChatPreset.BuildSystemPrompt(meta.TavernCard, username, promptContext, meta.Name)
 		if system != "" {
-			return Persona{System: appendResponseFeaturePrompts(system, meta)}
+			return finalizePersona(Persona{System: system}, meta)
 		}
 	}
 
 	if meta.TavernCard != nil {
 		system := BuildCharaSystemPrompt(meta.TavernCard, username, promptContext)
-		return Persona{System: appendResponseFeaturePrompts(system, meta)}
+		return finalizePersona(Persona{System: system}, meta)
 	}
 
 	if s, ok := personaGetters[meta.Name]; ok {
@@ -670,8 +686,7 @@ func GetPersonaByMeta(meta PersonaMeta, username string, dm bool, promptContext 
 				persona.System = strings.TrimSpace(persona.System + "\n\n" + promptBlock)
 			}
 		}
-		persona.System = appendResponseFeaturePrompts(persona.System, meta)
-		return persona
+		return finalizePersona(persona, meta)
 	}
 
 	persona := Persona{System: meta.System}
@@ -681,6 +696,14 @@ func GetPersonaByMeta(meta PersonaMeta, username string, dm bool, promptContext 
 		} else {
 			persona.System = promptBlock
 		}
+	}
+	return finalizePersona(persona, meta)
+}
+
+func finalizePersona(persona Persona, meta PersonaMeta) Persona {
+	persona.Tools = meta.Tools
+	if !meta.ToolsEnabled() {
+		persona.System = StripLegacySearchSystemPrompt(persona.System)
 	}
 	persona.System = appendResponseFeaturePrompts(persona.System, meta)
 	return persona

@@ -78,6 +78,7 @@ func buildVisibleChannelRefs(client *bot.Client, guild *discordGuildSnapshot, cu
 			}
 			name, description := summarizeDiscordChannel(channel)
 			refs = append(refs, persona.DiscordChannelRef{
+				ID:          channel.ID().String(),
 				Name:        name,
 				Category:    strings.TrimSpace(categoryNameForChannel(guildChannels, channel.ParentID())),
 				Description: description,
@@ -116,6 +117,7 @@ func buildVisibleChannelRefs(client *bot.Client, guild *discordGuildSnapshot, cu
 		name, description := summarizeDiscordChannel(channel)
 		refs = append(refs, visibleChannelRef{
 			ref: persona.DiscordChannelRef{
+				ID:          channel.ID().String(),
 				Name:        name,
 				Category:    categoryName,
 				Description: description,

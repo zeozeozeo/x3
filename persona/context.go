@@ -9,6 +9,7 @@ import (
 
 // DiscordChannelRef is a compact, stable reference to a visible Discord channel.
 type DiscordChannelRef struct {
+	ID          string `json:"id,omitempty"`
 	Name        string `json:"name,omitempty"`
 	Category    string `json:"category,omitempty"`
 	Description string `json:"description,omitempty"`
@@ -18,6 +19,7 @@ type DiscordChannelRef struct {
 type DiscordEnvironment struct {
 	GuildName          string              `json:"guild_name,omitempty"`
 	GuildDescription   string              `json:"guild_description,omitempty"`
+	ChannelID          string              `json:"channel_id,omitempty"`
 	ChannelName        string              `json:"channel_name,omitempty"`
 	ChannelDescription string              `json:"channel_description,omitempty"`
 	VisibleChannels    []DiscordChannelRef `json:"visible_channels,omitempty"`
@@ -26,6 +28,7 @@ type DiscordEnvironment struct {
 func (env *DiscordEnvironment) IsEmpty() bool {
 	return env == nil || (env.GuildName == "" &&
 		env.GuildDescription == "" &&
+		env.ChannelID == "" &&
 		env.ChannelName == "" &&
 		env.ChannelDescription == "" &&
 		len(env.VisibleChannels) == 0)
@@ -56,7 +59,11 @@ func (ctx PromptContext) BuildBlock() string {
 			fmt.Fprintf(&sb, "- Server description: %s\n", html.UnescapeString(ctx.Discord.GuildDescription))
 		}
 		if ctx.Discord.ChannelName != "" {
-			fmt.Fprintf(&sb, "- Current channel: #%s\n", html.UnescapeString(ctx.Discord.ChannelName))
+			fmt.Fprintf(&sb, "- Current channel: #%s", html.UnescapeString(ctx.Discord.ChannelName))
+			if ctx.Discord.ChannelID != "" {
+				fmt.Fprintf(&sb, " (id: %s)", ctx.Discord.ChannelID)
+			}
+			sb.WriteRune('\n')
 		}
 		if ctx.Discord.ChannelDescription != "" {
 			fmt.Fprintf(&sb, "- Current channel description: %s\n", html.UnescapeString(ctx.Discord.ChannelDescription))
@@ -76,6 +83,9 @@ func (ctx PromptContext) BuildBlock() string {
 					continue
 				}
 				fmt.Fprintf(&sb, "  - #%s", chName)
+				if id := strings.TrimSpace(ch.ID); id != "" {
+					fmt.Fprintf(&sb, " (id: %s)", id)
+				}
 				if cat := strings.TrimSpace(ch.Category); cat != "" {
 					fmt.Fprintf(&sb, " [%s]", html.UnescapeString(cat))
 				}

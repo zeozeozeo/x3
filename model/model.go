@@ -189,7 +189,7 @@ var (
 
 	lastScoreReset = time.Now()
 
-	CurrentVersion = 6
+	CurrentVersion = 34
 )
 
 type ModelsConfig struct {

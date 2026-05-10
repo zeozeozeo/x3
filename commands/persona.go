@@ -155,6 +155,11 @@ var PersonaCommand = discord.SlashCommandCreate{
 			Required:    false,
 		},
 		discord.ApplicationCommandOptionBool{
+			Name:        "tools",
+			Description: "Allow web grounding and Discord search tools",
+			Required:    false,
+		},
+		discord.ApplicationCommandOptionBool{
 			Name:        "ephemeral",
 			Description: "If the response should only be visible to you",
 			Required:    false,
@@ -190,7 +195,7 @@ func handlePersonaInfo(event *handler.CommandEvent, ephemeral bool) error {
 		AddField("Description", meta.Desc, true).
 		AddField("Temperature", fmt.Sprintf("%s (remapped to %s)", ftoa(settings.Temperature), ftoa(remappedSettings.Temperature)), true).
 		AddField("Top P", fmt.Sprintf("%s (remapped to %s)", ftoa(settings.TopP), ftoa(remappedSettings.TopP)), true).
-		AddField("Flags", fmt.Sprintf("images: %s, reasoning: %s, minilm: %s", enabledDisabled(cache.PersonaMeta.EnableImages), enabledDisabled(cache.PersonaMeta.Settings.Reasoning), enabledDisabled(cache.PersonaMeta.EnableMiniLMContinuations)), true).
+		AddField("Flags", fmt.Sprintf("images: %s, reasoning: %s, minilm: %s, tools: %s", enabledDisabled(cache.PersonaMeta.EnableImages), enabledDisabled(cache.PersonaMeta.Settings.Reasoning), enabledDisabled(cache.PersonaMeta.EnableMiniLMContinuations), enabledDisabled(cache.PersonaMeta.ToolsEnabled())), true).
 		AddField("Frequency Penalty", ftoa(settings.FrequencyPenalty), true).
 		AddField("Context length", fmt.Sprintf("%d", cache.ContextLength), true)
 	if cache.Llmer != nil {
@@ -257,9 +262,10 @@ func HandlePersona(event *handler.CommandEvent) error {
 	reasoning, hasReasoning := data.OptBool("reasoning")
 	renderHTML, hasRenderHTML := data.OptBool("html")
 	minilmContinuations, hasMiniLMContinuations := data.OptBool("continuations")
+	toolsEnabled, hasToolsEnabled := data.OptBool("tools")
 	ephemeral := data.Bool("ephemeral")
 
-	if dataPersona == "" && dataModel == "" && dataSystem == "" && dataCard == "" && !hasDataCardFile && dataPreset == "" && !hasDataPresetFile && !hasContext && !hasTemperature && !hasTopP && !hasFreqPenalty && !hasDataSeed && !hasEnableImages && !hasThinking && !hasReasoning && !hasRenderHTML && !hasMiniLMContinuations {
+	if dataPersona == "" && dataModel == "" && dataSystem == "" && dataCard == "" && !hasDataCardFile && dataPreset == "" && !hasDataPresetFile && !hasContext && !hasTemperature && !hasTopP && !hasFreqPenalty && !hasDataSeed && !hasEnableImages && !hasThinking && !hasReasoning && !hasRenderHTML && !hasMiniLMContinuations && !hasToolsEnabled {
 		return handlePersonaInfo(event, ephemeral)
 	}
 
@@ -397,6 +403,9 @@ func HandlePersona(event *handler.CommandEvent) error {
 	if hasMiniLMContinuations {
 		cache.PersonaMeta.EnableMiniLMContinuations = minilmContinuations
 	}
+	if hasToolsEnabled {
+		cache.PersonaMeta.Tools = &toolsEnabled
+	}
 
 	if dataPreset != "" || hasDataPresetFile {
 		if dataPreset != "" && hasDataPresetFile {
@@ -522,6 +531,15 @@ func HandlePersona(event *handler.CommandEvent) error {
 			s = "enabled MiniLM continuations"
 		} else {
 			s = "disabled MiniLM continuations"
+		}
+		didWhat = append(didWhat, s)
+	}
+	if cache.PersonaMeta.ToolsEnabled() != prevMeta.ToolsEnabled() {
+		var s string
+		if cache.PersonaMeta.ToolsEnabled() {
+			s = "enabled tools"
+		} else {
+			s = "disabled tools"
 		}
 		didWhat = append(didWhat, s)
 	}
