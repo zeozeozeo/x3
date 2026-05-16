@@ -527,24 +527,64 @@ func requestCompletionCacheFriendly(
 	softMessageLimit int,
 	ctx context.Context,
 ) (string, llm.Usage, error) {
-	llmer.TrimCacheFriendlyContext(softMessageLimit)
-	response, usage, err := llmer.RequestCompletion(models, settings, prepend, ctx)
+	requestLlmer := cloneLlmerForCompletion(llmer)
+	requestLlmer.TrimCacheFriendlyContext(softMessageLimit)
+	beforeRequest := len(requestLlmer.Messages)
+	response, usage, err := requestLlmer.RequestCompletion(models, settings, prepend, ctx)
 	if err == nil || !llm.IsContextLengthError(err) || softMessageLimit <= 0 {
+		if err == nil {
+			appendGeneratedAssistantMessage(llmer, requestLlmer.Messages[beforeRequest:])
+		}
 		return response, usage, err
 	}
 
 	keep := softMessageLimit
 	for attempts := 0; attempts < 4 && keep > 1; attempts++ {
 		keep = max(keep/2, 1)
-		if !llmer.TrimNonSystemMessages(keep) {
+		if !requestLlmer.TrimNonSystemMessages(keep) {
 			break
 		}
-		response, usage, err = llmer.RequestCompletion(models, settings, prepend, ctx)
+		beforeRequest = len(requestLlmer.Messages)
+		response, usage, err = requestLlmer.RequestCompletion(models, settings, prepend, ctx)
 		if err == nil || !llm.IsContextLengthError(err) {
+			if err == nil {
+				appendGeneratedAssistantMessage(llmer, requestLlmer.Messages[beforeRequest:])
+			}
 			return response, usage, err
 		}
 	}
 	return response, usage, err
+}
+
+func cloneLlmerForCompletion(source *llm.Llmer) *llm.Llmer {
+	clone := *source
+	clone.Messages = cloneLLMMessages(source.Messages)
+	return &clone
+}
+
+func cloneLLMMessages(messages []llm.Message) []llm.Message {
+	if len(messages) == 0 {
+		return nil
+	}
+	out := make([]llm.Message, len(messages))
+	copy(out, messages)
+	for i := range out {
+		out[i].Images = append([]string(nil), messages[i].Images...)
+	}
+	return out
+}
+
+func appendGeneratedAssistantMessage(dst *llm.Llmer, generated []llm.Message) {
+	if dst == nil {
+		return
+	}
+	for _, msg := range generated {
+		if msg.Role == llm.RoleAssistant {
+			cloned := cloneLLMMessages([]llm.Message{msg})
+			dst.Messages = append(dst.Messages, cloned[0])
+			return
+		}
+	}
 }
 
 func parseStableNarratorTags(response string) (string, error) {

@@ -84,27 +84,10 @@ func HandleLobotomy(event *handler.CommandEvent) error {
 		cache.PersonaMeta = db.NewChannelCache().PersonaMeta
 		writeCache = true
 	}
-	if cache.Llmer != nil {
-		cache.Llmer.Lobotomize(amount)
+	if lobotomizeCachedHistory(cache, amount, func() *llm.Llmer {
+		return llm.NewLlmer(event.Channel().ID())
+	}) {
 		writeCache = true
-	}
-	if cache.ImportedHistory != nil {
-		writeCache = true
-		if amount > 0 {
-			if cache.Llmer == nil {
-				cache.Llmer = llm.NewLlmer(event.Channel().ID())
-				cache.Llmer.Messages = append([]llm.Message(nil), cache.ImportedHistory.Messages...)
-				cache.Llmer.Lobotomize(amount)
-			}
-			cache.ImportedHistory.Messages = nonSystemMessages(cache.Llmer.Messages)
-			if len(cache.ImportedHistory.Messages) == 0 {
-				cache.ImportedHistory = nil
-				cache.Llmer = nil
-			}
-		} else {
-			cache.ImportedHistory = nil
-			cache.Llmer = nil
-		}
 	}
 	// in card mode, resend the card preset message
 	if len(cache.PersonaMeta.FirstMes) > 0 && amount == 0 {
@@ -150,6 +133,35 @@ func HandleLobotomy(event *handler.CommandEvent) error {
 	}
 	_, err = event.UpdateInteractionResponse(update.WithContent("Lobotomized for this channel"))
 	return err
+}
+
+func lobotomizeCachedHistory(cache *db.ChannelCache, amount int, newLlmer func() *llm.Llmer) bool {
+	if cache == nil {
+		return false
+	}
+	if cache.ImportedHistory != nil {
+		if amount <= 0 {
+			cache.ImportedHistory = nil
+			cache.Llmer = nil
+			return true
+		}
+		if cache.Llmer == nil {
+			cache.Llmer = newLlmer()
+			cache.Llmer.Messages = append([]llm.Message(nil), cache.ImportedHistory.Messages...)
+		}
+		cache.Llmer.Lobotomize(amount)
+		cache.ImportedHistory.Messages = nonSystemMessages(cache.Llmer.Messages)
+		if len(cache.ImportedHistory.Messages) == 0 {
+			cache.ImportedHistory = nil
+			cache.Llmer = nil
+		}
+		return true
+	}
+	if cache.Llmer != nil {
+		cache.Llmer.Lobotomize(amount)
+		return true
+	}
+	return false
 }
 
 func nonSystemMessages(messages []llm.Message) []llm.Message {

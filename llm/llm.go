@@ -361,7 +361,14 @@ func (l *Llmer) Lobotomize(removeN int) {
 
 	if removeN > 0 {
 		endIdx := max(len(l.Messages)-removeN, startIdx)
-		l.Messages = l.Messages[startIdx:endIdx]
+		if startIdx == 0 {
+			l.Messages = l.Messages[:endIdx]
+			return
+		}
+		newMessages := make([]Message, 0, endIdx-startIdx+1)
+		newMessages = append(newMessages, l.Messages[0])
+		newMessages = append(newMessages, l.Messages[startIdx:endIdx]...)
+		l.Messages = newMessages
 	} else {
 		// if amount <= 0, remove all messages except the system prompt
 		l.Messages = l.Messages[:startIdx]

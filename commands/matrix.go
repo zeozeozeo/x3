@@ -1209,22 +1209,9 @@ func (b *MatrixBot) handleLobotomyCommand(ctx context.Context, msg *matrixMessag
 	if resetPersona {
 		cache.PersonaMeta = db.NewChannelCache().PersonaMeta
 	}
-	if cache.Llmer != nil {
-		cache.Llmer.Lobotomize(amount)
-	}
-	if cache.ImportedHistory != nil {
-		if amount > 0 {
-			if cache.Llmer == nil {
-				cache.Llmer = llm.NewLlmerForKey(key)
-				cache.Llmer.Messages = append([]llm.Message(nil), cache.ImportedHistory.Messages...)
-			}
-			cache.Llmer.Lobotomize(amount)
-			cache.ImportedHistory.Messages = nonSystemMessages(cache.Llmer.Messages)
-		} else {
-			cache.ImportedHistory = nil
-			cache.Llmer = nil
-		}
-	}
+	lobotomizeCachedHistory(cache, amount, func() *llm.Llmer {
+		return llm.NewLlmerForKey(key)
+	})
 	cache.Summaries = nil
 	cache.Memories = nil
 	if err := cache.WriteKey(key); err != nil {
