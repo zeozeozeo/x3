@@ -1592,7 +1592,7 @@ func (b *MatrixBot) sendFiles(ctx context.Context, roomID id.RoomID, replyTo id.
 			if replyTo != "" {
 				content.RelatesTo = (&event.RelatesTo{}).SetReplyTo(replyTo)
 			}
-			resp, err := b.client.SendMessageEvent(ctx, roomID, event.EventMessage, content)
+			resp, err := b.sendMessageEventWithRetry(ctx, roomID, event.EventMessage, content)
 			if err != nil {
 				return firstID, err
 			}
@@ -1622,7 +1622,7 @@ func (b *MatrixBot) editText(ctx context.Context, roomID id.RoomID, target id.Ev
 	text = firstNonEmpty(strings.TrimSpace(text), "<empty response>")
 	content := matrixTextContent(ellipsisTrim(text, matrixMaxTextLen))
 	content.SetEdit(target)
-	resp, err := b.client.SendMessageEvent(ctx, roomID, event.EventMessage, content)
+	resp, err := b.sendMessageEventWithRetry(ctx, roomID, event.EventMessage, content)
 	if err != nil {
 		return "", err
 	}
@@ -1660,7 +1660,7 @@ func (b *MatrixBot) sendFile(ctx context.Context, roomID id.RoomID, replyTo id.E
 	if replyTo != "" {
 		content.RelatesTo = (&event.RelatesTo{}).SetReplyTo(replyTo)
 	}
-	resp, err := b.client.SendMessageEvent(ctx, roomID, event.EventMessage, content)
+	resp, err := b.sendMessageEventWithRetry(ctx, roomID, event.EventMessage, content)
 	if err != nil {
 		return "", err
 	}
@@ -1679,20 +1679,85 @@ func (b *MatrixBot) uploadMatrixMedia(ctx context.Context, roomID id.RoomID, dat
 		contentType = "application/octet-stream"
 		filename = ""
 	}
-	resp, err := b.client.UploadMedia(ctx, mautrix.ReqUploadMedia{
-		ContentBytes: data,
-		ContentType:  contentType,
-		FileName:     filename,
-	})
-	if err != nil {
-		return "", nil, err
+
+	var resp *mautrix.RespMediaUpload
+	var uploadErr error
+	for retries := 0; retries < 10; retries++ {
+		resp, uploadErr = b.client.UploadMedia(ctx, mautrix.ReqUploadMedia{
+			ContentBytes: data,
+			ContentType:  contentType,
+			FileName:     filename,
+		})
+		if uploadErr != nil && strings.Contains(uploadErr.Error(), "M_LIMIT_EXCEEDED") {
+			delay := time.Duration(retries+2) * time.Second
+			slog.Warn("upload rate limited by matrix, sleeping", "delay", delay)
+			select {
+			case <-time.After(delay):
+				continue
+			case <-ctx.Done():
+				return "", nil, ctx.Err()
+			}
+		}
+		break
 	}
+	if uploadErr != nil {
+		return "", nil, uploadErr
+	}
+
 	url := resp.ContentURI.CUString()
 	if file != nil {
 		file.URL = url
 		return "", file, nil
 	}
 	return url, nil, nil
+}
+
+func getMatrixRetryDelay(err error, retries int) (time.Duration, bool) {
+	if err == nil {
+		return 0, false
+	}
+
+	// Try to extract the retry_after_ms field from the Matrix HTTP error
+	var httpErr mautrix.HTTPError
+	if errors.As(err, &httpErr) && httpErr.RespError != nil && httpErr.RespError.ErrCode == "M_LIMIT_EXCEEDED" {
+		if httpErr.RespError.RetryAfterMs > 0 {
+			return time.Duration(httpErr.RespError.RetryAfterMs) * time.Millisecond, true
+		}
+		return time.Duration(retries+2) * time.Second, true
+	}
+
+	// Fallback string check in case the error is wrapped differently
+	if strings.Contains(err.Error(), "M_LIMIT_EXCEEDED") || strings.Contains(err.Error(), "Too Many Requests") {
+		return time.Duration(retries+2) * time.Second, true
+	}
+
+	return 0, false
+}
+
+func getMatrixRetryDelay(err error, retries int) (time.Duration, bool) {
+	if err == nil {
+		return 0, false
+	}
+
+	var httpErr mautrix.HTTPError
+	if errors.As(err, &httpErr) && httpErr.RespError != nil && httpErr.RespError.ErrCode == "M_LIMIT_EXCEEDED" {
+		if val, ok := httpErr.RespError.ExtraData["retry_after_ms"]; ok {
+			if ms, ok := val.(float64); ok {
+				return time.Duration(ms) * time.Millisecond, true
+			}
+			if ms, ok := val.(int); ok {
+				return time.Duration(ms) * time.Millisecond, true
+			}
+		}
+		return time.Duration(retries+2) * time.Second, true
+	}
+
+	errStr := err.Error()
+	if strings.Contains(errStr, "M_LIMIT_EXCEEDED") || strings.Contains(errStr, "429") {
+		return time.Duration(retries+2) * time.Second, true
+	}
+
+	return 0, false
 }
 
 func splitMatrixText(text string) []string {
