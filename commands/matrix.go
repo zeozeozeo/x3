@@ -1632,6 +1632,23 @@ func (b *MatrixBot) editText(ctx context.Context, roomID id.RoomID, target id.Ev
 	return resp.EventID, err
 }
 
+func (b *MatrixBot) sendMessageEventWithRetry(ctx context.Context, roomID id.RoomID, eventType event.Type, content *event.MessageEventContent) (*mautrix.RespSendEvent, error) {
+	for retries := 0; retries < 10; retries++ {
+		resp, err := b.client.SendMessageEvent(ctx, roomID, eventType, content)
+		if delay, shouldRetry := getMatrixRetryDelay(err, retries); shouldRetry {
+			slog.Warn("rate limited by matrix, sleeping", "delay", delay, "room_id", roomID.String())
+			select {
+			case <-time.After(delay):
+				continue
+			case <-ctx.Done():
+				return nil, ctx.Err()
+			}
+		}
+		return resp, err
+	}
+	return b.client.SendMessageEvent(ctx, roomID, eventType, content)
+}
+
 func (b *MatrixBot) sendFile(ctx context.Context, roomID id.RoomID, replyTo id.EventID, file matrixOutFile) (id.EventID, error) {
 	data := append([]byte(nil), file.Data...)
 	contentType := file.ContentType
@@ -1710,28 +1727,6 @@ func (b *MatrixBot) uploadMatrixMedia(ctx context.Context, roomID id.RoomID, dat
 		return "", file, nil
 	}
 	return url, nil, nil
-}
-
-func getMatrixRetryDelay(err error, retries int) (time.Duration, bool) {
-	if err == nil {
-		return 0, false
-	}
-
-	// Try to extract the retry_after_ms field from the Matrix HTTP error
-	var httpErr mautrix.HTTPError
-	if errors.As(err, &httpErr) && httpErr.RespError != nil && httpErr.RespError.ErrCode == "M_LIMIT_EXCEEDED" {
-		if httpErr.RespError.RetryAfterMs > 0 {
-			return time.Duration(httpErr.RespError.RetryAfterMs) * time.Millisecond, true
-		}
-		return time.Duration(retries+2) * time.Second, true
-	}
-
-	// Fallback string check in case the error is wrapped differently
-	if strings.Contains(err.Error(), "M_LIMIT_EXCEEDED") || strings.Contains(err.Error(), "Too Many Requests") {
-		return time.Duration(retries+2) * time.Second, true
-	}
-
-	return 0, false
 }
 
 func getMatrixRetryDelay(err error, retries int) (time.Duration, bool) {
