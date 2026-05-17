@@ -42,6 +42,9 @@
         "mnn": {
           "codenames": ["deepseek-v4-flash"]
         },
+        "openrouter": {
+          "codenames": ["deepseek/deepseek-v4-flash:free"]
+        },
         "vercel": {
           "codenames": ["deepseek/deepseek-v4-flash"]
         },
@@ -244,6 +247,28 @@
       }
     },
     {
+      "name": "Mistral Large Latest",
+      "command": "mistrallarge",
+      "vision": true,
+      "reasoning": true,
+      "providers": {
+        "mistral": {
+          "codenames": ["mistral-large-latest"]
+        }
+      }
+    },
+    {
+      "name": "Mistral Medium Latest",
+      "command": "mistral",
+      "vision": true,
+      "reasoning": true,
+      "providers": {
+        "mistral": {
+          "codenames": ["mistral-medium-latest"]
+        }
+      }
+    },
+    {
       "name": "Meituan LongCat Flash Chat 560B",
       "command": "longcat",
       "providers": {
@@ -260,6 +285,17 @@
       "providers": {
         "openrouter": {
           "codenames": ["nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free"]
+        }
+      }
+    },
+    {
+      "name": "Mistral Small Latest",
+      "command": "mistralsmall",
+      "vision": true,
+      "reasoning": true,
+      "providers": {
+        "mistral": {
+          "codenames": ["mistral-small-latest"]
         }
       }
     },
@@ -312,9 +348,9 @@
     "Meta Llama 4 Scout 109B/17A"
   ],
   "providers_order": [
+    "openrouter",
     "vercel",
     "deepseek",
-    "openrouter",
     "ollama",
     "cerebras",
     "minimax",
@@ -341,7 +377,8 @@
     "navy",
     "akash",
     "perplexity",
-    "atlas"
+    "atlas",
+    "mistral"
   ],
   "provider_settings": {
     "cloudflare": {
@@ -350,12 +387,18 @@
     "deepseek": {
       "native_tool_calling": true
     },
+    "mistral": {
+      "native_tool_calling": true
+    },
     "ollama": {
+      "native_tool_calling": true
+    },
+    "openrouter": {
       "native_tool_calling": true
     },
     "vercel": {
       "native_tool_calling": true
     }
   },
-  "current_version": 34
+  "current_version": 35
 }
