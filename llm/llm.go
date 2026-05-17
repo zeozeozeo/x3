@@ -119,6 +119,9 @@ func firstNonEmpty(values ...string) string {
 }
 
 func applyReasoningSettings(req *openai.ChatCompletionRequest, provider string, reasoning bool) {
+	if provider == model.ProviderMistral {
+		return //oh cool yeah.
+	}
 	thinkingType := "disabled"
 	reasoningEffort := "none"
 	if reasoning {
