@@ -70,6 +70,7 @@ const (
 	zenmuxBaseURL       = "https://zenmux.ai/api/v1"
 	deepseekBaseURL     = "https://api.deepseek.com"
 	mistralBaseURL      = "https://api.mistral.ai/v1"
+	zenBaseURL          = "https://opencode.ai/zen/v1"
 )
 
 const (
@@ -109,6 +110,7 @@ const (
 	ProviderZenmux       = "zenmux"
 	ProviderDeepseek     = "deepseek"
 	ProviderMistral      = "mistral"
+	ProviderZen          = "zen" // OpenCode Zen
 )
 
 type ModelProvider struct {
@@ -187,6 +189,7 @@ var (
 		{Name: ProviderZenmux},
 		{Name: ProviderDeepseek},
 		{Name: ProviderMistral},
+		{Name: ProviderZen},
 		//{Name: ProviderG4F},
 	}
 
@@ -430,6 +433,8 @@ func (m Model) Client(provider string) (baseUrls []string, tokens []string, code
 		tokenEnvKey, apiVar = "X3_DEEPSEEK_TOKEN", deepseekBaseURL
 	case ProviderMistral:
 		tokenEnvKey, apiVar = "X3_MISTRAL_TOKEN", mistralBaseURL
+	case ProviderZen:
+		tokenEnvKey, apiVar = "X3_ZEN_TOKEN", zenBaseURL
 	default:
 		return nil, nil, nil
 	}
