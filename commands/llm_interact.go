@@ -146,9 +146,10 @@ func splitResponseChunk(response string) (messages []string) {
 // splitLlmTags splits model responses into Discord messages. It accepts the
 // legacy <new_message> tag and blank-line separators outside protected markdown.
 func splitLlmTags(response string, personaMeta *persona.PersonaMeta) (messages []string) {
+	rawCount := 0
 	defer func() {
 		if personaMeta != nil {
-			personaMeta.ExcessiveSplit = len(messages) >= excessiveSplitPunishThres
+			personaMeta.ExcessiveSplit = rawCount >= excessiveSplitPunishThres
 		}
 	}()
 
@@ -159,7 +160,35 @@ func splitLlmTags(response string, personaMeta *persona.PersonaMeta) (messages [
 		}
 		messages = append(messages, splitResponseChunk(content)...)
 	}
+	rawCount = len(messages)
+	messages = collapseRepeatedSplitMessages(messages)
 	return
+}
+
+func collapseRepeatedSplitMessages(messages []string) []string {
+	if len(messages) < 2 {
+		return messages
+	}
+
+	for blockSize := 1; blockSize <= len(messages)/2; blockSize++ {
+		if len(messages)%blockSize != 0 {
+			continue
+		}
+
+		block := messages[:blockSize]
+		repeated := true
+		for i := blockSize; i < len(messages); i += blockSize {
+			if !slices.Equal(block, messages[i:i+blockSize]) {
+				repeated = false
+				break
+			}
+		}
+		if repeated {
+			return append([]string(nil), block...)
+		}
+	}
+
+	return messages
 }
 
 // Doesn't call SendTyping!
