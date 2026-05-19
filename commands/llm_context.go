@@ -22,7 +22,7 @@ import (
 	"github.com/zeozeozeo/x3/llm"
 )
 
-var lobotomyMessagesRegex = regexp.MustCompile(`Removed last (\d+) messages from the context`)
+var lobotomyMessagesRegex = regexp.MustCompile(`(?i)Removed last (\d+) (messages|turns) from the context`)
 
 var imageURLRegexp = regexp.MustCompile(`https?://[^\s<>"']+`)
 
@@ -37,12 +37,15 @@ var imageURLExtensions = map[string]struct{}{
 
 func getLobotomyAmountFromMessage(msg discord.Message) int {
 	matches := lobotomyMessagesRegex.FindStringSubmatch(msg.Content)
-	if len(matches) != 2 {
+	if len(matches) != 3 {
 		return 0
 	}
 	n, err := strconv.Atoi(matches[1])
 	if err != nil {
 		return 0
+	}
+	if strings.EqualFold(matches[2], "turns") {
+		return n * 2
 	}
 	return n
 }

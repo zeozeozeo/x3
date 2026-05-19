@@ -444,6 +444,13 @@ func (b *MatrixBot) onMessage(ctx context.Context, evt *event.Event) {
 		return
 	}
 
+	if handled, err := b.tryAutoImportChatArchive(ctx, msg); handled {
+		if err != nil {
+			slog.Error("matrix chatlog auto-import failed", "room_id", msg.RoomID.String(), "event_id", msg.EventID.String(), "err", err)
+		}
+		return
+	}
+
 	trimmed := strings.TrimSpace(msg.Content)
 	isDM := b.isDMRoom(ctx, msg.RoomID)
 	if rawCommand, ok := b.parseCommand(trimmed, isDM); ok {
@@ -701,9 +708,9 @@ func (b *MatrixBot) helpText(isDM bool) string {
 		b.commandUsage("persona", isDM) + " images|thinking|reasoning|html|continuations|tools on|off",
 		b.commandUsage("models", isDM) + " list available model short names",
 		b.commandUsage("context", isDM) + " add|list|clear|delete|get|edit ...",
-		b.commandUsage("lobotomy", isDM) + " [amount] [reset_persona]",
+		b.commandUsage("lobotomy", isDM) + " [turns] [reset_persona]",
 		b.commandUsage("regenerate", isDM) + " [prepend]",
-		b.commandUsage("chatlog", isDM) + " export|import",
+		b.commandUsage("chatlog", isDM) + " export",
 	}, "\n")
 }
 
@@ -783,9 +790,9 @@ func (b *MatrixBot) lobotomyHelpText(isDM bool) string {
 	return strings.Join([]string{
 		"Lobotomy command:",
 		base + "                  forget all cached messages",
-		base + " <amount>         forget the last N cached messages",
+		base + " <turns>          forget the last N turns",
 		base + " reset            also reset persona",
-		base + " <amount> reset   combine both options",
+		base + " <turns> reset    combine both options",
 		"",
 		"Before clearing context, x3 attaches a chatlog archive when one is available.",
 	}, "\n")
@@ -796,7 +803,7 @@ func (b *MatrixBot) chatlogHelpText(isDM bool) string {
 	return strings.Join([]string{
 		"Chatlog command:",
 		base + " export           export cached context as JSON",
-		base + " import           import an attached x3 chatlog JSON file",
+		"Upload an `x3-chatlog-<year>-<month>-<day>.json` file to import it automatically.",
 	}, "\n")
 }
 
@@ -1209,7 +1216,8 @@ func (b *MatrixBot) handleLobotomyCommand(ctx context.Context, msg *matrixMessag
 	if resetPersona {
 		cache.PersonaMeta = db.NewChannelCache().PersonaMeta
 	}
-	lobotomizeCachedHistory(cache, amount, func() *llm.Llmer {
+	messagesToRemove := amount * 2
+	lobotomizeCachedHistory(cache, messagesToRemove, func() *llm.Llmer {
 		return llm.NewLlmerForKey(key)
 	})
 	cache.Summaries = nil
@@ -1219,7 +1227,7 @@ func (b *MatrixBot) handleLobotomyCommand(ctx context.Context, msg *matrixMessag
 	}
 	text := "Lobotomized for this room."
 	if amount > 0 {
-		text = fmt.Sprintf("Removed last %d messages from the context", amount)
+		text = fmt.Sprintf("Removed last %d turns from the context", amount)
 	}
 	if attachArchive {
 		_, err = b.sendFiles(ctx, msg.RoomID, msg.EventID, text, []matrixOutFile{matrixChatArchiveFile(archiveData, archive.ExportedAt)})
@@ -1313,35 +1321,39 @@ func (b *MatrixBot) handleChatlogCommand(ctx context.Context, msg *matrixMessage
 		_, err = b.sendFiles(ctx, msg.RoomID, msg.EventID, "Exported chatlog.", []matrixOutFile{matrixChatArchiveFile(data, archive.ExportedAt)})
 		return err
 	case "import":
-		if len(parsed.Args) > 1 {
-			return b.sendText(ctx, msg.RoomID, msg.EventID, matrixUnexpectedTokenDiagnostic(rest, parsed.At(1), "chatlog import"))
+		return b.sendText(ctx, msg.RoomID, msg.EventID, "Matrix imports chatlog archives automatically. Upload an `x3-chatlog-<year>-<month>-<day>.json` file in the room.")
+	default:
+		return b.sendText(ctx, msg.RoomID, msg.EventID, matrixCommandDiagnostic(rest, actionToken, "Unknown chatlog action `"+actionToken.Text+"`.", "Valid actions: export.")+"\n\n"+b.chatlogHelpText(isDM))
+	}
+}
+
+func (b *MatrixBot) tryAutoImportChatArchive(ctx context.Context, msg *matrixMessage) (bool, error) {
+	for _, att := range msg.Attachments {
+		if !isChatArchiveFilename(att.Filename) {
+			continue
 		}
-		if len(msg.Attachments) == 0 {
-			return b.sendText(ctx, msg.RoomID, msg.EventID, matrixCommandDiagnostic(rest, actionToken, "Missing chatlog archive attachment.", "Attach an `x3-chatlog-<year>-<month>-<day>.json` file and run `"+b.commandUsage("chatlog", isDM)+" import`."))
+		if att.Size > chatArchiveMaxSize || len(att.Data) > chatArchiveMaxSize {
+			return true, b.sendText(ctx, msg.RoomID, msg.EventID, fmt.Sprintf("Chatlog import failed: archive is too large; max size is %d bytes", chatArchiveMaxSize))
 		}
+
 		var archive chatArchive
-		if err := json.Unmarshal(msg.Attachments[0].Data, &archive); err != nil {
-			return err
+		if err := json.Unmarshal(att.Data, &archive); err != nil {
+			return true, b.sendText(ctx, msg.RoomID, msg.EventID, "Chatlog import failed: invalid archive JSON: "+err.Error())
 		}
 		if archive.Version != chatArchiveVersion {
-			return fmt.Errorf("unsupported archive version %d", archive.Version)
+			return true, b.sendText(ctx, msg.RoomID, msg.EventID, fmt.Sprintf("Chatlog import failed: unsupported archive version %d", archive.Version))
 		}
-		importedMessages := matrixArchiveToLLMMessages(archive.Messages)
-		cache.Llmer = llm.NewLlmerForKey(key)
-		cache.Llmer.Messages = importedMessages
-		cache.ImportedHistory = &db.ImportedChatHistory{Messages: append([]llm.Message(nil), importedMessages...)}
-		cache.Summaries = append([]persona.Summary(nil), archive.Summaries...)
-		cache.Memories = nil
-		cache.AddMemories(archive.Memories)
-		cache.Context = append([]string(nil), archive.Context...)
-		cache.UpdateInteractionTime()
+
+		key := b.roomKey(msg.RoomID)
+		cache := db.GetChannelCacheByKey(key)
+		importedMessages := applyChatArchiveToCache(cache, llm.NewLlmerForKey(key), archive)
 		if err := cache.WriteKey(key); err != nil {
-			return err
+			return true, err
 		}
-		return b.sendText(ctx, msg.RoomID, msg.EventID, fmt.Sprintf("Imported %s into cached context.", pluralize(len(importedMessages), "message")))
-	default:
-		return b.sendText(ctx, msg.RoomID, msg.EventID, matrixCommandDiagnostic(rest, actionToken, "Unknown chatlog action `"+actionToken.Text+"`.", "Valid actions: export, import.")+"\n\n"+b.chatlogHelpText(isDM))
+		return true, b.sendText(ctx, msg.RoomID, msg.EventID, fmt.Sprintf("Imported %s into cached context.", pluralize(len(importedMessages), "message")))
 	}
+
+	return false, nil
 }
 
 func buildMatrixChatArchive(msg *matrixMessage, cache *db.ChannelCache) chatArchive {
@@ -1362,24 +1374,6 @@ func matrixChatArchiveFile(data []byte, exportedAt time.Time) matrixOutFile {
 		ContentType: "application/json",
 		Data:        data,
 	}
-}
-
-func matrixArchiveToLLMMessages(messages []chatArchiveMessage) []llm.Message {
-	out := make([]llm.Message, 0, len(messages))
-	for _, msg := range messages {
-		if strings.TrimSpace(msg.Content) == "" && len(msg.Images) == 0 {
-			continue
-		}
-		out = append(out, llm.Message{
-			Role:      msg.Role,
-			Content:   msg.Content,
-			Images:    append([]string(nil), msg.Images...),
-			Author:    msg.Author,
-			Timestamp: msg.Timestamp,
-			MessageID: msg.MessageID,
-		})
-	}
-	return out
 }
 
 func (b *MatrixBot) handleLlm(ctx context.Context, msg *matrixMessage, isRegenerate bool, regeneratePrepend string) error {

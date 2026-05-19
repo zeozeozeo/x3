@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"regexp"
 	"strings"
 	"sync"
 	"time"
@@ -21,8 +22,10 @@ import (
 )
 
 const chatArchiveVersion = 1
+const chatArchiveMaxSize = 2 * 1024 * 1024
 
 var errNoChatInteractions = errors.New("there were no interactions in this channel")
+var chatArchiveFilenameRegexp = regexp.MustCompile(`(?i)^x3-chatlog-\d{4}-\d{1,2}-\d{1,2}\.json$`)
 
 type chatArchiveMessage struct {
 	Role      string    `json:"role"`
@@ -146,6 +149,10 @@ func chatArchiveFilename(t time.Time) string {
 	return fmt.Sprintf("x3-chatlog-%d-%d-%d.json", t.Year(), int(t.Month()), t.Day())
 }
 
+func isChatArchiveFilename(name string) bool {
+	return chatArchiveFilenameRegexp.MatchString(strings.TrimSpace(name))
+}
+
 func newChatArchiveFile(data []byte, exportedAt ...time.Time) *discord.File {
 	t := time.Now().UTC()
 	if len(exportedAt) > 0 {
@@ -182,21 +189,8 @@ func handleChatArchiveImport(event *handler.CommandEvent) error {
 		return updateInteractionError(event, fmt.Sprintf("unsupported archive version %d", archive.Version))
 	}
 
-	importedMessages := archive.toLLMMessages(event.Channel().ID())
 	cache := db.GetChannelCache(event.Channel().ID())
-	cache.Llmer = llm.NewLlmer(event.Channel().ID())
-	cache.Llmer.Messages = importedMessages
-	cache.ImportedHistory = &db.ImportedChatHistory{Messages: append([]llm.Message(nil), importedMessages...)}
-	if summariesEnabled() {
-		cache.Summaries = append([]persona.Summary(nil), archive.Summaries...)
-	} else {
-		cache.Summaries = nil
-		cache.MessagesSinceSummary = 0
-	}
-	cache.Memories = nil
-	cache.AddMemories(archive.Memories)
-	cache.Context = append([]string(nil), archive.Context...)
-	cache.UpdateInteractionTime()
+	importedMessages := applyChatArchiveToCache(cache, llm.NewLlmer(event.Channel().ID()), archive)
 	if err := cache.Write(event.Channel().ID()); err != nil {
 		return updateInteractionError(event, err.Error())
 	}
@@ -218,10 +212,27 @@ func handleChatArchiveImport(event *handler.CommandEvent) error {
 	return nil
 }
 
+func applyChatArchiveToCache(cache *db.ChannelCache, llmer *llm.Llmer, archive chatArchive) []llm.Message {
+	importedMessages := archive.toLLMMessages()
+	cache.Llmer = llmer
+	cache.Llmer.Messages = importedMessages
+	cache.ImportedHistory = &db.ImportedChatHistory{Messages: append([]llm.Message(nil), importedMessages...)}
+	if summariesEnabled() {
+		cache.Summaries = append([]persona.Summary(nil), archive.Summaries...)
+	} else {
+		cache.Summaries = nil
+		cache.MessagesSinceSummary = 0
+	}
+	cache.Memories = nil
+	cache.AddMemories(archive.Memories)
+	cache.Context = append([]string(nil), archive.Context...)
+	cache.UpdateInteractionTime()
+	return importedMessages
+}
+
 func downloadChatArchiveAttachment(attachment discord.Attachment) ([]byte, error) {
-	const maxArchiveSize = 2 * 1024 * 1024
-	if attachment.Size > maxArchiveSize {
-		return nil, fmt.Errorf("archive is too large; max size is %d bytes", maxArchiveSize)
+	if attachment.Size > chatArchiveMaxSize {
+		return nil, fmt.Errorf("archive is too large; max size is %d bytes", chatArchiveMaxSize)
 	}
 
 	resp, err := http.Get(attachment.URL)
@@ -233,12 +244,12 @@ func downloadChatArchiveAttachment(attachment discord.Attachment) ([]byte, error
 		return nil, fmt.Errorf("failed to download archive: HTTP %d", resp.StatusCode)
 	}
 
-	body, err := io.ReadAll(io.LimitReader(resp.Body, maxArchiveSize+1))
+	body, err := io.ReadAll(io.LimitReader(resp.Body, chatArchiveMaxSize+1))
 	if err != nil {
 		return nil, fmt.Errorf("failed to read archive: %w", err)
 	}
-	if len(body) > maxArchiveSize {
-		return nil, fmt.Errorf("archive is too large; max size is %d bytes", maxArchiveSize)
+	if len(body) > chatArchiveMaxSize {
+		return nil, fmt.Errorf("archive is too large; max size is %d bytes", chatArchiveMaxSize)
 	}
 	if !utf8.Valid(body) {
 		return nil, fmt.Errorf("archive is not valid UTF-8")
@@ -504,7 +515,7 @@ func messageImageURLs(content string, attachments []discord.Attachment) []string
 	return urls
 }
 
-func (a chatArchive) toLLMMessages(channelID snowflake.ID) []llm.Message {
+func (a chatArchive) toLLMMessages() []llm.Message {
 	messages := make([]llm.Message, 0, len(a.Messages))
 	for _, msg := range a.Messages {
 		if strings.TrimSpace(msg.Content) == "" && len(msg.Images) == 0 {
