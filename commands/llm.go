@@ -66,6 +66,9 @@ var GptCommands = makeGptCommands()
 
 // HandleLlm handles an LLM slash command.
 func HandleLlm(event *handler.CommandEvent, models []model.Model) error {
+	unlock := lockChannelInteraction(event.Channel().ID())
+	defer unlock()
+
 	data := event.SlashCommandInteractionData()
 	prompt := data.String("prompt")
 	ephemeral := data.Bool("ephemeral")

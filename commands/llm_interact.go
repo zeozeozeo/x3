@@ -32,11 +32,24 @@ var (
 	errRegenerateNoMessage       = errors.New("cannot find last response to regenerate")
 )
 
+var channelInteractionLocks sync.Map // snowflake.ID -> *sync.Mutex
+
 const (
 	generateImageTag          = "<generate_image>"
 	newMessageTag             = "<new_message>"
 	excessiveSplitPunishThres = 5
 )
+
+func lockChannelInteraction(channelID snowflake.ID) func() {
+	if channelID == 0 {
+		return func() {}
+	}
+
+	lockAny, _ := channelInteractionLocks.LoadOrStore(channelID, &sync.Mutex{})
+	lock := lockAny.(*sync.Mutex)
+	lock.Lock()
+	return lock.Unlock
+}
 
 // replaceLlmTagsWithNewlines replaces response split markers with newlines.
 func replaceLlmTagsWithNewlines(response string, personaMeta *persona.PersonaMeta) string {
@@ -214,6 +227,9 @@ func handleLlmInteraction2(
 	includeNSFW bool, // Whether Discord search should include NSFW channels
 	ctx context.Context,
 ) (string, snowflake.ID, error) { // (Returns jumpURL if regenerating, otherwise response), the bot message id and error
+	unlock := lockChannelInteraction(channelID)
+	defer unlock()
+
 	cache := db.GetChannelCache(channelID)
 
 	// might be the first message for a character card
