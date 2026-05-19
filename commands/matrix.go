@@ -1416,15 +1416,8 @@ func (b *MatrixBot) handleLlm(ctx context.Context, msg *matrixMessage, isRegener
 	} else {
 		promptContext := matrixPromptContext(cache)
 		p := persona.GetPersonaByMeta(cache.PersonaMeta, msg.Author, b.isDMRoom(ctx, msg.RoomID), promptContext)
-		llmer.SetPersona(p, &cache.PersonaMeta.ExcessiveSplit)
 		content := matrixFormatMsg(augmentContentWithLinkMetadata(msg.Content), msg.Author, msg.ReplyTo)
-		llmer.AddMessageWithID(llm.RoleUser, content, 0, msg.EventID.String())
-		if len(llmer.Messages) > 0 {
-			added := &llmer.Messages[len(llmer.Messages)-1]
-			added.Author = msg.Author
-			added.Timestamp = msg.Timestamp
-			added.MessageID = msg.EventID.String()
-		}
+		appendMatrixUserMessage(llmer, cache, p, content, msg.Author, msg.EventID.String(), msg.Timestamp)
 		for _, attachment := range msg.Attachments {
 			if attachment.IsImage && attachment.DataURI != "" {
 				llmer.AddImage(attachment.DataURI)

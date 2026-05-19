@@ -425,6 +425,12 @@ func (l *Llmer) AddMessageWithID(role, content string, id snowflake.ID, messageI
 func (l *Llmer) SetPersona(persona persona.Persona, punishExcessiveSplit *bool) {
 	l.ToolsEnabled = persona.Tools
 
+	for i := range l.Messages {
+		if l.Messages[i].Role == RoleUser {
+			l.Messages[i].Content = strings.TrimPrefix(l.Messages[i].Content, SplitWarningPrefix)
+		}
+	}
+
 	// remove system prompt if there is one
 	if len(l.Messages) > 0 && l.Messages[0].Role == RoleSystem {
 		l.Messages = l.Messages[1:]
