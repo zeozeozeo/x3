@@ -446,15 +446,17 @@ func (l *Llmer) SetPersona(persona persona.Persona, punishExcessiveSplit *bool) 
 		Content: persona.System,
 	}}, l.Messages...)
 
-	if punishExcessiveSplit != nil && *punishExcessiveSplit {
-		*punishExcessiveSplit = false
-		if len(l.Messages) > 0 {
-			lastMsg := &l.Messages[len(l.Messages)-1]
-			if lastMsg.Role == RoleUser {
-				lastMsg.Content = SplitWarningPrefix + lastMsg.Content
+	/*
+		if punishExcessiveSplit != nil && *punishExcessiveSplit {
+			*punishExcessiveSplit = false
+			if len(l.Messages) > 0 {
+				lastMsg := &l.Messages[len(l.Messages)-1]
+				if lastMsg.Role == RoleUser {
+					lastMsg.Content = SplitWarningPrefix + lastMsg.Content
+				}
 			}
 		}
-	}
+	*/
 }
 
 // Add an image by URL to the latest message.
