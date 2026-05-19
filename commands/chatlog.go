@@ -338,12 +338,16 @@ func buildChatArchiveFromLLMMessages(channelID snowflake.ID, guildID *snowflake.
 func archiveMessagesFromLLM(messages []llm.Message) []chatArchiveMessage {
 	out := make([]chatArchiveMessage, 0, len(messages))
 	for _, msg := range messages {
-		if msg.Role == llm.RoleSystem || strings.TrimSpace(msg.Content) == "" && len(msg.Images) == 0 {
+		content := msg.Content
+		if msg.Role == llm.RoleUser {
+			content = stripSplitWarning(content)
+		}
+		if msg.Role == llm.RoleSystem || strings.TrimSpace(content) == "" && len(msg.Images) == 0 {
 			continue
 		}
 		out = append(out, chatArchiveMessage{
 			Role:      msg.Role,
-			Content:   msg.Content,
+			Content:   content,
 			Author:    firstNonEmpty(msg.Author, msg.Role),
 			MessageID: msg.MessageID,
 			Timestamp: msg.Timestamp,
@@ -360,6 +364,10 @@ func firstNonEmpty(values ...string) string {
 		}
 	}
 	return ""
+}
+
+func stripSplitWarning(content string) string {
+	return strings.TrimPrefix(content, llm.SplitWarningPrefix)
 }
 
 func fetchMessagesForArchive(event *handler.CommandEvent) ([]discord.Message, error) {
@@ -518,12 +526,16 @@ func messageImageURLs(content string, attachments []discord.Attachment) []string
 func (a chatArchive) toLLMMessages() []llm.Message {
 	messages := make([]llm.Message, 0, len(a.Messages))
 	for _, msg := range a.Messages {
-		if strings.TrimSpace(msg.Content) == "" && len(msg.Images) == 0 {
+		content := msg.Content
+		if msg.Role == llm.RoleUser {
+			content = stripSplitWarning(content)
+		}
+		if strings.TrimSpace(content) == "" && len(msg.Images) == 0 {
 			continue
 		}
 		messages = append(messages, llm.Message{
 			Role:      msg.Role,
-			Content:   msg.Content,
+			Content:   content,
 			Images:    append([]string(nil), msg.Images...),
 			Author:    msg.Author,
 			Timestamp: msg.Timestamp,
@@ -560,7 +572,7 @@ func chatArchiveBrowserMessage(archive chatArchive, page, pageSize int) discord.
 				fmt.Fprintf(&b, " <t:%d:f>", msg.Timestamp.Unix())
 			}
 			b.WriteString("\n")
-			b.WriteString(ellipsisTrim(msg.Content, 450))
+			b.WriteString(ellipsisTrim(stripSplitWarning(msg.Content), 450))
 			if len(msg.Images) > 0 {
 				fmt.Fprintf(&b, "\n-# %s", pluralize(len(msg.Images), "image"))
 			}

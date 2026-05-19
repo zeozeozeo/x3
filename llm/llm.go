@@ -27,9 +27,10 @@ import (
 )
 
 const (
-	RoleUser      = openai.ChatMessageRoleUser
-	RoleAssistant = openai.ChatMessageRoleAssistant
-	RoleSystem    = openai.ChatMessageRoleSystem
+	RoleUser           = openai.ChatMessageRoleUser
+	RoleAssistant      = openai.ChatMessageRoleAssistant
+	RoleSystem         = openai.ChatMessageRoleSystem
+	SplitWarningPrefix = "*SYSTEM MESSAGE: you've used >=5 splits in your previous message, try staying within 1-3 splits!*\n"
 )
 
 var (
@@ -444,7 +445,7 @@ func (l *Llmer) SetPersona(persona persona.Persona, punishExcessiveSplit *bool) 
 		if len(l.Messages) > 0 {
 			lastMsg := &l.Messages[len(l.Messages)-1]
 			if lastMsg.Role == RoleUser {
-				lastMsg.Content = "*SYSTEM MESSAGE: you've used >=5 splits in your previous message, try staying within 1-3 splits!*\n" + lastMsg.Content
+				lastMsg.Content = SplitWarningPrefix + lastMsg.Content
 			}
 		}
 	}
