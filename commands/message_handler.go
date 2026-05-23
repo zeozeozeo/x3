@@ -118,6 +118,7 @@ func handleLlmInteraction(event *events.MessageCreate) error {
 		event.Message.Author.EffectiveName(),
 		event.Message.Author.ID,
 		event.Message.Attachments,
+		event.Message.Embeds,
 		false, // not a time interaction
 		false, // not a regenerate
 		"",    // no regenerate prepend
@@ -326,6 +327,7 @@ func handleReactionAdd(client *bot.Client, messageAuthorID *snowflake.ID, channe
 		user.EffectiveName(),
 		userID,
 		msg.Attachments,
+		msg.Embeds,
 		false, // not a time interaction
 		false, // not a regenerate
 		"",    // no regenerate prepend

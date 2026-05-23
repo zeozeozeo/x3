@@ -214,6 +214,7 @@ func handleLlmInteraction2(
 	username string, // Username of the triggering user
 	userID snowflake.ID, // ID of the triggering user
 	attachments []discord.Attachment, // Attachments from the triggering message
+	embeds []discord.Embed, // Embeds from the triggering message
 	timeInteraction bool, // Whether this is a proactive time-based interaction
 	isRegenerate bool, // Whether to regenerate the last response
 	regeneratePrepend string, // Text to prepend to the regenerated response
@@ -332,6 +333,7 @@ func handleLlmInteraction2(
 		reference = nil
 	}
 	contentWithLinks := augmentContentWithLinkMetadata(content)
+	contentWithLinks = appendImageLinks(contentWithLinks, messageImageURLs(content, attachments, embeds))
 	llmer.AddMessage(llm.RoleUser, formatMsg(contentWithLinks, username, reference), messageID)
 	if len(llmer.Messages) > 0 {
 		msg := &llmer.Messages[len(llmer.Messages)-1]
@@ -341,7 +343,7 @@ func handleLlmInteraction2(
 			msg.MessageID = messageID.String()
 		}
 	}
-	addImageSources(llmer, content, attachments)
+	addImageSources(llmer, content, attachments, embeds)
 
 	if isRegenerate {
 		// remove messages up to (but not including) the message being regenerated

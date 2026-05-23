@@ -95,6 +95,7 @@ func HandleImpersonate(event *handler.CommandEvent) error {
 			username,
 			0,     // determine uid from history
 			nil,   // no attachments
+			nil,   // no embeds
 			false, // not a timeInteraction
 			false, // not a regenerate
 			prepend,

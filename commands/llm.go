@@ -122,8 +122,12 @@ func HandleLlm(event *handler.CommandEvent, models []model.Model) error {
 				} else {
 					msgPersona := persona.GetPersonaByMeta(cache.PersonaMeta, msg.Author.EffectiveName(), isDM, promptContext)
 					llmer.SetPersona(msgPersona, nil)
-					llmer.AddMessage(llm.RoleUser, formatMsg(getMessageContent(*msg), msg.Author.EffectiveName(), msg.ReferencedMessage), msg.ID)
-					addImageAttachments(llmer, msg.Attachments)
+					content := getMessageContent(*msg)
+					rawContent := content
+					content = augmentContentWithLinkMetadata(content)
+					content = appendImageLinks(content, messageImageURLs(rawContent, msg.Attachments, msg.Embeds))
+					llmer.AddMessage(llm.RoleUser, formatMsg(content, msg.Author.EffectiveName(), msg.ReferencedMessage), msg.ID)
+					addImageSources(llmer, rawContent, msg.Attachments, msg.Embeds)
 				}
 			}
 		}

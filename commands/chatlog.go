@@ -488,7 +488,7 @@ func replayMessagesForArchive(messages []discord.Message, botID snowflake.ID) []
 			Author:    msg.Author.EffectiveName(),
 			MessageID: msg.ID.String(),
 			Timestamp: msg.CreatedAt,
-			Images:    messageImageURLs(content, msg.Attachments),
+			Images:    messageImageURLs(content, msg.Attachments, msg.Embeds),
 		})
 	}
 
@@ -505,22 +505,6 @@ func appendArchiveMessage(messages []chatArchiveMessage, message chatArchiveMess
 		return messages
 	}
 	return append(messages, message)
-}
-
-func imageAttachmentURLs(attachments []discord.Attachment) []string {
-	var urls []string
-	for _, attachment := range attachments {
-		if isImageAttachment(attachment) {
-			urls = append(urls, attachment.URL)
-		}
-	}
-	return urls
-}
-
-func messageImageURLs(content string, attachments []discord.Attachment) []string {
-	urls := imageAttachmentURLs(attachments)
-	urls = append(urls, imageURLsFromContent(content)...)
-	return urls
 }
 
 func (a chatArchive) toLLMMessages() []llm.Message {

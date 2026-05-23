@@ -48,6 +48,7 @@ func HandleRegenerate(event *handler.CommandEvent) error {
 		"",    // no username
 		0,     // no memory
 		nil,   // no attachments
+		nil,   // no embeds
 		false, // timeInteraction
 		true,  // isRegenerate
 		prepend,

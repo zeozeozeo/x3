@@ -86,10 +86,8 @@ func addImageAttachments(llmer *llm.Llmer, attachments []discord.Attachment) {
 	if attachments == nil {
 		return
 	}
-	for _, attachment := range attachments {
-		if isImageAttachment(attachment) {
-			llmer.AddImage(attachment.URL)
-		}
+	for _, imageURL := range imageURLsFromAttachments(attachments) {
+		llmer.AddImage(imageURL)
 	}
 }
 
@@ -99,9 +97,37 @@ func addImageLinks(llmer *llm.Llmer, content string) {
 	}
 }
 
-func addImageSources(llmer *llm.Llmer, content string, attachments []discord.Attachment) {
-	addImageAttachments(llmer, attachments)
-	addImageLinks(llmer, content)
+func addImageSources(llmer *llm.Llmer, content string, attachments []discord.Attachment, embeds []discord.Embed) {
+	for _, imageURL := range messageImageURLs(content, attachments, embeds) {
+		llmer.AddImage(imageURL)
+	}
+}
+
+func appendImageLinks(content string, imageURLs []string) string {
+	if len(imageURLs) == 0 {
+		return content
+	}
+
+	filtered := make([]string, 0, len(imageURLs))
+	seen := make(map[string]struct{}, len(imageURLs))
+	for _, raw := range imageURLs {
+		raw = strings.TrimSpace(raw)
+		if raw == "" {
+			continue
+		}
+		if _, ok := seen[raw]; ok {
+			continue
+		}
+		seen[raw] = struct{}{}
+		if strings.Contains(content, raw) {
+			continue
+		}
+		filtered = append(filtered, raw)
+	}
+	if len(filtered) == 0 {
+		return content
+	}
+	return appendContextLine(content, "image links: "+strings.Join(filtered, ", "))
 }
 
 func appendContextLine(content, line string) string {
@@ -154,6 +180,90 @@ func imageURLsFromContent(content string) []string {
 	for _, raw := range matches {
 		raw = strings.TrimRight(raw, ".,!?;:)]}")
 		if !isLikelyImageURL(raw) {
+			continue
+		}
+		if _, ok := seen[raw]; ok {
+			continue
+		}
+		seen[raw] = struct{}{}
+		out = append(out, raw)
+	}
+	return out
+}
+
+func imageURLsFromAttachments(attachments []discord.Attachment) []string {
+	if len(attachments) == 0 {
+		return nil
+	}
+
+	out := make([]string, 0, len(attachments)*2)
+	seen := make(map[string]struct{}, len(attachments)*2)
+	for _, attachment := range attachments {
+		if !isImageAttachment(attachment) {
+			continue
+		}
+		for _, raw := range []string{attachment.URL, attachment.ProxyURL} {
+			raw = strings.TrimSpace(raw)
+			if raw == "" {
+				continue
+			}
+			if _, ok := seen[raw]; ok {
+				continue
+			}
+			seen[raw] = struct{}{}
+			out = append(out, raw)
+		}
+	}
+	return out
+}
+
+func imageURLsFromEmbeds(embeds []discord.Embed) []string {
+	if len(embeds) == 0 {
+		return nil
+	}
+
+	out := make([]string, 0, len(embeds)*2)
+	seen := make(map[string]struct{}, len(embeds)*2)
+	add := func(raw string) {
+		raw = strings.TrimSpace(raw)
+		if raw == "" {
+			return
+		}
+		if _, ok := seen[raw]; ok {
+			return
+		}
+		seen[raw] = struct{}{}
+		out = append(out, raw)
+	}
+
+	for _, embed := range embeds {
+		if embed.Image != nil {
+			add(embed.Image.URL)
+			add(embed.Image.ProxyURL)
+		}
+		if embed.Thumbnail != nil {
+			add(embed.Thumbnail.URL)
+			add(embed.Thumbnail.ProxyURL)
+		}
+	}
+
+	return out
+}
+
+func messageImageURLs(content string, attachments []discord.Attachment, embeds []discord.Embed) []string {
+	urls := imageURLsFromAttachments(attachments)
+	urls = append(urls, imageURLsFromEmbeds(embeds)...)
+	urls = append(urls, imageURLsFromContent(content)...)
+
+	if len(urls) == 0 {
+		return nil
+	}
+
+	seen := make(map[string]struct{}, len(urls))
+	out := make([]string, 0, len(urls))
+	for _, raw := range urls {
+		raw = strings.TrimSpace(raw)
+		if raw == "" {
 			continue
 		}
 		if _, ok := seen[raw]; ok {
@@ -463,7 +573,9 @@ func addContextMessages(
 
 	latestImageIdx := -1
 	for i, msg := range messages { // newest to oldest
-		if slices.ContainsFunc(msg.Attachments, isImageAttachment) || len(imageURLsFromContent(msg.Content)) > 0 {
+		if slices.ContainsFunc(msg.Attachments, isImageAttachment) ||
+			len(imageURLsFromContent(msg.Content)) > 0 ||
+			len(imageURLsFromEmbeds(msg.Embeds)) > 0 {
 			latestImageIdx = i
 			break // found the newest image
 		}
@@ -485,6 +597,7 @@ func addContextMessages(
 		msg := messages[i]
 		role := llm.RoleUser
 		content := ""
+		rawContent := ""
 
 		if msg.Author.ID == client.ID() {
 			role = llm.RoleAssistant
@@ -537,6 +650,7 @@ func addContextMessages(
 
 			// remove appends
 			content = strings.TrimSuffix(content, interactionReminder)
+			rawContent = content
 		} else { // (user message)
 			role = llm.RoleUser
 			lastUserID = msg.Author.ID
@@ -552,7 +666,9 @@ func addContextMessages(
 			} else {
 				content = getMessageContent(msg)
 			}
+			rawContent = content
 			content = augmentContentWithLinkMetadata(content)
+			content = appendImageLinks(content, messageImageURLs(rawContent, msg.Attachments, msg.Embeds))
 
 			reference := msg.ReferencedMessage
 			// don't format reply if it refers to the immediately preceding assistant message
@@ -573,7 +689,7 @@ func addContextMessages(
 
 		// add image sources if this is the newest message containing one
 		if i == latestImageIdx {
-			addImageSources(llmer, content, msg.Attachments)
+			addImageSources(llmer, rawContent, msg.Attachments, msg.Embeds)
 		}
 	}
 

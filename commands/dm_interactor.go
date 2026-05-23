@@ -101,6 +101,7 @@ func InitiateDMInteraction(client *bot.Client) {
 			"system message", // Placeholder username
 			0,                // User ID will be determined by handleLlmInteraction2 from history
 			nil,              // No attachments
+			nil,              // No embeds
 			true,             // timeInteraction flag
 			false,            // Not a regenerate
 			"",               // No regenerate prepend
