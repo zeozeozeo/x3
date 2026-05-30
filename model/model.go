@@ -72,6 +72,7 @@ const (
 	mistralBaseURL      = "https://api.mistral.ai/v1"
 	zenBaseURL          = "https://opencode.ai/zen/v1"
 	mimoBaseURL         = "https://token-plan-sgp.xiaomimimo.com/v1"
+	makoraBaseURL       = "https://inference.makora.com/glm-5-1-fp8/v1"
 )
 
 const (
@@ -113,6 +114,7 @@ const (
 	ProviderMistral      = "mistral"
 	ProviderZen          = "zen" // OpenCode Zen
 	ProviderMiMo         = "mimo"
+	ProviderMakora       = "makora"
 )
 
 type ModelProvider struct {
@@ -193,6 +195,7 @@ var (
 		{Name: ProviderMistral},
 		{Name: ProviderZen},
 		{Name: ProviderMiMo},
+		{Name: ProviderMakora},
 		//{Name: ProviderG4F},
 	}
 
@@ -440,6 +443,8 @@ func (m Model) Client(provider string) (baseUrls []string, tokens []string, code
 		tokenEnvKey, apiVar = "X3_ZEN_TOKEN", zenBaseURL
 	case ProviderMiMo:
 		tokenEnvKey, apiVar = "X3_MIMO_TOKEN", mimoBaseURL
+	case ProviderMakora:
+		tokenEnvKey, apiVar = "X3_MAKORA_TOKEN", makoraBaseURL
 	default:
 		return nil, nil, nil
 	}
