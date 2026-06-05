@@ -21,14 +21,14 @@ const (
 
 var AntiscamCommand = discord.SlashCommandCreate{
 	Name:        "antiscam",
-	Description: "Toggle the anti-scam cleanup channel for this server",
+	Description: "Toggle the anti-scam channel for this server",
 	Contexts: []discord.InteractionContextType{
 		discord.InteractionContextTypeGuild,
 	},
 	Options: []discord.ApplicationCommandOption{
 		discord.ApplicationCommandOptionBool{
 			Name:        "enabled",
-			Description: "Whether the anti-scam cleanup channel is enabled",
+			Description: "Whether the anti-scam channel is enabled",
 			Required:    true,
 		},
 	},
@@ -59,7 +59,7 @@ func HandleAntiscam(event *handler.CommandEvent) error {
 		created, refreshed, err = ensureAntiscamChannel(event.Client(), *guildID)
 		if err != nil {
 			slog.Error("failed to ensure antiscam channel", "err", err, slog.String("guild_id", guildID.String()))
-			return sendInteractionError(event, "Anti-scam was enabled, but I could not create or update the cleanup channel. Check my Manage Channels and Manage Messages permissions.", true)
+			return sendInteractionError(event, "Anti-scam was enabled, but I could not create or update the channel. Check my Manage Channels and Manage Messages permissions.", true)
 		}
 	}
 
@@ -67,7 +67,15 @@ func HandleAntiscam(event *handler.CommandEvent) error {
 	details := ""
 	if enabled {
 		status = "enabled"
-		details = fmt.Sprintf("\n\nCreated **%d** cleanup channel and refreshed **%d** existing one.", created, refreshed)
+		s1 := ""
+		if created > 1 || created == 0 {
+			s1 = "s"
+		}
+		s2 := ""
+		if refreshed > 1 || refreshed == 0 {
+			s2 = "s"
+		}
+		details = fmt.Sprintf("\n\nCreated **%d** channel%s and refreshed **%d** existing one%s.", created, refreshed, s1, s2)
 	}
 
 	return sendInteractionOk(event, "Anti-scam updated", fmt.Sprintf("Anti-scam has been **%s** for this server.%s", status, details), false)
@@ -223,8 +231,8 @@ func upsertAntiscamPrompt(client *bot.Client, channelID snowflake.ID, promptMess
 func antiscamPromptEmbed() discord.Embed {
 	return discord.NewEmbed().
 		WithColor(0xFFD700).
-		WithTitle("Anti-scam cleanup").
-		WithDescription("Type in this channel to get the last 5 minutes of your message history erased.\n\nMessages you send during the next 5 minutes will be erased too.").
+		WithTitle("Anti-scam").
+		WithDescription("Type in this channel to get the last 5 minutes of your message history erased (scam prevention).").
 		WithFooter("x3", x3Icon).
 		WithTimestamp(time.Now())
 }
