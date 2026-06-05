@@ -21,11 +21,10 @@ import (
 )
 
 var (
-	containsX3Regex              = regexp.MustCompile(`(?i)(^|\P{L})(?:x3|х3|clanker|clanky|кланкер)(\P{L}|$)`)
-	containsProtogenRegex        = regexp.MustCompile(`(?i)(^|\P{L})(?:protogen|протоген)(\P{L}|$)`)
-	containsSigmaRegex           = regexp.MustCompile(`(?i)(^|\P{L})(?:sigma|сигма)(\P{L}|$)`)
-	cdnLinkRegex                 = regexp.MustCompile(`https?://(?:cdn|media)\.discordapp\.com/[^\s]+\.(?:png|jpg|jpeg|webp)(?:\?[^\s]*)?`)
-	antiscamNotificationDebounce sync.Map // guildID -> time.Time
+	containsX3Regex       = regexp.MustCompile(`(?i)(^|\P{L})(?:x3|х3|clanker|clanky|кланкер)(\P{L}|$)`)
+	containsProtogenRegex = regexp.MustCompile(`(?i)(^|\P{L})(?:protogen|протоген)(\P{L}|$)`)
+	containsSigmaRegex    = regexp.MustCompile(`(?i)(^|\P{L})(?:sigma|сигма)(\P{L}|$)`)
+	antiscamPurgeJobs     sync.Map // guildID:userID -> struct{}
 )
 
 func handleCharacterCardImage(event *events.MessageCreate) bool {
@@ -165,48 +164,14 @@ func OnMessageCreate(event *events.MessageCreate) {
 	}
 
 	// anti-scam
-	if event.GuildID != nil && db.IsAntiscamEnabled(*event.GuildID) {
-		isScam := false
-		// 4 image attachments
-		if len(event.Message.Attachments) == 4 {
-			allImages := true
-			for _, a := range event.Message.Attachments {
-				if !isImageAttachment(a) {
-					allImages = false
-					break
-				}
-			}
-			if allImages {
-				isScam = true
-			}
+	if event.GuildID != nil && db.IsAntiscamEnabled(*event.GuildID) && db.IsAntiscamChannel(event.ChannelID) {
+		if err := handleAntiscamTrigger(event); err != nil {
+			slog.Error("failed to handle antiscam trigger", "err", err, slog.String("guild_id", event.GuildID.String()), slog.String("user_id", event.Message.Author.ID.String()))
+			_ = sendPrettyEmbed(event.Client(), event.ChannelID, "Anti-scam", "Failed to erase this account's recent message history. Check my Read Message History and Manage Messages permissions.")
+		} else {
+			_ = sendPrettyEmbed(event.Client(), event.ChannelID, "Anti-scam", "Started erasing this account's recent message history.")
 		}
-
-		// 4 discord CDN links and no other content
-		if !isScam {
-			content := strings.TrimSpace(event.Message.Content)
-			links := cdnLinkRegex.FindAllString(content, -1)
-			if len(links) == 4 {
-				// check if there is any other content
-				remaining := content
-				for _, link := range links {
-					remaining = strings.Replace(remaining, link, "", 1)
-				}
-				if strings.TrimSpace(remaining) == "" {
-					isScam = true
-				}
-			}
-		}
-
-		if isScam {
-			_ = event.Client().Rest.DeleteMessage(event.ChannelID, event.MessageID)
-
-			// notify (debounced)
-			if lastNotify, ok := antiscamNotificationDebounce.Load(*event.GuildID); !ok || time.Since(lastNotify.(time.Time)) > 30*time.Second {
-				antiscamNotificationDebounce.Store(*event.GuildID, time.Now())
-				_ = sendPrettyEmbed(event.Client(), event.ChannelID, "Anti-scam", "Deleted a message that appeared to be a scam.")
-			}
-			return
-		}
+		return
 	}
 
 	// auto-apply character cards from .card.png images in DMs
@@ -296,6 +261,124 @@ func OnMessageCreate(event *events.MessageCreate) {
 		)
 		return
 	}
+}
+
+func handleAntiscamTrigger(event *events.MessageCreate) error {
+	if event.GuildID == nil {
+		return nil
+	}
+
+	guildID := *event.GuildID
+	userID := event.Message.Author.ID
+	triggeredAt := event.Message.CreatedAt
+	if triggeredAt.IsZero() {
+		triggeredAt = time.Now()
+	}
+	start := triggeredAt.Add(-5 * time.Minute)
+	end := triggeredAt.Add(5 * time.Minute)
+
+	if err := purgeGuildUserMessages(event.Client(), guildID, userID, start, time.Now().Add(time.Second)); err != nil {
+		return err
+	}
+
+	jobKey := guildID.String() + ":" + userID.String()
+	if _, loaded := antiscamPurgeJobs.LoadOrStore(jobKey, struct{}{}); loaded {
+		return nil
+	}
+	go func() {
+		defer antiscamPurgeJobs.Delete(jobKey)
+		delay := time.Until(end)
+		if delay > 0 {
+			time.Sleep(delay)
+		}
+		if err := purgeGuildUserMessages(event.Client(), guildID, userID, start, end); err != nil {
+			slog.Error("failed delayed antiscam purge", "err", err, slog.String("guild_id", guildID.String()), slog.String("user_id", userID.String()))
+		}
+	}()
+
+	return nil
+}
+
+func purgeGuildUserMessages(client *bot.Client, guildID, userID snowflake.ID, start, end time.Time) error {
+	channels, err := client.Rest.GetGuildChannels(guildID)
+	if err != nil {
+		return err
+	}
+	trapChannels, err := db.GetAntiscamChannels(guildID)
+	if err != nil {
+		return err
+	}
+	trapChannelIDs := make(map[snowflake.ID]struct{}, len(trapChannels))
+	for _, channel := range trapChannels {
+		trapChannelIDs[channel.ChannelID] = struct{}{}
+	}
+
+	for _, channel := range channels {
+		if !isAntiscamSupportedChannel(channel) {
+			continue
+		}
+		if _, isTrap := trapChannelIDs[channel.ID()]; !isTrap && db.IsChannelInBlacklist(channel.ID()) {
+			continue
+		}
+		if err := purgeChannelUserMessages(client, channel.ID(), userID, start, end); err != nil {
+			slog.Warn("failed to purge antiscam channel messages", "err", err, slog.String("channel_id", channel.ID().String()))
+		}
+	}
+	return nil
+}
+
+func purgeChannelUserMessages(client *bot.Client, channelID, userID snowflake.ID, start, end time.Time) error {
+	afterID := snowflake.New(start.Add(-time.Millisecond))
+	beforeID := snowflake.ID(0)
+	var ids []snowflake.ID
+
+	for {
+		messages, err := client.Rest.GetMessages(channelID, 0, beforeID, afterID, 100)
+		if err != nil {
+			return err
+		}
+		if len(messages) == 0 {
+			break
+		}
+
+		oldestID := messages[len(messages)-1].ID
+		for _, msg := range messages {
+			if msg.CreatedAt.Before(start) || msg.CreatedAt.After(end) {
+				continue
+			}
+			if msg.Author.ID == userID {
+				ids = append(ids, msg.ID)
+			}
+		}
+
+		oldestTime := messages[len(messages)-1].CreatedAt
+		if len(messages) < 100 || !oldestTime.After(start) || oldestID == beforeID {
+			break
+		}
+		beforeID = oldestID
+	}
+
+	return deleteMessages(client, channelID, ids)
+}
+
+func deleteMessages(client *bot.Client, channelID snowflake.ID, ids []snowflake.ID) error {
+	for len(ids) > 0 {
+		n := min(len(ids), 100)
+		batch := ids[:n]
+		if len(batch) == 1 {
+			if err := client.Rest.DeleteMessage(channelID, batch[0]); err != nil {
+				return err
+			}
+		} else if err := client.Rest.BulkDeleteMessages(channelID, batch); err != nil {
+			for _, id := range batch {
+				if err := client.Rest.DeleteMessage(channelID, id); err != nil {
+					return err
+				}
+			}
+		}
+		ids = ids[n:]
+	}
+	return nil
 }
 
 func handleReactionAdd(client *bot.Client, messageAuthorID *snowflake.ID, channelID, messageID, userID snowflake.ID, emoji discord.PartialEmoji, isDM bool) {

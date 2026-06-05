@@ -49,6 +49,7 @@ func InitDB(dataSourceName string) error {
 		`CREATE TABLE IF NOT EXISTS image_blacklist ( channel_id TEXT PRIMARY KEY )`,
 		`CREATE TABLE IF NOT EXISTS users ( user_id TEXT PRIMARY KEY, last_interaction_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP )`,
 		`CREATE TABLE IF NOT EXISTS antiscam_servers ( server_id TEXT PRIMARY KEY )`,
+		`CREATE TABLE IF NOT EXISTS antiscam_channels ( guild_id TEXT NOT NULL, parent_id TEXT NOT NULL, channel_id TEXT PRIMARY KEY, prompt_message_id TEXT, UNIQUE(guild_id, parent_id) )`,
 		`CREATE TABLE IF NOT EXISTS image_descriptions ( image_url TEXT PRIMARY KEY, description TEXT, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP )`,
 		`CREATE TABLE IF NOT EXISTS user_cache ( user_id TEXT PRIMARY KEY, cache BLOB )`,
 		`CREATE TABLE IF NOT EXISTS link_metadata ( url TEXT PRIMARY KEY, metadata BLOB, fetched_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP )`,

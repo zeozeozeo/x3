@@ -80,3 +80,110 @@ func SetAntiscamEnabled(serverID snowflake.ID, enabled bool) error {
 	_, err := DB.Exec("DELETE FROM antiscam_servers WHERE server_id = ?", serverID.String())
 	return err
 }
+
+type AntiscamChannel struct {
+	GuildID         snowflake.ID
+	ParentID        snowflake.ID
+	ChannelID       snowflake.ID
+	PromptMessageID snowflake.ID
+}
+
+func UpsertAntiscamChannel(guildID, parentID, channelID snowflake.ID, promptMessageID *snowflake.ID) error {
+	prompt := ""
+	if promptMessageID != nil {
+		prompt = promptMessageID.String()
+	}
+	_, err := DB.Exec(
+		`INSERT INTO antiscam_channels (guild_id, parent_id, channel_id, prompt_message_id)
+		 VALUES (?, ?, ?, ?)
+		 ON CONFLICT(guild_id, parent_id) DO UPDATE SET channel_id = excluded.channel_id, prompt_message_id = excluded.prompt_message_id`,
+		guildID.String(),
+		parentID.String(),
+		channelID.String(),
+		prompt,
+	)
+	return err
+}
+
+func ReplaceAntiscamChannels(guildID, channelID snowflake.ID, promptMessageID *snowflake.ID) error {
+	tx, err := DB.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	if _, err := tx.Exec("DELETE FROM antiscam_channels WHERE guild_id = ?", guildID.String()); err != nil {
+		return err
+	}
+
+	prompt := ""
+	if promptMessageID != nil {
+		prompt = promptMessageID.String()
+	}
+	if _, err := tx.Exec(
+		`INSERT INTO antiscam_channels (guild_id, parent_id, channel_id, prompt_message_id) VALUES (?, ?, ?, ?)`,
+		guildID.String(),
+		"0",
+		channelID.String(),
+		prompt,
+	); err != nil {
+		return err
+	}
+
+	return tx.Commit()
+}
+
+func SetAntiscamPromptMessage(channelID, messageID snowflake.ID) error {
+	_, err := DB.Exec("UPDATE antiscam_channels SET prompt_message_id = ? WHERE channel_id = ?", messageID.String(), channelID.String())
+	return err
+}
+
+func GetAntiscamChannels(guildID snowflake.ID) ([]AntiscamChannel, error) {
+	rows, err := DB.Query("SELECT guild_id, parent_id, channel_id, COALESCE(prompt_message_id, '') FROM antiscam_channels WHERE guild_id = ?", guildID.String())
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var channels []AntiscamChannel
+	for rows.Next() {
+		var guildKey, parentKey, channelKey, promptKey string
+		if err := rows.Scan(&guildKey, &parentKey, &channelKey, &promptKey); err != nil {
+			return nil, err
+		}
+		guild, err := snowflake.Parse(guildKey)
+		if err != nil {
+			continue
+		}
+		parent, err := snowflake.Parse(parentKey)
+		if err != nil {
+			continue
+		}
+		channel, err := snowflake.Parse(channelKey)
+		if err != nil {
+			continue
+		}
+		var prompt snowflake.ID
+		if promptKey != "" {
+			prompt, _ = snowflake.Parse(promptKey)
+		}
+		channels = append(channels, AntiscamChannel{
+			GuildID:         guild,
+			ParentID:        parent,
+			ChannelID:       channel,
+			PromptMessageID: prompt,
+		})
+	}
+	return channels, rows.Err()
+}
+
+func IsAntiscamChannel(channelID snowflake.ID) bool {
+	var id string
+	err := DB.QueryRow("SELECT channel_id FROM antiscam_channels WHERE channel_id = ?", channelID.String()).Scan(&id)
+	return err == nil
+}
+
+func DeleteAntiscamChannel(channelID snowflake.ID) error {
+	_, err := DB.Exec("DELETE FROM antiscam_channels WHERE channel_id = ?", channelID.String())
+	return err
+}
