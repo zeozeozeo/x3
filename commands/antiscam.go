@@ -173,11 +173,9 @@ func ensureAntiscamChannel(client *bot.Client, guildID snowflake.ID) (created in
 func updateAntiscamChannel(client *bot.Client, channelID snowflake.ID, position int) error {
 	name := antiscamChannelName
 	topic := antiscamChannelTopic
-	parentID := snowflake.ID(0)
 	_, err := client.Rest.UpdateChannel(channelID, discord.GuildTextChannelUpdate{
 		Name:     &name,
 		Topic:    &topic,
-		ParentID: &parentID,
 		Position: &position,
 	})
 	return err
