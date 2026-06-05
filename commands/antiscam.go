@@ -75,7 +75,7 @@ func HandleAntiscam(event *handler.CommandEvent) error {
 		if refreshed > 1 || refreshed == 0 {
 			s2 = "s"
 		}
-		details = fmt.Sprintf("\n\nCreated **%d** channel%s and refreshed **%d** existing one%s.", created, refreshed, s1, s2)
+		details = fmt.Sprintf("\n\nCreated **%d** channel%s and refreshed **%d** existing one%s.", created, s1, refreshed, s2)
 	}
 
 	return sendInteractionOk(event, "Anti-scam updated", fmt.Sprintf("Anti-scam has been **%s** for this server.%s", status, details), false)
