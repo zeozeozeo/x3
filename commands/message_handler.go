@@ -167,9 +167,6 @@ func OnMessageCreate(event *events.MessageCreate) {
 	if event.GuildID != nil && db.IsAntiscamEnabled(*event.GuildID) && db.IsAntiscamChannel(event.ChannelID) {
 		if err := handleAntiscamTrigger(event); err != nil {
 			slog.Error("failed to handle antiscam trigger", "err", err, slog.String("guild_id", event.GuildID.String()), slog.String("user_id", event.Message.Author.ID.String()))
-			_ = sendPrettyEmbed(event.Client(), event.ChannelID, "Anti-scam", "Failed to erase this account's recent message history. Check my Read Message History and Manage Messages permissions.")
-		} else {
-			_ = sendPrettyEmbed(event.Client(), event.ChannelID, "Anti-scam", "Started erasing this account's recent message history.")
 		}
 		return
 	}
