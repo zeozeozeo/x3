@@ -276,8 +276,8 @@ func handleAntiscamTrigger(event *events.MessageCreate) error {
 	if triggeredAt.IsZero() {
 		triggeredAt = time.Now()
 	}
-	start := triggeredAt.Add(-5 * time.Minute)
-	end := triggeredAt.Add(5 * time.Minute)
+	start := triggeredAt.Add(-30 * time.Minute)
+	end := triggeredAt.Add(30 * time.Minute)
 
 	antiscamCleanupUntil.Store(antiscamCleanupKey(guildID, userID), end)
 	return purgeCachedGuildUserMessages(event.Client(), guildID, userID, start, time.Now().Add(time.Second))

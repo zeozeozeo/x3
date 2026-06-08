@@ -230,7 +230,7 @@ func antiscamPromptEmbed() discord.Embed {
 	return discord.NewEmbed().
 		WithColor(0xFFD700).
 		WithTitle("Anti-scam").
-		WithDescription("Type in this channel to get the last 5 minutes of your message history erased (scam prevention).").
+		WithDescription("Type in this channel to get the last 30 minutes of your message history erased (scam prevention).").
 		WithFooter("x3", x3Icon).
 		WithTimestamp(time.Now())
 }
