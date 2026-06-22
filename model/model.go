@@ -73,6 +73,7 @@ const (
 	zenBaseURL          = "https://opencode.ai/zen/v1"
 	mimoBaseURL         = "https://token-plan-sgp.xiaomimimo.com/v1"
 	makoraBaseURL       = "https://inference.makora.com/glm-5-1-fp8/v1"
+	openferenceBaseURL  = "https://api.openference.com/v1"
 )
 
 const (
@@ -115,6 +116,7 @@ const (
 	ProviderZen          = "zen" // OpenCode Zen
 	ProviderMiMo         = "mimo"
 	ProviderMakora       = "makora"
+	ProviderOpenference  = "openference"
 )
 
 type ModelProvider struct {
@@ -196,6 +198,7 @@ var (
 		{Name: ProviderZen},
 		{Name: ProviderMiMo},
 		{Name: ProviderMakora},
+		{Name: ProviderOpenference},
 		//{Name: ProviderG4F},
 	}
 
@@ -445,6 +448,8 @@ func (m Model) Client(provider string) (baseUrls []string, tokens []string, code
 		tokenEnvKey, apiVar = "X3_MIMO_TOKEN", mimoBaseURL
 	case ProviderMakora:
 		tokenEnvKey, apiVar = "X3_MAKORA_TOKEN", makoraBaseURL
+	case ProviderOpenference:
+		tokenEnvKey, apiVar = "X3_OPENFERENCE_TOKEN", openferenceBaseURL
 	default:
 		return nil, nil, nil
 	}
