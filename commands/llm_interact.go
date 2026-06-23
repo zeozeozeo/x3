@@ -207,7 +207,23 @@ func collapseRepeatedSplitMessages(messages []string) []string {
 		}
 	}
 
-	return result
+	for i := 1; i < len(result); i++ {
+		for j := 0; j < i; j++ {
+			if cut, ok := strings.CutSuffix(result[i], result[j]); ok {
+				result[i] = strings.TrimSpace(cut)
+				break
+			}
+		}
+	}
+
+	j := 0
+	for _, msg := range result {
+		if msg != "" {
+			result[j] = msg
+			j++
+		}
+	}
+	return result[:j]
 }
 
 // Doesn't call SendTyping!
