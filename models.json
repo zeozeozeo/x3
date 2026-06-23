@@ -1,33 +1,25 @@
 {
   "models": [
     {
-      "name": "GLM 5",
+      "name": "GLM 5.2",
       "command": "glm5",
       "reasoning": true,
       "providers": {
-        "vercel": {
-          "codenames": ["zai/glm-5"]
+        "openference": {
+          "codenames": ["GLM-5.2"]
+        },
+        "zenmux": {
+          "codenames": ["z-ai/glm-5.2-free"]
         }
       }
     },
     {
       "name": "GLM 5.1",
-      "command": "glm",
+      "command": "glm51",
       "reasoning": true,
       "providers": {
-        "vercel": {
-          "codenames": ["zai/glm-5.1"]
-        }
-      }
-    },
-    {
-      "name": "Xiaomi MiMo V2.5",
-      "command": "mimo",
-      "vision": true,
-      "reasoning": true,
-      "providers": {
-        "vercel": {
-          "codenames": ["xiaomi/mimo-v2.5"]
+        "openference": {
+          "codenames": ["GLM-5.1"]
         }
       }
     },
@@ -36,20 +28,17 @@
       "command": "deepseek",
       "reasoning": true,
       "providers": {
-        "deepseek": {
-          "codenames": ["deepseek-v4-flash"]
-        },
         "mnn": {
           "codenames": ["deepseek-v4-flash"]
         },
-        "openrouter": {
-          "codenames": ["deepseek/deepseek-v4-flash:free"]
+        "openference": {
+          "codenames": ["DeepSeek-V4-Flash"]
         },
         "vercel": {
           "codenames": ["deepseek/deepseek-v4-flash"]
         },
-        "zenmux": {
-          "codenames": ["deepseek/deepseek-v4-flash-free"]
+        "zen": {
+          "codenames": ["deepseek-v4-flash-free"]
         }
       }
     },
@@ -58,8 +47,8 @@
       "command": "deepseekpro",
       "reasoning": true,
       "providers": {
-        "deepseek": {
-          "codenames": ["deepseek-v4-pro"]
+        "openference": {
+          "codenames": ["DeepSeek-V4-Pro"]
         },
         "vercel": {
           "codenames": ["deepseek/deepseek-v4-pro"]
@@ -99,22 +88,14 @@
       }
     },
     {
-      "name": "Xiaomi MiMo V2.5 Pro",
-      "command": "mimopro",
-      "vision": true,
-      "reasoning": true,
-      "providers": {
-        "vercel": {
-          "codenames": ["xiaomi/mimo-v2.5-pro"]
-        }
-      }
-    },
-    {
       "name": "Kimi K2.6",
       "command": "kimi",
       "vision": true,
       "reasoning": true,
       "providers": {
+        "openference": {
+          "codenames": ["Kimi K2.6"]
+        },
         "vercel": {
           "codenames": ["moonshotai/kimi-k2.6"]
         }
@@ -300,12 +281,42 @@
       }
     },
     {
+      "name": "Step 3.7 Flash",
+      "command": "stepflash",
+      "reasoning": true,
+      "providers": {
+        "zenmux": {
+          "codenames": ["stepfun/step-3.7-flash-free"]
+        }
+      }
+    },
+    {
       "name": "GLM 4.6V Flash",
       "command": "glmv",
       "vision": true,
       "providers": {
         "zenmux": {
           "codenames": ["z-ai/glm-4.6v-flash-free"]
+        }
+      }
+    },
+    {
+      "name": "NVIDIA Nemotron 3 Ultra",
+      "command": "nemotronultra",
+      "reasoning": true,
+      "providers": {
+        "openrouter": {
+          "codenames": ["nvidia/nemotron-3-ultra-550b-a55b:free"]
+        }
+      }
+    },
+    {
+      "name": "Owl Alpha",
+      "command": "owlalpha",
+      "reasoning": true,
+      "providers": {
+        "openrouter": {
+          "codenames": ["openrouter/owl-alpha"]
         }
       }
     },
@@ -326,12 +337,12 @@
     }
   ],
   "default_models": [
-    "GLM 5",
+    "GLM 5.2",
+    "Mistral Medium Latest",
+    "Kimi K2.6",
     "DeepSeek V4 Flash",
-    "GLM 5.1",
-    "Xiaomi MiMo V2.5",
-    "DeepSeek V3.2",
     "GLM 4.5 Air",
+    "DeepSeek V3.2",
     "GLM 4.7 Flash"
   ],
   "narrator_models": [
@@ -342,15 +353,18 @@
     "Meta Llama 4 Maverick 400B/17A"
   ],
   "default_vision_models": [
+    "Kimi K2.6",
+    "Gemma 4 31B",
     "NVIDIA Nemotron 3 Nano Omni 30B/A3B",
-    "Xiaomi MiMo V2.5",
     "Meta Llama 4 Maverick 400B/17A",
     "Meta Llama 4 Scout 109B/17A"
   ],
   "providers_order": [
     "openrouter",
-    "vercel",
+    "openference",
     "deepseek",
+    "mimo",
+    "vercel",
     "ollama",
     "cerebras",
     "minimax",
@@ -387,18 +401,21 @@
     "deepseek": {
       "native_tool_calling": true
     },
+    "mimo": {
+      "native_tool_calling": true
+    },
     "mistral": {
       "native_tool_calling": true
     },
     "ollama": {
       "native_tool_calling": true
     },
-    "openrouter": {
+    "openference": {
       "native_tool_calling": true
     },
     "vercel": {
       "native_tool_calling": true
     }
   },
-  "current_version": 35
+  "current_version": 41
 }
