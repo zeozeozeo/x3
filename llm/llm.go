@@ -1003,8 +1003,7 @@ func (l *Llmer) requestCompletionInternal(
 	for i, baseUrl := range baseUrls {
 		tokensToTry := tokens
 
-		// TODO: ability to do this with any provider
-		if provider == model.ProviderCloudflare && len(baseUrls) > 1 && len(baseUrls) == len(tokens) {
+		if len(baseUrls) > 1 && len(baseUrls) == len(tokens) {
 			if i < len(tokens) {
 				tokensToTry = []string{tokens[i]}
 			} else {
@@ -1021,10 +1020,12 @@ func (l *Llmer) requestCompletionInternal(
 			}
 			client := openai.NewClientWithConfig(config)
 
+			var tokenSucceeded bool
 			for _, codename := range codenames {
 				slog.Info("attempting request", "provider", provider, "baseUrl", baseUrl, "codename", codename)
 				res, usage, err := l.requestCompletionInternal2(m, codename, provider, settings, client, prepend, ctx, 0, nil, "")
 				if err == nil {
+					tokenSucceeded = true
 					// we got a response, but if we used a prefill, we should indicate that it was used
 					// (prepend it to the response in bold)
 					if prepend != "" {
@@ -1034,6 +1035,9 @@ func (l *Llmer) requestCompletionInternal(
 				}
 				lastErr = err
 				slog.Warn("request failed, trying next config", "provider", provider, "baseUrl", baseUrl, "codename", codename, "error", err)
+			}
+			if !tokenSucceeded {
+				model.RecordTokenError(token)
 			}
 		}
 	}

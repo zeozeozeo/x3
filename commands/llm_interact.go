@@ -183,26 +183,31 @@ func collapseRepeatedSplitMessages(messages []string) []string {
 		return messages
 	}
 
-	// IDK why, but DS V4 and GLM5.1 tend to duplicate the messages??
-	for {
-		removed := false
-		for blockSize := len(messages) / 2; blockSize >= 1 && !removed; blockSize-- {
-			for start := 0; start+2*blockSize <= len(messages) && !removed; start++ {
-				block := messages[start : start+blockSize]
-				for dupStart := start + blockSize; dupStart+blockSize <= len(messages); dupStart++ {
-					if !slices.Equal(block, messages[dupStart:dupStart+blockSize]) {
-						continue
-					}
-					messages = append(append([]string(nil), messages[:dupStart]...), messages[dupStart+blockSize:]...)
-					removed = true
-					break
-				}
+	seen := make(map[string]bool, len(messages))
+	unique := make([]string, 0, len(messages))
+	for _, msg := range messages {
+		if seen[msg] {
+			continue
+		}
+		seen[msg] = true
+		unique = append(unique, msg)
+	}
+
+	result := make([]string, 0, len(unique))
+	for i, msg := range unique {
+		redundant := false
+		for j := 0; j < i; j++ {
+			if strings.Contains(unique[j], msg) {
+				redundant = true
+				break
 			}
 		}
-		if !removed {
-			return messages
+		if !redundant {
+			result = append(result, msg)
 		}
 	}
+
+	return result
 }
 
 // Doesn't call SendTyping!

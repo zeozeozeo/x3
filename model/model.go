@@ -204,7 +204,10 @@ var (
 
 	lastScoreReset = time.Now()
 
-	CurrentVersion = 34
+	tokenErrors         = map[string]int{}
+	lastTokenErrorReset = time.Now()
+
+	CurrentVersion = 35
 )
 
 type ModelsConfig struct {
@@ -299,6 +302,59 @@ func resetProviderScore() {
 	}
 }
 
+// RecordTokenError increments the error count for a token.
+func RecordTokenError(token string) {
+	if token == "" {
+		return
+	}
+	if time.Since(lastTokenErrorReset) > 10*time.Minute {
+		tokenErrors = map[string]int{}
+		lastTokenErrorReset = time.Now()
+	}
+	tokenErrors[token]++
+}
+
+// SortTokensByError sorts tokens in-place by ascending error count.
+func SortTokensByError(tokens []string) {
+	if len(tokens) < 2 {
+		return
+	}
+	if time.Since(lastTokenErrorReset) > 10*time.Minute {
+		tokenErrors = map[string]int{}
+		lastTokenErrorReset = time.Now()
+	}
+	sort.SliceStable(tokens, func(i, j int) bool {
+		return tokenErrors[tokens[i]] < tokenErrors[tokens[j]]
+	})
+}
+
+// SortPairByTokenError sorts two parallel slices (base URLs and tokens) together
+// by ascending token error count, keeping pairs intact.
+func SortPairByTokenError(baseUrls, tokens []string) {
+	if len(tokens) < 2 {
+		return
+	}
+	if time.Since(lastTokenErrorReset) > 10*time.Minute {
+		tokenErrors = map[string]int{}
+		lastTokenErrorReset = time.Now()
+	}
+	type pair struct {
+		baseURL string
+		token   string
+	}
+	pairs := make([]pair, len(baseUrls))
+	for i := range baseUrls {
+		pairs[i] = pair{baseURL: baseUrls[i], token: tokens[i]}
+	}
+	sort.SliceStable(pairs, func(i, j int) bool {
+		return tokenErrors[pairs[i].token] < tokenErrors[pairs[j].token]
+	})
+	for i, p := range pairs {
+		baseUrls[i] = p.baseURL
+		tokens[i] = p.token
+	}
+}
+
 func getErrors(p *ScoredProvider, reasoning bool) int {
 	if p == nil {
 		return 0
@@ -382,6 +438,7 @@ func (m Model) Client(provider string) (baseUrls []string, tokens []string, code
 		if len(baseUrls) != len(tokens) {
 			panic("X3_CLOUDFLARE_API_BASE and X3_CLOUDFLARE_API_TOKEN lists must be the same length")
 		}
+		SortPairByTokenError(baseUrls, tokens)
 		return
 	case ProviderCohere:
 		tokenEnvKey, apiVar = "X3_COHERE_TOKEN", cohereBaseURL
@@ -393,6 +450,7 @@ func (m Model) Client(provider string) (baseUrls []string, tokens []string, code
 		if len(baseUrls) != len(tokens) {
 			panic("X3_SELFHOSTED_API_BASE and X3_SELFHOSTED_API_TOKEN lists must be the same length")
 		}
+		SortPairByTokenError(baseUrls, tokens)
 		return
 	case ProviderZhipu:
 		tokenEnvKey, apiVar = "X3_BIGMODEL_TOKEN", zhipuBaseURL
@@ -456,6 +514,7 @@ func (m Model) Client(provider string) (baseUrls []string, tokens []string, code
 
 	baseUrls = []string{apiVar}
 	tokens = getEnvList(tokenEnvKey)
+	SortTokensByError(tokens)
 	return
 }
 
