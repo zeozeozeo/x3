@@ -2,6 +2,7 @@ package model
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"sort"
@@ -74,6 +75,7 @@ const (
 	mimoBaseURL         = "https://token-plan-sgp.xiaomimimo.com/v1"
 	makoraBaseURL       = "https://inference.makora.com/glm-5-1-fp8/v1"
 	openferenceBaseURL  = "https://api.openference.com/v1"
+	cloudflareBaseURLf  = "https://api.cloudflare.com/client/v4/accounts/%s/ai/v1"
 )
 
 const (
@@ -433,13 +435,7 @@ func (m Model) Client(provider string) (baseUrls []string, tokens []string, code
 	case ProviderElectron:
 		tokenEnvKey, apiVar = "X3_ELECTRONHUB_TOKEN", electronBaseURL
 	case ProviderCloudflare:
-		baseUrls = getEnvList("X3_CLOUDFLARE_API_BASE")
-		tokens = getEnvList("X3_CLOUDFLARE_API_TOKEN")
-		if len(baseUrls) != len(tokens) {
-			panic("X3_CLOUDFLARE_API_BASE and X3_CLOUDFLARE_API_TOKEN lists must be the same length")
-		}
-		SortPairByTokenError(baseUrls, tokens)
-		return
+		tokenEnvKey, apiVar = "X3_CLOUDFLARE_WORKERS_AI_TOKEN", fmt.Sprintf(cloudflareBaseURLf, os.Getenv("X3_CLOUDFLARE_ACCOUNT_ID"))
 	case ProviderCohere:
 		tokenEnvKey, apiVar = "X3_COHERE_TOKEN", cohereBaseURL
 	case ProviderMNN:
