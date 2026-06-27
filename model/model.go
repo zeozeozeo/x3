@@ -435,7 +435,17 @@ func (m Model) Client(provider string) (baseUrls []string, tokens []string, code
 	case ProviderElectron:
 		tokenEnvKey, apiVar = "X3_ELECTRONHUB_TOKEN", electronBaseURL
 	case ProviderCloudflare:
-		tokenEnvKey, apiVar = "X3_CLOUDFLARE_WORKERS_AI_TOKEN", fmt.Sprintf(cloudflareBaseURLf, os.Getenv("X3_CLOUDFLARE_ACCOUNT_ID"))
+		tokens2 := getEnvList("X3_CLOUDFLARE_WORKERS_AI_TOKEN")
+		accIds := getEnvList("X3_CLOUDFLARE_ACCOUNT_ID")
+		if len(tokens2) != len(accIds) {
+			panic("X3_CLOUDFLARE_WORKERS_AI_TOKEN and X3_CLOUDFLARE_ACCOUNT_ID lists must be the same length")
+		}
+		baseUrls = make([]string, len(accIds))
+		for i, accId := range accIds {
+			baseUrls[i] = fmt.Sprintf(cloudflareBaseURLf, accId)
+		}
+		SortPairByTokenError(baseUrls, tokens2)
+		return
 	case ProviderCohere:
 		tokenEnvKey, apiVar = "X3_COHERE_TOKEN", cohereBaseURL
 	case ProviderMNN:
