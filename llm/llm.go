@@ -811,7 +811,7 @@ func (l *Llmer) requestCompletionInternal2(
 	}
 	req := openai.ChatCompletionRequest{
 		Model:       codename,
-		Messages:    l.convertMessages(m.Vision, provider != model.ProviderOllama, prepend, searchResults, ctx), // ollama cloud doesn't support fetching from image URLs, how nice :)
+		Messages:    l.convertMessages(m.Vision, provider != model.ProviderOllama && provider != model.ProviderCloudflare, prepend, searchResults, ctx), // ollama cloud doesn't support fetching from image URLs, how nice :)
 		Temperature: settings.Temperature,
 		TopP:        settings.TopP,
 		// MinP anyone?
