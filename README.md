@@ -25,7 +25,7 @@ A Discord LLM roleplay and utility bot
 - Web-based model.json editor GUI
 - Furry
 - Works in DM, app and server contexts
-- Extensive LLM model selection (GLM-5.1, DeepSeek V4, GPT-5, Llama, etcetc)
+- Extensive LLM model selection (GLM-5.2, Mistral, Kimi K2.6, DeepSeek V4, etcetc)
 - Supports vision models, and automatically generates text descriptions for text-only models
 - It has an extremely overcomplicated internal model router - it constantly juggles between vision and text models in a conversation (balancing between vision quality and response style consistency), in a very configurable manner
 - It is optimized for the lowest running cost possible, aiming for maximum cache hits and routing to the cheapest providers
