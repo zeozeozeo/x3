@@ -5,21 +5,11 @@
       "command": "glm5",
       "reasoning": true,
       "providers": {
+        "cloudflare": {
+          "codenames": ["@cf/zai-org/glm-5.2"]
+        },
         "openference": {
           "codenames": ["GLM-5.2"]
-        },
-        "zenmux": {
-          "codenames": ["z-ai/glm-5.2-free"]
-        }
-      }
-    },
-    {
-      "name": "GLM 5.1",
-      "command": "glm51",
-      "reasoning": true,
-      "providers": {
-        "openference": {
-          "codenames": ["GLM-5.1"]
         }
       }
     },
@@ -43,19 +33,6 @@
       }
     },
     {
-      "name": "DeepSeek V4 Pro",
-      "command": "deepseekpro",
-      "reasoning": true,
-      "providers": {
-        "openference": {
-          "codenames": ["DeepSeek-V4-Pro"]
-        },
-        "vercel": {
-          "codenames": ["deepseek/deepseek-v4-pro"]
-        }
-      }
-    },
-    {
       "name": "GLM 4.5 Air",
       "command": "glmair",
       "providers": {
@@ -68,12 +45,12 @@
       }
     },
     {
-      "name": "DeepSeek V3.2",
-      "command": "deepseek32",
+      "name": "GLM 4.7",
+      "command": "glm47",
       "reasoning": true,
       "providers": {
-        "mnn": {
-          "codenames": ["deepseek-v3.2"]
+        "cerebras": {
+          "codenames": ["zai-glm-4.7"]
         }
       }
     },
@@ -93,6 +70,9 @@
       "vision": true,
       "reasoning": true,
       "providers": {
+        "cloudflare": {
+          "codenames": ["@cf/moonshotai/kimi-k2.6"]
+        },
         "openference": {
           "codenames": ["Kimi K2.6"]
         },
@@ -338,11 +318,10 @@
   ],
   "default_models": [
     "GLM 5.2",
+    "GLM 4.7",
     "Mistral Medium Latest",
-    "Kimi K2.6",
     "DeepSeek V4 Flash",
-    "GLM 4.5 Air",
-    "DeepSeek V3.2",
+    "Kimi K2.6",
     "GLM 4.7 Flash"
   ],
   "narrator_models": [
@@ -352,19 +331,11 @@
     "Meta Llama 4 Scout 109B/17A",
     "Meta Llama 4 Maverick 400B/17A"
   ],
-  "default_vision_models": [
-    "Kimi K2.6",
-    "Gemma 4 31B",
-    "NVIDIA Nemotron 3 Nano Omni 30B/A3B",
-    "Meta Llama 4 Maverick 400B/17A",
-    "Meta Llama 4 Scout 109B/17A"
-  ],
+  "default_vision_models": ["Mistral Small Latest", "Mistral Medium Latest"],
   "providers_order": [
     "openrouter",
-    "openference",
     "deepseek",
     "mimo",
-    "vercel",
     "ollama",
     "cerebras",
     "minimax",
@@ -409,13 +380,7 @@
     },
     "ollama": {
       "native_tool_calling": true
-    },
-    "openference": {
-      "native_tool_calling": true
-    },
-    "vercel": {
-      "native_tool_calling": true
     }
   },
-  "current_version": 41
+  "current_version": 48
 }
