@@ -17,6 +17,7 @@ import (
 
 	"github.com/barasher/go-exiftool"
 	"github.com/cloudflare/ahocorasick"
+	"github.com/forPelevin/gomoji"
 	"github.com/google/uuid"
 )
 
@@ -150,7 +151,7 @@ func (c *TavernCardV2) maybeSwapWeirdPersonalityFieldWithCreatorNotesIfTheCardAu
 	if c.Data == nil {
 		return
 	}
-	if ContainsEmoji(c.Data.Personality) || weirdPersonalityStringsMatcher.Contains([]byte(strings.ToLower(c.Data.Personality))) {
+	if gomoji.ContainsEmoji(c.Data.Personality) || weirdPersonalityStringsMatcher.Contains([]byte(strings.ToLower(c.Data.Personality))) {
 		if c.Data.CreatorNotes != "" {
 			c.Data.CreatorNotes += "\n"
 		}

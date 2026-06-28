@@ -5,6 +5,7 @@ go 1.25.1
 require (
 	github.com/PuerkitoBio/goquery v1.11.0
 	github.com/disgoorg/disgo v0.19.3
+	github.com/forPelevin/gomoji v1.4.1
 	github.com/fsnotify/fsnotify v1.9.0
 	github.com/microcosm-cc/bluemonday v1.0.27
 	github.com/yalue/onnxruntime_go v1.25.0
@@ -29,6 +30,7 @@ require (
 	github.com/mattn/go-colorable v0.1.14 // indirect
 	github.com/mattn/go-isatty v0.0.20 // indirect
 	github.com/petermattis/goid v0.0.0-20260330135022-df67b199bc81 // indirect
+	github.com/rivo/uniseg v0.4.7 // indirect
 	github.com/rs/zerolog v1.35.0 // indirect
 	github.com/sasha-s/go-csync v0.0.0-20240107134140-fcbab37b09ad // indirect
 	github.com/tidwall/gjson v1.18.0 // indirect
