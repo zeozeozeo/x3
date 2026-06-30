@@ -713,42 +713,27 @@ func HandlePersonaModelAutocomplete(event *handler.AutocompleteEvent) error {
 	})
 }
 
+type personaEntry struct {
+	displayName string
+	value       string
+}
+
 // HandlePersonaPersonaAutocomplete handles the autocomplete for the persona option in the /persona command.
 func HandlePersonaPersonaAutocomplete(event *handler.AutocompleteEvent) error {
-	query := strings.TrimSpace(event.Data.String("persona"))
-
-	var choices []discord.AutocompleteChoice
-
+	var entries []personaEntry
 	for _, p := range persona.AllPersonas {
-		if len(choices) >= 25 {
-			break
-		}
-		name := p.String()
-		if query == "" || strings.Contains(strings.ToLower(name), strings.ToLower(query)) {
-			choices = append(choices, discord.AutocompleteChoiceString{
-				Name:  name,
-				Value: p.Name,
-			})
-		}
+		entries = append(entries, personaEntry{p.String(), p.Name})
 	}
-
 	userCache := db.GetUserCache(event.User().ID)
 	for _, card := range userCache.Personas {
-		if len(choices) >= 25 {
-			break
-		}
 		displayName := card.PersonaName
 		if displayName == "" {
 			displayName = card.Name
 		}
-		name := displayName + " (Custom)"
-		if query == "" || strings.Contains(strings.ToLower(displayName), strings.ToLower(query)) {
-			choices = append(choices, discord.AutocompleteChoiceString{
-				Name:  name,
-				Value: displayName,
-			})
-		}
+		entries = append(entries, personaEntry{displayName + " (Custom)", displayName})
 	}
-
-	return event.AutocompleteResult(choices)
+	return HandleGenericAutocomplete(event, "persona", entries, func(item any, index int) (string, string) {
+		e := item.(personaEntry)
+		return e.displayName, e.value
+	})
 }

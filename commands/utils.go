@@ -21,7 +21,6 @@ import (
 	"github.com/disgoorg/disgo/discord"
 	"github.com/disgoorg/disgo/handler"
 	"github.com/disgoorg/snowflake/v2"
-	"github.com/lithammer/fuzzysearch/fuzzy"
 )
 
 const (
@@ -91,10 +90,9 @@ func HandleGenericAutocomplete(
 			})
 		}
 	} else {
-		matches := fuzzy.RankFindNormalizedFold(query, searchStrings)
-		sort.Sort(matches)
+		indices := rankItems(query, searchStrings)
 
-		for _, match := range matches {
+		for _, idx := range indices {
 			if len(choices) >= 25 {
 				break
 			}
@@ -102,10 +100,10 @@ func HandleGenericAutocomplete(
 			var name, value string
 			switch v := items.(type) {
 			case []string:
-				name, value = formatter(v[match.OriginalIndex], match.OriginalIndex)
+				name, value = formatter(v[idx], idx)
 			default:
 				val := reflect.ValueOf(items)
-				name, value = formatter(val.Index(match.OriginalIndex).Interface(), match.OriginalIndex)
+				name, value = formatter(val.Index(idx).Interface(), idx)
 			}
 
 			choices = append(choices, discord.AutocompleteChoiceString{
@@ -116,6 +114,114 @@ func HandleGenericAutocomplete(
 	}
 
 	return event.AutocompleteResult(choices)
+}
+
+// rankItems scores each search string against the query and returns indices sorted best-first.
+func rankItems(query string, searchStrings []string) []int {
+	q := strings.ToLower(strings.TrimSpace(query))
+
+	type scoredIdx struct {
+		idx   int
+		score int
+	}
+	scored := make([]scoredIdx, 0, len(searchStrings))
+
+	for i, s := range searchStrings {
+		score := scoreItem(q, strings.ToLower(s))
+		if score > 0 {
+			scored = append(scored, scoredIdx{i, score})
+		}
+	}
+
+	sort.Slice(scored, func(i, j int) bool {
+		if scored[i].score != scored[j].score {
+			return scored[i].score > scored[j].score
+		}
+		return scored[i].idx < scored[j].idx
+	})
+
+	indices := make([]int, len(scored))
+	for i, s := range scored {
+		indices[i] = s.idx
+	}
+	return indices
+}
+
+// scoreItem ranks how well query q matches target t (both lowercase).
+// Higher score = better match. Returns 0 for no match.
+func scoreItem(q, t string) int {
+	// 1. exact match
+	if q == t {
+		return 100000
+	}
+
+	// 2. substring match
+	if pos := strings.Index(t, q); pos >= 0 {
+		return 90000 - pos
+	}
+
+	qWords := strings.Fields(q)
+	tWords := strings.Fields(t)
+
+	// 3. query matches a whole word in target
+	for _, tw := range tWords {
+		if q == tw {
+			return 80000
+		}
+	}
+
+	// 4. query is prefix of word
+	for _, tw := range tWords {
+		if strings.HasPrefix(tw, q) {
+			return 70000
+		}
+	}
+
+	// 5. query word matches a target word
+	if len(qWords) > 1 {
+		matchCount := 0
+		for _, qw := range qWords {
+			for _, tw := range tWords {
+				if qw == tw || strings.HasPrefix(tw, qw) {
+					matchCount++
+					break
+				}
+			}
+		}
+		if matchCount > 0 {
+			return 60000 + (matchCount * 5000 / len(qWords))
+		}
+	}
+
+	// 6. each query word appears as substring in a target word
+	matchCount := 0
+	for _, qw := range qWords {
+		for _, tw := range tWords {
+			if strings.Contains(tw, qw) {
+				matchCount++
+				break
+			}
+		}
+	}
+	if matchCount > 0 {
+		return 50000 + (matchCount * 5000 / len(qWords))
+	}
+
+	// 7. fuzzy match
+	qi := 0
+	matchLen := 0
+	for ti := 0; ti < len(t) && qi < len(q); ti++ {
+		if q[qi] == t[ti] {
+			matchLen++
+			qi++
+		}
+	}
+
+	if matchLen == 0 {
+		return 0
+	}
+
+	return matchLen * 40000 / len(q)
 }
 
 // sendInteractionError sends a formatted error message as a response to a command event
