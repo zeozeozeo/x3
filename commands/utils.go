@@ -128,49 +128,41 @@ type cachedEmbedding struct {
 }
 
 var (
-	itemEmbeddingsMu     sync.RWMutex
-	itemEmbeddings       = map[string]*cachedEmbedding{}
-	embeddingCleanupOnce sync.Once
+	itemEmbeddingsMu      sync.Mutex
+	itemEmbeddings        = map[string]*cachedEmbedding{}
+	lastEmbeddingCleanup  time.Time
 )
 
 const (
-	embeddingTTL    = 30 * time.Minute
-	maxEmbeddings   = 2000
-	cleanupInterval = 10 * time.Minute
+	embeddingTTL  = 30 * time.Minute
+	maxEmbeddings = 2000
 )
 
-func startEmbeddingCleanup() {
-	go func() {
-		for {
-			time.Sleep(cleanupInterval)
-			itemEmbeddingsMu.Lock()
-			now := time.Now()
-			for k, v := range itemEmbeddings {
-				if now.Sub(v.created) > embeddingTTL {
-					delete(itemEmbeddings, k)
-				}
-			}
-			itemEmbeddingsMu.Unlock()
-		}
-	}()
-}
-
 func itemEmbedding(embedder minilm.Embedder, text string) []float32 {
-	embeddingCleanupOnce.Do(startEmbeddingCleanup)
+	itemEmbeddingsMu.Lock()
+	defer itemEmbeddingsMu.Unlock()
 
-	itemEmbeddingsMu.RLock()
-	cached, ok := itemEmbeddings[text]
-	itemEmbeddingsMu.RUnlock()
-	if ok {
+	if time.Since(lastEmbeddingCleanup) > embeddingTTL/3 {
+		now := time.Now()
+		for k, v := range itemEmbeddings {
+			if now.Sub(v.created) > embeddingTTL {
+				delete(itemEmbeddings, k)
+			}
+		}
+		lastEmbeddingCleanup = now
+	}
+
+	if cached, ok := itemEmbeddings[text]; ok {
 		return cached.vector
 	}
 
+	itemEmbeddingsMu.Unlock()
 	emb, err := embedder.Embed(text)
+	itemEmbeddingsMu.Lock()
 	if err != nil {
 		return nil
 	}
 
-	itemEmbeddingsMu.Lock()
 	if len(itemEmbeddings) >= maxEmbeddings {
 		var oldestKey string
 		var oldestTime time.Time
@@ -183,7 +175,6 @@ func itemEmbedding(embedder minilm.Embedder, text string) []float32 {
 		delete(itemEmbeddings, oldestKey)
 	}
 	itemEmbeddings[text] = &cachedEmbedding{vector: emb, created: time.Now()}
-	itemEmbeddingsMu.Unlock()
 
 	return emb
 }
