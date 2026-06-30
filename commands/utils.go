@@ -21,6 +21,7 @@ import (
 	"github.com/disgoorg/disgo/discord"
 	"github.com/disgoorg/disgo/handler"
 	"github.com/disgoorg/snowflake/v2"
+	"github.com/zeozeozeo/x3/minilm"
 )
 
 const (
@@ -116,14 +117,81 @@ func HandleGenericAutocomplete(
 	return event.AutocompleteResult(choices)
 }
 
+type scoredIdx struct {
+	idx   int
+	score int
+}
+
+type cachedEmbedding struct {
+	vector  []float32
+	created time.Time
+}
+
+var (
+	itemEmbeddingsMu     sync.RWMutex
+	itemEmbeddings       = map[string]*cachedEmbedding{}
+	embeddingCleanupOnce sync.Once
+)
+
+const (
+	embeddingTTL    = 30 * time.Minute
+	maxEmbeddings   = 2000
+	cleanupInterval = 10 * time.Minute
+)
+
+func startEmbeddingCleanup() {
+	go func() {
+		for {
+			time.Sleep(cleanupInterval)
+			itemEmbeddingsMu.Lock()
+			now := time.Now()
+			for k, v := range itemEmbeddings {
+				if now.Sub(v.created) > embeddingTTL {
+					delete(itemEmbeddings, k)
+				}
+			}
+			itemEmbeddingsMu.Unlock()
+		}
+	}()
+}
+
+func itemEmbedding(embedder minilm.Embedder, text string) []float32 {
+	embeddingCleanupOnce.Do(startEmbeddingCleanup)
+
+	itemEmbeddingsMu.RLock()
+	cached, ok := itemEmbeddings[text]
+	itemEmbeddingsMu.RUnlock()
+	if ok {
+		return cached.vector
+	}
+
+	emb, err := embedder.Embed(text)
+	if err != nil {
+		return nil
+	}
+
+	itemEmbeddingsMu.Lock()
+	if len(itemEmbeddings) >= maxEmbeddings {
+		var oldestKey string
+		var oldestTime time.Time
+		for k, v := range itemEmbeddings {
+			if oldestKey == "" || v.created.Before(oldestTime) {
+				oldestKey = k
+				oldestTime = v.created
+			}
+		}
+		delete(itemEmbeddings, oldestKey)
+	}
+	itemEmbeddings[text] = &cachedEmbedding{vector: emb, created: time.Now()}
+	itemEmbeddingsMu.Unlock()
+
+	return emb
+}
+
 // rankItems scores each search string against the query and returns indices sorted best-first.
 func rankItems(query string, searchStrings []string) []int {
 	q := strings.ToLower(strings.TrimSpace(query))
 
-	type scoredIdx struct {
-		idx   int
-		score int
-	}
 	scored := make([]scoredIdx, 0, len(searchStrings))
 
 	for i, s := range searchStrings {
@@ -131,6 +199,10 @@ func rankItems(query string, searchStrings []string) []int {
 		if score > 0 {
 			scored = append(scored, scoredIdx{i, score})
 		}
+	}
+
+	if embedder, err := minilm.GlobalEmbedder(); err == nil {
+		boostWithSemantic(embedder, query, searchStrings, scored)
 	}
 
 	sort.Slice(scored, func(i, j int) bool {
@@ -145,6 +217,25 @@ func rankItems(query string, searchStrings []string) []int {
 		indices[i] = s.idx
 	}
 	return indices
+}
+
+func boostWithSemantic(embedder minilm.Embedder, query string, searchStrings []string, scored []scoredIdx) {
+	queryEmb, err := embedder.Embed(query)
+	if err != nil || len(queryEmb) == 0 {
+		return
+	}
+	for i := range scored {
+		idx := scored[i].idx
+		s := searchStrings[idx]
+		itemEmb := itemEmbedding(embedder, s)
+		if itemEmb == nil {
+			continue
+		}
+		sim := minilm.Cosine(queryEmb, itemEmb)
+		if sim > 0 {
+			scored[i].score += int(sim * 3000)
+		}
+	}
 }
 
 // scoreItem ranks how well query q matches target t (both lowercase).
