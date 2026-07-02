@@ -38,6 +38,7 @@ A Discord LLM roleplay and utility bot
 - Ability to export and import conversations `/chatlog export`, `/chatlog import`, `/lobotomy`
 - Can render & embed HTML/SVG blocks (like SillyTavern's frontend does, but in Discord) with [Gotenberg](https://gotenberg.dev/)
 - Has a small local embeddings model that determines whether the model should respond after an interaction for some time (10min by default)
+- No need to write complex system prompts, just steer the behavior to your liking with `/context` commands (`add`, `edit`, `remove`)
 - Free and Discord based, [add it](https://discord.com/oauth2/authorize?client_id=1307635432632094740)
 - Also is a Matrix bot: [@x3_bot:matrix.org](https://matrix.to/#/@x3_bot:matrix.org)
 
