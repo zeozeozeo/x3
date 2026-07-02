@@ -173,7 +173,7 @@ func main() {
 
 	// start GUI server
 	go func() {
-		modelEditorServer := modeled.NewServer()
+		modelEditorServer := modeled.NewServer(dbPath)
 		if err := modelEditorServer.Start(); err != nil && err != http.ErrServerClosed {
 			slog.Error("GUI server error", "err", err)
 		}

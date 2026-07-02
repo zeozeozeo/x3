@@ -1,14 +1,17 @@
 package modeled
 
 import (
+	"database/sql"
 	"embed"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log/slog"
 	"net/http"
 	"os"
 
 	"github.com/zeozeozeo/x3/model"
+	_ "github.com/mattn/go-sqlite3"
 )
 
 const (
@@ -24,9 +27,10 @@ var templateFiles embed.FS
 
 type Server struct {
 	httpServer *http.Server
+	dbPath     string
 }
 
-func NewServer() *Server {
+func NewServer(dbPath string) *Server {
 	mux := http.NewServeMux()
 
 	// Serve static files
@@ -42,9 +46,73 @@ func NewServer() *Server {
 		Handler: mux,
 	}
 
-	return &Server{
+	s := &Server{
 		httpServer: server,
+		dbPath:     dbPath,
 	}
+
+	mux.HandleFunc("/api/backup", s.handleBackup)
+
+	return s
+}
+
+type backupRequest struct {
+	Token string `json:"token"`
+}
+
+func (s *Server) handleBackup(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var req backupRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, fmt.Sprintf("Error decoding request: %v", err), http.StatusBadRequest)
+		return
+	}
+
+	expectedToken := os.Getenv("X3_DOWNLOAD_TOKEN")
+	if expectedToken == "" || req.Token != expectedToken {
+		http.Error(w, "Invalid download token", http.StatusForbidden)
+		return
+	}
+
+	// Open a temporary database connection to VACUUM into a temp file
+	tmpFile := s.dbPath + ".backup.tmp"
+	tmpConn, err := sql.Open("sqlite3", s.dbPath)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Error opening database for backup: %v", err), http.StatusInternalServerError)
+		return
+	}
+	defer tmpConn.Close()
+
+	// VACUUM INTO writes a cleanly-packed copy to the target path
+	_, err = tmpConn.Exec(fmt.Sprintf("VACUUM INTO '%s'", tmpFile))
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Error vacuuming database: %v", err), http.StatusInternalServerError)
+		return
+	}
+	defer os.Remove(tmpFile)
+
+	f, err := os.Open(tmpFile)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Error opening vacuumed database: %v", err), http.StatusInternalServerError)
+		return
+	}
+	defer f.Close()
+
+	stat, err := f.Stat()
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Error statting database: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/octet-stream")
+	w.Header().Set("Content-Disposition", "attachment; filename=x3.db")
+	w.Header().Set("Content-Length", fmt.Sprintf("%d", stat.Size()))
+
+	io.Copy(w, f)
 }
 
 func (s *Server) Start() error {

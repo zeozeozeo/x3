@@ -20,6 +20,9 @@ function setupEventListeners() {
   // Reload button
   document.getElementById("reloadBtn").addEventListener("click", loadConfig);
 
+  // Backup button
+  document.getElementById("backupBtn").addEventListener("click", openBackupModal);
+
   // Version edit button
   document
     .getElementById("editVersionBtn")
@@ -907,6 +910,82 @@ function saveVersion() {
 
   renderVersion();
   showStatus("Version updated successfully", "success");
+}
+
+function openBackupModal() {
+  const modal = document.createElement("div");
+  modal.className = "modal";
+  modal.style.display = "block";
+  modal.innerHTML = `
+    <div class="modal-content" style="max-width: 400px;">
+      <div class="modal-header">
+        <h3>Database Backup</h3>
+        <span class="close" onclick="this.closest('.modal').remove()">&times;</span>
+      </div>
+      <div class="modal-body">
+        <p style="margin-bottom: 15px; color: #7f8c8d;">Enter the download token to start the database backup download.</p>
+        <div class="form-group">
+          <label>Download Token:</label>
+          <input type="password" id="downloadTokenInput" style="width: 100%; padding: 8px;" placeholder="Enter download token">
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-primary" onclick="downloadBackup()">Download Backup</button>
+        <button type="button" class="btn btn-secondary" onclick="this.closest('.modal').remove()">Cancel</button>
+      </div>
+    </div>
+  `;
+
+  document.body.appendChild(modal);
+
+  modal.addEventListener("click", function (e) {
+    if (e.target === this) {
+      this.remove();
+    }
+  });
+
+  // Focus the input
+  setTimeout(() => document.getElementById("downloadTokenInput").focus(), 100);
+}
+
+async function downloadBackup() {
+  const token = document.getElementById("downloadTokenInput").value.trim();
+  if (!token) {
+    showStatus("Please enter a download token", "error");
+    return;
+  }
+
+  try {
+    const response = await fetch("/api/backup", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ token }),
+    });
+
+    if (!response.ok) {
+      const errText = await response.text();
+      throw new Error(errText || "Invalid download token");
+    }
+
+    // Trigger file download
+    const blob = await response.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "x3.db";
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+
+    // Close modal
+    const modal = document.querySelector(".modal");
+    if (modal) modal.remove();
+
+    showStatus("Database downloaded successfully", "success");
+  } catch (error) {
+    showStatus(`Backup failed: ${error.message}`, "error");
+  }
 }
 
 function escapeHtml(unsafe) {
