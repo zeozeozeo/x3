@@ -291,16 +291,6 @@
       }
     },
     {
-      "name": "Owl Alpha",
-      "command": "owlalpha",
-      "reasoning": true,
-      "providers": {
-        "openrouter": {
-          "codenames": ["openrouter/owl-alpha"]
-        }
-      }
-    },
-    {
       "name": "Markov Chain (not an LLM)",
       "command": "markov",
       "is_markov": true
