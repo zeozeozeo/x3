@@ -924,40 +924,63 @@ func inlineRemoteImages(ctx context.Context, renderer *Renderer, input string) (
 }
 
 func fetchImageAsDataURL(ctx context.Context, client *http.Client, raw string) (string, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, raw, nil)
+	data, mediaType, err := fetchImageBytes(ctx, client, raw, "")
 	if err != nil {
 		return "", err
+	}
+	return "data:" + mediaType + ";base64," + base64.StdEncoding.EncodeToString(data), nil
+}
+
+func fetchImageBytes(ctx context.Context, client *http.Client, raw, referer string) ([]byte, string, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, raw, nil)
+	if err != nil {
+		return nil, "", err
 	}
 	req.Header.Set("User-Agent", "x3-htmlrender/1.0")
 	req.Header.Set("Accept", "image/avif,image/webp,image/apng,image/png,image/jpeg,image/gif,image/*;q=0.8,*/*;q=0.1")
+	if referer != "" {
+		req.Header.Set("Referer", referer)
+	}
 
 	resp, err := client.Do(req)
 	if err != nil {
-		return "", err
+		return nil, "", err
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return "", fmt.Errorf("image fetch failed: HTTP %d", resp.StatusCode)
-	}
-
-	contentType := strings.ToLower(strings.TrimSpace(resp.Header.Get("Content-Type")))
-	mediaType, _, _ := mime.ParseMediaType(contentType)
-	if !isSupportedInlineImageType(mediaType) {
-		return "", fmt.Errorf("unsupported image content type %q", mediaType)
+		return nil, "", fmt.Errorf("image fetch failed: HTTP %d", resp.StatusCode)
 	}
 
 	data, err := io.ReadAll(io.LimitReader(resp.Body, maxInlineImageBytes+1))
 	if err != nil {
-		return "", err
+		return nil, "", err
 	}
 	if len(data) == 0 {
-		return "", fmt.Errorf("image response was empty")
+		return nil, "", fmt.Errorf("image response was empty")
 	}
 	if len(data) > maxInlineImageBytes {
-		return "", fmt.Errorf("image exceeds %d byte inline limit", maxInlineImageBytes)
+		return nil, "", fmt.Errorf("image exceeds %d byte inline limit", maxInlineImageBytes)
 	}
 
-	return "data:" + mediaType + ";base64," + base64.StdEncoding.EncodeToString(data), nil
+	contentType := strings.ToLower(strings.TrimSpace(resp.Header.Get("Content-Type")))
+	mediaType, _, _ := mime.ParseMediaType(contentType)
+	if sniffed := detectImageMediaType(data); sniffed != "" {
+		return data, sniffed, nil
+	}
+	if isSupportedInlineImageType(mediaType) {
+		return data, mediaType, nil
+	}
+
+	if referer == "" && (strings.EqualFold(mediaType, "text/html") || strings.EqualFold(mediaType, "application/xhtml+xml")) {
+		finalURL := raw
+		if resp.Request != nil && resp.Request.URL != nil {
+			finalURL = resp.Request.URL.String()
+		}
+		if recovered, recoveredType, ok := recoverHotlinkProtectedImage(ctx, client, raw, finalURL, data); ok {
+			return recovered, recoveredType, nil
+		}
+	}
+	return nil, "", fmt.Errorf("unsupported image content type %q", mediaType)
 }
 
 func isSupportedInlineImageType(mediaType string) bool {
@@ -967,6 +990,129 @@ func isSupportedInlineImageType(mediaType string) bool {
 	default:
 		return false
 	}
+}
+
+func detectImageMediaType(data []byte) string {
+	if len(data) >= 12 && bytes.Equal(data[:8], []byte{0x89, 'P', 'N', 'G', '\r', '\n', 0x1a, '\n'}) {
+		return "image/png"
+	}
+	if len(data) >= 3 && bytes.Equal(data[:3], []byte{0xff, 0xd8, 0xff}) {
+		return "image/jpeg"
+	}
+	if len(data) >= 6 {
+		header := string(data[:6])
+		if header == "GIF87a" || header == "GIF89a" {
+			return "image/gif"
+		}
+	}
+	if len(data) >= 12 && string(data[:4]) == "RIFF" && string(data[8:12]) == "WEBP" {
+		return "image/webp"
+	}
+	if len(data) >= 12 && bytes.Equal(data[4:12], []byte("ftypavif")) {
+		return "image/avif"
+	}
+	return ""
+}
+
+func recoverHotlinkProtectedImage(ctx context.Context, client *http.Client, raw, referer string, htmlData []byte) ([]byte, string, bool) {
+	candidates := collectImageCandidatesFromHTML(htmlData, referer)
+	candidates = append([]string{raw}, candidates...)
+
+	seen := make(map[string]struct{}, len(candidates))
+	for _, candidate := range candidates {
+		candidate = strings.TrimSpace(candidate)
+		if candidate == "" || candidate == referer {
+			continue
+		}
+		if _, ok := seen[candidate]; ok {
+			continue
+		}
+		seen[candidate] = struct{}{}
+		if !isSafeRenderURL(candidate, true) {
+			continue
+		}
+		data, mediaType, err := fetchImageBytes(ctx, client, candidate, referer)
+		if err == nil {
+			return data, mediaType, true
+		}
+	}
+	return nil, "", false
+}
+
+func collectImageCandidatesFromHTML(htmlData []byte, base string) []string {
+	root, err := xhtml.Parse(bytes.NewReader(htmlData))
+	if err != nil {
+		return nil
+	}
+
+	var baseURL *url.URL
+	if base != "" {
+		baseURL, _ = url.Parse(base)
+	}
+
+	var candidates []string
+	seen := make(map[string]struct{})
+	add := func(raw string) {
+		raw = strings.TrimSpace(raw)
+		if raw == "" {
+			return
+		}
+		if baseURL != nil {
+			if parsed, err := url.Parse(raw); err == nil {
+				raw = baseURL.ResolveReference(parsed).String()
+			}
+		}
+		if _, ok := seen[raw]; ok {
+			return
+		}
+		seen[raw] = struct{}{}
+		candidates = append(candidates, raw)
+	}
+
+	var walk func(*xhtml.Node)
+	walk = func(node *xhtml.Node) {
+		if node.Type == xhtml.ElementNode {
+			switch strings.ToLower(node.Data) {
+			case "meta":
+				var property, name, content string
+				for _, attr := range node.Attr {
+					switch strings.ToLower(attr.Key) {
+					case "property":
+						property = strings.ToLower(strings.TrimSpace(attr.Val))
+					case "name":
+						name = strings.ToLower(strings.TrimSpace(attr.Val))
+					case "content":
+						content = strings.TrimSpace(attr.Val)
+					}
+				}
+				if content != "" && (property == "og:image" || property == "twitter:image" || name == "twitter:image") {
+					add(content)
+				}
+			case "img":
+				for _, attr := range node.Attr {
+					if strings.EqualFold(attr.Key, "src") {
+						add(attr.Val)
+					}
+				}
+			case "a":
+				var href string
+				for _, attr := range node.Attr {
+					if strings.EqualFold(attr.Key, "href") {
+						href = attr.Val
+						break
+					}
+				}
+				if href != "" && strings.Contains(strings.ToLower(textContent(node)), "original image") {
+					add(href)
+				}
+			}
+		}
+		for child := node.FirstChild; child != nil; child = child.NextSibling {
+			walk(child)
+		}
+	}
+	walk(root)
+	return candidates
 }
 
 func removeUnsafeURLAttrs(node *xhtml.Node) {
