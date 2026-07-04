@@ -170,14 +170,18 @@ func messageReactionsContext(reactions []discord.MessageReaction) string {
 }
 
 func imageURLsFromContent(content string) []string {
-	matches := imageURLRegexp.FindAllString(content, -1)
+	matches := detectURLs(content, imageURLRegexp)
 	if len(matches) == 0 {
 		return nil
 	}
 
 	var out []string
 	seen := make(map[string]struct{}, len(matches))
-	for _, raw := range matches {
+	for _, match := range matches {
+		if match.angleQuoted {
+			continue
+		}
+		raw := match.raw
 		raw = strings.TrimRight(raw, ".,!?;:)]}")
 		if !isLikelyImageURL(raw) {
 			continue

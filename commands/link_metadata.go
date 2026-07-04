@@ -106,14 +106,18 @@ func linkMetadataSummaries(content string) []string {
 }
 
 func linksFromContent(content string) []string {
-	matches := urlRegexp.FindAllString(content, -1)
+	matches := detectURLs(content, urlRegexp)
 	if len(matches) == 0 {
 		return nil
 	}
 
 	seen := map[string]struct{}{}
 	out := make([]string, 0, len(matches))
-	for _, raw := range matches {
+	for _, match := range matches {
+		if match.angleQuoted {
+			continue
+		}
+		raw := match.raw
 		raw = normalizeLinkURL(raw)
 		if raw == "" || isLikelyImageURL(raw) {
 			continue
