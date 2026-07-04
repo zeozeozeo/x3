@@ -1,5 +1,5 @@
 # Build Stage
-FROM docker.io/library/golang:1.25.6-alpine3.23 AS builder
+FROM docker.io/library/golang:1.26-alpine AS builder
 RUN apk add --no-cache build-base
 WORKDIR /bot
 COPY go.mod go.sum ./
