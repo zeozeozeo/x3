@@ -3,11 +3,13 @@ package htmlrender
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"fmt"
 	"image"
 	"image/color"
 	"image/png"
 	"io"
+	"mime"
 	"mime/multipart"
 	"net/http"
 	"net/netip"
@@ -27,8 +29,10 @@ import (
 )
 
 const (
-	DefaultWidth  = 900
-	DefaultHeight = 1600
+	DefaultWidth        = 900
+	DefaultHeight       = 1600
+	maxInlineImageBytes = 10 * 1024 * 1024
+	maxInlineImageCount = 8
 )
 
 var (
@@ -310,6 +314,10 @@ func RenderResponse(ctx context.Context, renderer *Renderer, response string, li
 
 	for i, block := range blocks {
 		sanitized, err := Sanitize(block.HTML)
+		if err != nil {
+			return Result{DisplayText: response, Changed: false}, err
+		}
+		sanitized, err = inlineRemoteImages(ctx, renderer, sanitized)
 		if err != nil {
 			return Result{DisplayText: response, Changed: false}, err
 		}
@@ -857,6 +865,108 @@ func stripUnsafeHTMLURLs(input string) string {
 		}
 	}
 	return out.String()
+}
+
+func inlineRemoteImages(ctx context.Context, renderer *Renderer, input string) (string, error) {
+	root, err := xhtml.Parse(strings.NewReader("<body>" + input + "</body>"))
+	if err != nil {
+		return input, nil
+	}
+	body := findElement(root, "body")
+	if body == nil {
+		return input, nil
+	}
+
+	client := http.DefaultClient
+	if renderer != nil && renderer.Client != nil {
+		client = renderer.Client
+	}
+
+	inlined := 0
+	var walk func(*xhtml.Node) error
+	walk = func(node *xhtml.Node) error {
+		if node.Type == xhtml.ElementNode && strings.EqualFold(node.Data, "img") && inlined < maxInlineImageCount {
+			for i := range node.Attr {
+				if !strings.EqualFold(node.Attr[i].Key, "src") {
+					continue
+				}
+				src := strings.TrimSpace(node.Attr[i].Val)
+				if src == "" || isSafeDataImageURL(src) || !isSafeRenderURL(src, true) {
+					break
+				}
+				dataURL, err := fetchImageAsDataURL(ctx, client, src)
+				if err != nil {
+					return err
+				}
+				node.Attr[i].Val = dataURL
+				inlined++
+				break
+			}
+		}
+		for child := node.FirstChild; child != nil; child = child.NextSibling {
+			if err := walk(child); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+	if err := walk(body); err != nil {
+		return "", err
+	}
+
+	var out strings.Builder
+	for child := body.FirstChild; child != nil; child = child.NextSibling {
+		if err := xhtml.Render(&out, child); err != nil {
+			return input, nil
+		}
+	}
+	return out.String(), nil
+}
+
+func fetchImageAsDataURL(ctx context.Context, client *http.Client, raw string) (string, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, raw, nil)
+	if err != nil {
+		return "", err
+	}
+	req.Header.Set("User-Agent", "x3-htmlrender/1.0")
+	req.Header.Set("Accept", "image/avif,image/webp,image/apng,image/png,image/jpeg,image/gif,image/*;q=0.8,*/*;q=0.1")
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return "", fmt.Errorf("image fetch failed: HTTP %d", resp.StatusCode)
+	}
+
+	contentType := strings.ToLower(strings.TrimSpace(resp.Header.Get("Content-Type")))
+	mediaType, _, _ := mime.ParseMediaType(contentType)
+	if !isSupportedInlineImageType(mediaType) {
+		return "", fmt.Errorf("unsupported image content type %q", mediaType)
+	}
+
+	data, err := io.ReadAll(io.LimitReader(resp.Body, maxInlineImageBytes+1))
+	if err != nil {
+		return "", err
+	}
+	if len(data) == 0 {
+		return "", fmt.Errorf("image response was empty")
+	}
+	if len(data) > maxInlineImageBytes {
+		return "", fmt.Errorf("image exceeds %d byte inline limit", maxInlineImageBytes)
+	}
+
+	return "data:" + mediaType + ";base64," + base64.StdEncoding.EncodeToString(data), nil
+}
+
+func isSupportedInlineImageType(mediaType string) bool {
+	switch strings.ToLower(strings.TrimSpace(mediaType)) {
+	case "image/png", "image/jpeg", "image/jpg", "image/gif", "image/webp", "image/avif":
+		return true
+	default:
+		return false
+	}
 }
 
 func removeUnsafeURLAttrs(node *xhtml.Node) {

@@ -3,6 +3,7 @@ package htmlrender
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"image"
 	"image/color"
 	"image/png"
@@ -351,6 +352,88 @@ func TestRenderResponseFencedFullDocumentRendersOnce(t *testing.T) {
 	if len(result.Blocks) != 1 || strings.TrimSpace(result.DisplayText) != "before\n\nafter" {
 		t.Fatalf("unexpected render result: %+v", result)
 	}
+}
+
+func TestRenderResponseInlinesRemoteImagesBeforeGotenberg(t *testing.T) {
+	requests := 0
+	gotenberg := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requests++
+		if err := r.ParseMultipartForm(8 << 20); err != nil {
+			t.Fatalf("ParseMultipartForm failed: %v", err)
+		}
+		files := r.MultipartForm.File["files"]
+		if len(files) != 1 {
+			t.Fatalf("expected one index file, got %d", len(files))
+		}
+		file, err := files[0].Open()
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer file.Close()
+		body, _ := io.ReadAll(file)
+		html := string(body)
+		if strings.Contains(html, "https://images.example/a.png") {
+			t.Fatalf("expected remote image URL to be inlined, got:\n%s", html)
+		}
+		if !strings.Contains(html, `src="data:image/png;base64,`) {
+			t.Fatalf("expected inlined data image, got:\n%s", html)
+		}
+		w.Header().Set("Content-Type", "image/png")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write(testPNG(t))
+	}))
+	defer gotenberg.Close()
+
+	client := gotenberg.Client()
+	baseTransport := client.Transport
+	if baseTransport == nil {
+		baseTransport = http.DefaultTransport
+	}
+	client.Transport = roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		if req.URL.Hostname() == "images.example" {
+			return &http.Response{
+				StatusCode: http.StatusOK,
+				Header:     http.Header{"Content-Type": []string{"image/png"}},
+				Body:       io.NopCloser(bytes.NewReader(testPNG(t))),
+				Request:    req,
+			}, nil
+		}
+		return baseTransport.RoundTrip(req)
+	})
+
+	response := "```html\n<div><img src=\"https://images.example/a.png\" alt=\"ok\"></div>\n```"
+	result, err := RenderResponse(context.Background(), &Renderer{BaseURL: gotenberg.URL, Client: client}, response, 3)
+	if err != nil {
+		t.Fatalf("RenderResponse failed: %v", err)
+	}
+	if requests != 1 {
+		t.Fatalf("expected one render request, got %d", requests)
+	}
+	if len(result.Blocks) != 1 {
+		t.Fatalf("expected one rendered block, got %+v", result)
+	}
+}
+
+func TestInlineRemoteImagesLeavesIframesUnsupported(t *testing.T) {
+	got, err := Sanitize(`<div><iframe src="https://example.com/embed"></iframe><img src="https://example.com/a.png"></div>`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(got, "<iframe") || strings.Contains(got, "example.com/embed") {
+		t.Fatalf("expected iframe markup to be removed, got:\n%s", got)
+	}
+	if !strings.Contains(got, `src="https://example.com/a.png"`) {
+		t.Fatalf("expected img to remain eligible for inlining, got:\n%s", got)
+	}
+}
+
+type roundTripFunc func(*http.Request) (*http.Response, error)
+
+func (f roundTripFunc) RoundTrip(req *http.Request) (*http.Response, error) {
+	if f == nil {
+		return nil, fmt.Errorf("nil round trip func")
+	}
+	return f(req)
 }
 
 func TestCropTransparentPNG(t *testing.T) {
