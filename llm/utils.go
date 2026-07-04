@@ -19,27 +19,113 @@ var thinkingTags = [][2]string{
 // ExtractThinking returns the thinking content and the rest of the response (thinking, response)
 func ExtractThinking(response string) (string, string) {
 	response = strings.TrimSpace(response)
+	lowerResponse := strings.ToLower(response)
 
 	for _, tag := range thinkingTags {
 		startTag := tag[0]
-		endTag := tag[1]
+		if !strings.HasPrefix(lowerResponse, startTag) {
+			continue
+		}
 
-		if strings.HasPrefix(response, startTag) {
-			relativeEndIdx := strings.Index(response[len(startTag):], endTag)
+		thinkingContent, remainingResponse, ok := extractLeadingThinkingBlock(response, lowerResponse, startTag)
+		if ok {
+			return thinkingContent, remainingResponse
+		}
 
-			if relativeEndIdx != -1 {
-				endIdx := relativeEndIdx + len(startTag)
-				thinkingContent := strings.TrimSpace(response[len(startTag):endIdx])
-				remainingResponse := strings.TrimSpace(response[endIdx+len(endTag):])
-				return thinkingContent, remainingResponse
-			} else {
-				// found a start tag but no end tag
-				return response, ""
+		// found a start tag but no end tag
+		return response, ""
+	}
+
+	return "", response
+}
+
+func extractLeadingThinkingBlock(response, lowerResponse, startTag string) (string, string, bool) {
+	depth := 1
+	contentStart := len(startTag)
+	searchFrom := contentStart
+
+	for depth > 0 {
+		tokenStart, tokenEnd, delta, ok := findNextThinkingToken(lowerResponse, searchFrom)
+		if !ok {
+			return "", "", false
+		}
+		if depth+delta == 0 {
+			thinkingContent := strings.TrimSpace(stripThinkingSelfClosingTags(response[contentStart:tokenStart]))
+			remainingResponse := strings.TrimSpace(stripLeadingThinkingArtifacts(response[tokenEnd:]))
+			return thinkingContent, remainingResponse, true
+		}
+		depth += delta
+		searchFrom = tokenEnd
+	}
+
+	return "", "", false
+}
+
+func findNextThinkingToken(lowerResponse string, from int) (start int, end int, delta int, ok bool) {
+	bestStart := len(lowerResponse)
+	bestEnd := 0
+	bestDelta := 0
+	found := false
+
+	for _, tag := range thinkingTags {
+		tagName := strings.TrimSuffix(strings.TrimPrefix(tag[0], "<"), ">")
+		candidates := []struct {
+			token string
+			delta int
+		}{
+			{token: tag[0], delta: 1},
+			{token: "<" + tagName + "/>", delta: 0},
+			{token: "<" + tagName + " />", delta: 0},
+			{token: tag[1], delta: -1},
+		}
+
+		for _, candidate := range candidates {
+			idx := strings.Index(lowerResponse[from:], candidate.token)
+			if idx == -1 {
+				continue
+			}
+			absStart := from + idx
+			if !found || absStart < bestStart {
+				bestStart = absStart
+				bestEnd = absStart + len(candidate.token)
+				bestDelta = candidate.delta
+				found = true
 			}
 		}
 	}
 
-	return "", response
+	if !found {
+		return 0, 0, 0, false
+	}
+	return bestStart, bestEnd, bestDelta, true
+}
+
+func stripThinkingSelfClosingTags(s string) string {
+	for _, tag := range thinkingTags {
+		tagName := strings.TrimSuffix(strings.TrimPrefix(tag[0], "<"), ">")
+		s = strings.ReplaceAll(s, "<"+tagName+"/>", "")
+		s = strings.ReplaceAll(s, "<"+tagName+" />", "")
+	}
+	return s
+}
+
+func stripLeadingThinkingArtifacts(s string) string {
+	s = strings.TrimSpace(s)
+	for {
+		trimmed := false
+		for _, tag := range thinkingTags {
+			tagName := strings.TrimSuffix(strings.TrimPrefix(tag[0], "<"), ">")
+			for _, prefix := range []string{"<" + tagName + "/>", "<" + tagName + " />", tag[1]} {
+				if strings.HasPrefix(strings.ToLower(s), prefix) {
+					s = strings.TrimSpace(s[len(prefix):])
+					trimmed = true
+				}
+			}
+		}
+		if !trimmed {
+			return s
+		}
+	}
 }
 
 // extract stuff in <search></search>
