@@ -281,12 +281,24 @@ func (m *Manager) CreateSite(ctx context.Context, creatorID, theme string, addit
 		m.mu.Unlock()
 		return nil, fmt.Errorf("you can only create %d new sites per %s", m.cfg.SiteCreationsPerUser, humanWindow(m.cfg.SiteWindow))
 	}
+	dummyID := randHex(16)
+	m.sessions[dummyID] = &Session{
+		CreatorID: creatorID,
+		CreatedAt: now,
+		ExpiresAt: now.Add(time.Minute),
+	}
 	m.mu.Unlock()
 
 	rootHTML, metrics, err := m.generatePage(ctx, theme, additionalContext, "", nil, "")
+
+	m.mu.Lock()
+	delete(m.sessions, dummyID)
+	m.mu.Unlock()
+
 	if err != nil {
 		return nil, err
 	}
+
 	m.mu.Lock()
 	m.recordGenerationMetricsLocked(metrics)
 	m.mu.Unlock()
@@ -684,9 +696,13 @@ func (m *Manager) navigate(ctx context.Context, session *Session, viewerID, from
 		m.mu.Unlock()
 		return "", "", fmt.Errorf("this site can only create %d new pages per %s", m.cfg.PagesPerWindow, humanWindow(m.cfg.PageWindow))
 	}
+	session.GeneratedPageTimes = append(session.GeneratedPageTimes, now)
 	rootHTML := session.RootHTML
 	history := append([]string(nil), page.History...)
 	history = append(history, intent)
+	if len(history) > 10 {
+		history = history[len(history)-10:]
+	}
 	theme := session.Theme
 	estimated := m.estimateGenerationDurationLocked(session, intent, history)
 	m.broadcastLocked(session, wsServerMessage{
@@ -699,6 +715,9 @@ func (m *Manager) navigate(ctx context.Context, session *Session, viewerID, from
 	nextHTML, metrics, err := m.generatePage(ctx, theme, session.AdditionalContext, rootHTML, history, intent)
 	if err != nil {
 		m.mu.Lock()
+		if len(session.GeneratedPageTimes) > 0 {
+			session.GeneratedPageTimes = session.GeneratedPageTimes[:len(session.GeneratedPageTimes)-1]
+		}
 		m.broadcastLocked(session, wsServerMessage{
 			Type:  "generation_error",
 			Error: err.Error(),
@@ -715,6 +734,9 @@ func (m *Manager) navigate(ctx context.Context, session *Session, viewerID, from
 		return "", "", fmt.Errorf("page not found")
 	}
 	if childID, ok := page.Children[intent]; ok {
+		if len(session.GeneratedPageTimes) > 0 {
+			session.GeneratedPageTimes = session.GeneratedPageTimes[:len(session.GeneratedPageTimes)-1]
+		}
 		session.OwnerPageID = childID
 		_ = m.saveSessionLocked(session)
 		return m.pageURL(session, childID), childID, nil
@@ -730,7 +752,6 @@ func (m *Manager) navigate(ctx context.Context, session *Session, viewerID, from
 	}
 	session.OwnerPageID = nextPageID
 	session.OwnerSeenAt = time.Now()
-	session.GeneratedPageTimes = append(session.GeneratedPageTimes, time.Now())
 	viewer := m.ensureViewerLocked(session, viewerID)
 	viewer.CurrentPageID = nextPageID
 	m.recordGenerationMetricsLocked(metrics)
@@ -907,7 +928,9 @@ func (m *Manager) handleWSMessage(siteID, viewerID string, conn *websocket.Conn,
 	}
 	viewer.LastSeenAt = time.Now()
 	if msg.PageID != "" {
-		viewer.CurrentPageID = msg.PageID
+		if _, pageExists := session.Pages[msg.PageID]; pageExists {
+			viewer.CurrentPageID = msg.PageID
+		}
 	}
 	if session.OwnerViewerID == viewerID {
 		session.OwnerSeenAt = viewer.LastSeenAt
