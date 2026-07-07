@@ -6,12 +6,16 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"hash"
+	"hash/fnv"
 	"html"
 	"log/slog"
 	"net/url"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
+	"sync"
 	"time"
 	"unicode/utf8"
 
@@ -33,12 +37,72 @@ const (
 	RoleSystem               = openai.ChatMessageRoleSystem
 	SplitWarningPrefix       = "*SYSTEM MESSAGE: you've used >=5 splits in your previous message, try staying within 1-3 splits!*\n"
 	providerPromptTrimTarget = 8000
+	estimateCacheTTL         = 30 * time.Minute
 )
 
 var (
-	gImageCache *imageCache = NewImageCache(100*1024*1024, 24*time.Hour)
-	gAlice      *aiml.Kernel
+	gImageCache    *imageCache = NewImageCache(100*1024*1024, 24*time.Hour)
+	gAlice         *aiml.Kernel
+	gEstimateCache = newEstimateCache(estimateCacheTTL)
 )
+
+type estimateCache struct {
+	mu      sync.Mutex
+	ttl     time.Duration
+	entries map[string]estimateCacheEntry
+}
+
+type estimateCacheEntry struct {
+	value     int
+	expiresAt time.Time
+}
+
+func newEstimateCache(ttl time.Duration) *estimateCache {
+	return &estimateCache{
+		ttl:     ttl,
+		entries: make(map[string]estimateCacheEntry),
+	}
+}
+
+func (c *estimateCache) get(key string) (int, bool) {
+	if c == nil || key == "" {
+		return 0, false
+	}
+	now := time.Now()
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.pruneLocked(now)
+	entry, ok := c.entries[key]
+	if !ok || now.After(entry.expiresAt) {
+		delete(c.entries, key)
+		return 0, false
+	}
+	entry.expiresAt = now.Add(c.ttl)
+	c.entries[key] = entry
+	return entry.value, true
+}
+
+func (c *estimateCache) set(key string, value int) {
+	if c == nil || key == "" {
+		return
+	}
+	now := time.Now()
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.pruneLocked(now)
+	c.entries[key] = estimateCacheEntry{
+		value:     value,
+		expiresAt: now.Add(c.ttl),
+	}
+}
+
+func (c *estimateCache) pruneLocked(now time.Time) {
+	for key, entry := range c.entries {
+		if now.After(entry.expiresAt) {
+			delete(c.entries, key)
+		}
+	}
+}
 
 //go:embed alicebot/*.aiml
 var aliceFS embed.FS
@@ -587,36 +651,99 @@ func (l Llmer) convertMessages(hasVision, supportsImageURL bool, prepend, search
 	return messages
 }
 
+func estimateCacheKey(prefix string, m model.Model, writePayload func(hash.Hash64)) string {
+	h := fnv.New64a()
+	_, _ = h.Write([]byte(prefix))
+	_, _ = h.Write([]byte{0})
+	_, _ = h.Write([]byte(m.Name))
+	_, _ = h.Write([]byte{0})
+	_, _ = h.Write([]byte(string(m.Encoding)))
+	_, _ = h.Write([]byte{0})
+	writePayload(h)
+	return prefix + ":" + strconv.FormatUint(h.Sum64(), 16)
+}
+
+func tokenCountCacheKey(m model.Model, s string) string {
+	return estimateCacheKey("tok", m, func(h hash.Hash64) {
+		_, _ = h.Write([]byte(s))
+	})
+}
+
+func chatMessageTokensCacheKey(m model.Model, msg openai.ChatCompletionMessage) string {
+	return estimateCacheKey("msg", m, func(h hash.Hash64) {
+		writeChatMessageSignature(h, msg)
+	})
+}
+
+func chatPromptTokensCacheKey(m model.Model, messages []openai.ChatCompletionMessage) string {
+	return estimateCacheKey("prompt", m, func(h hash.Hash64) {
+		for i := range messages {
+			writeChatMessageSignature(h, messages[i])
+			_, _ = h.Write([]byte{0xff})
+		}
+	})
+}
+
+func writeChatMessageSignature(h hash.Hash64, msg openai.ChatCompletionMessage) {
+	_, _ = h.Write([]byte(msg.Role))
+	_, _ = h.Write([]byte{0})
+	_, _ = h.Write([]byte(msg.Content))
+	_, _ = h.Write([]byte{0})
+	for i := range msg.MultiContent {
+		_, _ = h.Write([]byte(msg.MultiContent[i].Type))
+		_, _ = h.Write([]byte{0})
+		_, _ = h.Write([]byte(msg.MultiContent[i].Text))
+		_, _ = h.Write([]byte{0xfe})
+	}
+}
+
 func tokenCount(m model.Model, s string) int {
 	if s == "" {
 		return 0
 	}
+	key := tokenCountCacheKey(m, s)
+	if cached, ok := gEstimateCache.get(key); ok {
+		return cached
+	}
 	count, err := m.Tokenizer().Count(s)
 	if err == nil {
+		gEstimateCache.set(key, count)
 		return count
 	}
 	ids, _, err := m.Tokenizer().Encode(s)
 	if err != nil {
 		return 0
 	}
-	return len(ids)
+	count = len(ids)
+	gEstimateCache.set(key, count)
+	return count
 }
 
 func estimateChatMessageTokens(m model.Model, msg openai.ChatCompletionMessage) int {
+	key := chatMessageTokensCacheKey(m, msg)
+	if cached, ok := gEstimateCache.get(key); ok {
+		return cached
+	}
 	tokens := tokenCount(m, msg.Content)
 	for _, part := range msg.MultiContent {
 		if part.Type == openai.ChatMessagePartTypeText {
 			tokens += tokenCount(m, part.Text)
 		}
 	}
+	gEstimateCache.set(key, tokens)
 	return tokens
 }
 
 func estimateChatPromptTokens(m model.Model, messages []openai.ChatCompletionMessage) int {
+	key := chatPromptTokensCacheKey(m, messages)
+	if cached, ok := gEstimateCache.get(key); ok {
+		return cached
+	}
 	tokens := 0
 	for _, msg := range messages {
 		tokens += estimateChatMessageTokens(m, msg)
 	}
+	gEstimateCache.set(key, tokens)
 	return tokens
 }
 
