@@ -891,10 +891,15 @@ func (m *Manager) handleWS(w http.ResponseWriter, r *http.Request, siteID string
 }
 
 type wsClientMessage struct {
-	Type   string  `json:"type"`
-	PageID string  `json:"page_id,omitempty"`
-	X      float64 `json:"x,omitempty"`
-	Y      float64 `json:"y,omitempty"`
+	Type     string  `json:"type"`
+	PageID   string  `json:"page_id,omitempty"`
+	X        float64 `json:"x,omitempty"`
+	Y        float64 `json:"y,omitempty"`
+	XPct     float64 `json:"x_pct,omitempty"`
+	YPct     float64 `json:"y_pct,omitempty"`
+	Selector string  `json:"selector,omitempty"`
+	RX       float64 `json:"rx,omitempty"`
+	RY       float64 `json:"ry,omitempty"`
 }
 
 type wsServerMessage struct {
@@ -904,6 +909,11 @@ type wsServerMessage struct {
 	Role        string         `json:"role,omitempty"`
 	X           float64        `json:"x,omitempty"`
 	Y           float64        `json:"y,omitempty"`
+	XPct        float64        `json:"x_pct,omitempty"`
+	YPct        float64        `json:"y_pct,omitempty"`
+	Selector    string         `json:"selector,omitempty"`
+	RX          float64        `json:"rx,omitempty"`
+	RY          float64        `json:"ry,omitempty"`
 	Error       string         `json:"error,omitempty"`
 	EstimatedMs int64          `json:"estimated_ms,omitempty"`
 	Toast       string         `json:"toast,omitempty"`
@@ -947,10 +957,15 @@ func (m *Manager) handleWSMessage(siteID, viewerID string, conn *websocket.Conn,
 			return
 		}
 		m.broadcastLocked(session, wsServerMessage{
-			Type:   "cursor",
-			PageID: viewer.CurrentPageID,
-			X:      msg.X,
-			Y:      msg.Y,
+			Type:     "cursor",
+			PageID:   viewer.CurrentPageID,
+			X:        msg.X,
+			Y:        msg.Y,
+			XPct:     msg.XPct,
+			YPct:     msg.YPct,
+			Selector: msg.Selector,
+			RX:       msg.RX,
+			RY:       msg.RY,
 		})
 	case "ping":
 		m.sendViewerLocked(viewer, m.viewerStateMessageLocked(session, viewer.ID))

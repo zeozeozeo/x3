@@ -1,5 +1,7 @@
 (function () {
-  const cfg = JSON.parse(document.getElementById("x3-site-bootstrap").textContent);
+  const cfg = JSON.parse(
+    document.getElementById("x3-site-bootstrap").textContent,
+  );
 
   window.alert = function () {};
   window.confirm = function () {
@@ -111,7 +113,10 @@
 
   const downloadZipButton = document.createElement("button");
   downloadZipButton.type = "button";
-  downloadZipButton.setAttribute("aria-label", "Download all generated pages as zip");
+  downloadZipButton.setAttribute(
+    "aria-label",
+    "Download all generated pages as zip",
+  );
   downloadZipButton.style.cssText =
     "width:100%;height:40px;margin-top:10px;border:1px solid rgba(145,255,190,.16);border-radius:12px;background:linear-gradient(135deg,rgba(36,63,84,.75),rgba(18,36,54,.88));color:#eef5ff;padding:0 14px;font:600 13px/1 system-ui,sans-serif;display:flex;align-items:center;justify-content:center;gap:8px;cursor:pointer";
   downloadZipButton.innerHTML =
@@ -126,17 +131,34 @@
   treePanel.appendChild(treeList);
 
   function endpoint(path) {
-    return "/site/" + cfg.site_id + "/" + path + "?t=" + encodeURIComponent(cfg.token);
+    return (
+      "/site/" +
+      cfg.site_id +
+      "/" +
+      path +
+      "?t=" +
+      encodeURIComponent(cfg.token)
+    );
   }
 
   function pageURL(pageId) {
-    return "/site/" + cfg.site_id + "/" + encodeURIComponent(pageId) + "?t=" + encodeURIComponent(cfg.token);
+    return (
+      "/site/" +
+      cfg.site_id +
+      "/" +
+      encodeURIComponent(pageId) +
+      "?t=" +
+      encodeURIComponent(cfg.token)
+    );
   }
 
   function toggleTree(force) {
-    const open = typeof force === "boolean" ? force : treePanel.dataset.open !== "true";
+    const open =
+      typeof force === "boolean" ? force : treePanel.dataset.open !== "true";
     treePanel.dataset.open = open ? "true" : "false";
-    treePanel.style.transform = open ? "translateX(0)" : "translateX(calc(100% + 24px))";
+    treePanel.style.transform = open
+      ? "translateX(0)"
+      : "translateX(calc(100% + 24px))";
     treePanel.style.opacity = open ? "1" : "0";
   }
 
@@ -173,7 +195,7 @@
         showToast(
           "Read-only mode: you are watching someone else control this page.",
           "info",
-          5000
+          5000,
         );
       }
 
@@ -182,7 +204,12 @@
         currentPageId = msg.page_id;
       }
 
-      if (role !== "owner" && msg.page_id && msg.page_id !== prevPageId && msg.page_url) {
+      if (
+        role !== "owner" &&
+        msg.page_id &&
+        msg.page_id !== prevPageId &&
+        msg.page_url
+      ) {
         finishProgress();
         location.assign(msg.page_url);
         return;
@@ -191,7 +218,37 @@
     }
 
     if (msg.type === "cursor" && role !== "owner") {
-      overlay.style.transform = "translate(" + msg.x + "px," + msg.y + "px)";
+      let targetX = msg.x;
+      let targetY = msg.y;
+      let found = false;
+
+      if (msg.selector) {
+        try {
+          const el = document.querySelector(msg.selector);
+          if (el) {
+            const rect = el.getBoundingClientRect();
+            targetX = rect.left + msg.rx * rect.width;
+            targetY = rect.top + msg.ry * rect.height;
+            found = true;
+          }
+        } catch (e) {}
+      }
+
+      if (
+        !found &&
+        typeof msg.x_pct === "number" &&
+        typeof msg.y_pct === "number"
+      ) {
+        targetX = msg.x_pct * window.innerWidth;
+        targetY = msg.y_pct * window.innerHeight;
+      }
+
+      overlay.style.transform =
+        "translate(" +
+        Math.round(targetX) +
+        "px," +
+        Math.round(targetY) +
+        "px)";
       return;
     }
 
@@ -209,7 +266,11 @@
     if (msg.type === "ownership_changed") {
       role = msg.role || role;
       if (role === "owner") {
-        showToast(msg.toast || "You are now controlling the page.", "success", 5000);
+        showToast(
+          msg.toast || "You are now controlling the page.",
+          "success",
+          5000,
+        );
       }
       return;
     }
@@ -309,7 +370,9 @@
       if (
         next &&
         next.tagName === "SCRIPT" &&
-        /x3-site-tree-toggle|x3-site-progress|Read-only mode/.test(next.textContent || "")
+        /x3-site-tree-toggle|x3-site-progress|Read-only mode/.test(
+          next.textContent || "",
+        )
       ) {
         next.remove();
       }
@@ -326,7 +389,7 @@
     for (let n = 0; n < 256; n++) {
       let c = n;
       for (let k = 0; k < 8; k++) {
-        c = (c & 1) ? (0xedb88320 ^ (c >>> 1)) : (c >>> 1);
+        c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
       }
       table[n] = c >>> 0;
     }
@@ -346,7 +409,7 @@
     const dosTime =
       ((date.getHours() & 31) << 11) |
       ((date.getMinutes() & 63) << 5) |
-      ((Math.floor(date.getSeconds() / 2)) & 31);
+      (Math.floor(date.getSeconds() / 2) & 31);
     const dosDate =
       (((year - 1980) & 127) << 9) |
       (((date.getMonth() + 1) & 15) << 5) |
@@ -478,7 +541,9 @@
 
       for (let i = 0; i < pages.length; i++) {
         const node = pages[i];
-        const res = await fetch(pageURL(node.id), { credentials: "same-origin" });
+        const res = await fetch(pageURL(node.id), {
+          credentials: "same-origin",
+        });
         if (!res.ok) {
           throw new Error("Failed to fetch page " + (node.label || node.id));
         }
@@ -510,16 +575,26 @@
               }),
             },
             null,
-            2
-          )
+            2,
+          ),
         ),
         modifiedAt: new Date(),
       });
 
-      triggerDownload(buildZip(files), safeFilename("site-" + cfg.site_id) + ".zip");
-      showToast("Downloaded " + pages.length + " pages as a ZIP archive.", "success", 5000);
+      triggerDownload(
+        buildZip(files),
+        safeFilename("site-" + cfg.site_id) + ".zip",
+      );
+      showToast(
+        "Downloaded " + pages.length + " pages as a ZIP archive.",
+        "success",
+        5000,
+      );
     } catch (err) {
-      showToast((err && err.message) || "Failed to build the ZIP archive.", "error");
+      showToast(
+        (err && err.message) || "Failed to build the ZIP archive.",
+        "error",
+      );
     } finally {
       downloadZipButton.disabled = false;
       downloadZipButton.style.opacity = "1";
@@ -598,7 +673,8 @@
       titleRow.appendChild(icon);
 
       const title = document.createElement("div");
-      title.style.cssText = "font:600 13px/1.35 system-ui,sans-serif;min-width:0;flex:1";
+      title.style.cssText =
+        "font:600 13px/1.35 system-ui,sans-serif;min-width:0;flex:1";
       title.textContent = node.label || "Page";
       titleRow.appendChild(title);
 
@@ -616,8 +692,7 @@
       const path = document.createElement("div");
       path.style.cssText =
         "padding-left:24px;color:rgba(145,255,190,.72);font:700 10px/1.2 system-ui,sans-serif;letter-spacing:.08em;text-transform:uppercase";
-      path.textContent =
-        node.depth > 0 ? "Depth " + node.depth : "Root";
+      path.textContent = node.depth > 0 ? "Depth " + node.depth : "Root";
 
       item.appendChild(titleRow);
       item.appendChild(meta);
@@ -677,13 +752,16 @@
       toast.style.transform = "translateY(0)";
     });
 
-    setTimeout(function () {
-      toast.style.opacity = "0";
-      toast.style.transform = "translateY(8px)";
-      setTimeout(function () {
-        toast.remove();
-      }, 220);
-    }, Math.max(Number(durationMs) || 10000, 1200));
+    setTimeout(
+      function () {
+        toast.style.opacity = "0";
+        toast.style.transform = "translateY(8px)";
+        setTimeout(function () {
+          toast.remove();
+        }, 220);
+      },
+      Math.max(Number(durationMs) || 10000, 1200),
+    );
   }
 
   function startProgress(estimateMs) {
@@ -705,10 +783,13 @@
     progressTimer = null;
     progress.style.width = "100%";
     spinner.style.opacity = "0";
-    setTimeout(function () {
-      progress.style.opacity = "0";
-      progress.style.width = "0";
-    }, immediate ? 0 : 180);
+    setTimeout(
+      function () {
+        progress.style.opacity = "0";
+        progress.style.width = "0";
+      },
+      immediate ? 0 : 180,
+    );
   }
 
   function intentFor(anchor) {
@@ -726,7 +807,7 @@
       showToast(
         "Read-only mode: you are watching someone else control this page.",
         "info",
-        5000
+        5000,
       );
       return;
     }
@@ -760,7 +841,7 @@
       showToast(
         "Read-only mode: you are watching someone else control this page.",
         "info",
-        5000
+        5000,
       );
       return;
     }
@@ -774,7 +855,10 @@
     });
 
     if (!res.ok) {
-      showToast((await res.text()) || "Failed to change page history.", "error");
+      showToast(
+        (await res.text()) || "Failed to change page history.",
+        "error",
+      );
       return;
     }
 
@@ -805,7 +889,7 @@
       ev.preventDefault();
       navigate(anchor);
     },
-    true
+    true,
   );
 
   window.addEventListener("popstate", async function (ev) {
@@ -823,7 +907,10 @@
     });
 
     if (!res.ok) {
-      showToast((await res.text()) || "Failed to change page history.", "error");
+      showToast(
+        (await res.text()) || "Failed to change page history.",
+        "error",
+      );
       return;
     }
 
@@ -834,27 +921,120 @@
     }
   });
 
+  let lastSentTime = 0;
+  const throttleInterval = 40;
+  let pendingCursorTimeout = null;
+
+  function queueCursorSend(payload) {
+    const now = Date.now();
+    const timeSinceLastSend = now - lastSentTime;
+
+    if (timeSinceLastSend >= throttleInterval) {
+      send(payload);
+      lastSentTime = now;
+      if (pendingCursorTimeout) {
+        clearTimeout(pendingCursorTimeout);
+        pendingCursorTimeout = null;
+      }
+    } else {
+      if (pendingCursorTimeout) {
+        clearTimeout(pendingCursorTimeout);
+      }
+      pendingCursorTimeout = setTimeout(function () {
+        send(payload);
+        lastSentTime = Date.now();
+        pendingCursorTimeout = null;
+      }, throttleInterval - timeSinceLastSend);
+    }
+  }
+
+  function getUniqueSelector(el) {
+    if (!el || el === document.documentElement || el === document.body) {
+      return "";
+    }
+    if (el.id) {
+      return "#" + CSS.escape(el.id);
+    }
+    const parts = [];
+    while (
+      el &&
+      el.nodeType === Node.ELEMENT_NODE &&
+      el !== document.body &&
+      el !== document.documentElement
+    ) {
+      if (el.id) {
+        parts.unshift("#" + CSS.escape(el.id));
+        break;
+      }
+      let tagName = el.nodeName.toLowerCase();
+      let sibling = el;
+      let index = 1;
+      while ((sibling = sibling.previousElementSibling)) {
+        if (sibling.nodeName.toLowerCase() === tagName) {
+          index++;
+        }
+      }
+      parts.unshift(tagName + ":nth-of-type(" + index + ")");
+      el = el.parentElement;
+    }
+    return parts.join(" > ");
+  }
+
   document.addEventListener(
     "mousemove",
     function (ev) {
       if (role !== "owner") {
         return;
       }
-      cursorPayload = {
+
+      const target = ev.target;
+      const rect =
+        target && target.getBoundingClientRect
+          ? target.getBoundingClientRect()
+          : null;
+
+      let selector = "";
+      let rx = 0;
+      let ry = 0;
+
+      if (
+        rect &&
+        rect.width > 0 &&
+        rect.height > 0 &&
+        target !== document.documentElement &&
+        target !== document.body
+      ) {
+        try {
+          selector = getUniqueSelector(target);
+          rx =
+            Math.round(((ev.clientX - rect.left) / rect.width) * 10000) / 10000;
+          ry =
+            Math.round(((ev.clientY - rect.top) / rect.height) * 10000) / 10000;
+        } catch (err) {
+          selector = "";
+        }
+      }
+
+      const x_pct =
+        Math.round((ev.clientX / window.innerWidth) * 10000) / 10000;
+      const y_pct =
+        Math.round((ev.clientY / window.innerHeight) * 10000) / 10000;
+
+      const payload = {
         type: "cursor",
         page_id: currentPageId,
-        x: ev.clientX,
-        y: ev.clientY,
+        x: Math.round(ev.clientX),
+        y: Math.round(ev.clientY),
+        x_pct: x_pct,
+        y_pct: y_pct,
+        selector: selector,
+        rx: rx,
+        ry: ry,
       };
-      if (cursorFrame) {
-        return;
-      }
-      cursorFrame = requestAnimationFrame(function () {
-        send(cursorPayload);
-        cursorFrame = null;
-      });
+
+      queueCursorSend(payload);
     },
-    { passive: true }
+    { passive: true },
   );
 
   document.addEventListener("keydown", function (ev) {
