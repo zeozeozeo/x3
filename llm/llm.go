@@ -13,6 +13,7 @@ import (
 	"regexp"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/disgoorg/snowflake/v2"
 	"github.com/zeozeozeo/x3/eliza"
@@ -27,10 +28,11 @@ import (
 )
 
 const (
-	RoleUser           = openai.ChatMessageRoleUser
-	RoleAssistant      = openai.ChatMessageRoleAssistant
-	RoleSystem         = openai.ChatMessageRoleSystem
-	SplitWarningPrefix = "*SYSTEM MESSAGE: you've used >=5 splits in your previous message, try staying within 1-3 splits!*\n"
+	RoleUser                 = openai.ChatMessageRoleUser
+	RoleAssistant            = openai.ChatMessageRoleAssistant
+	RoleSystem               = openai.ChatMessageRoleSystem
+	SplitWarningPrefix       = "*SYSTEM MESSAGE: you've used >=5 splits in your previous message, try staying within 1-3 splits!*\n"
+	providerPromptTrimTarget = 7000
 )
 
 var (
@@ -618,6 +620,202 @@ func estimateChatPromptTokens(m model.Model, messages []openai.ChatCompletionMes
 	return tokens
 }
 
+func trimMessagesForCerebras(m model.Model, messages []openai.ChatCompletionMessage, targetTokens int) []openai.ChatCompletionMessage {
+	if len(messages) == 0 || targetTokens <= 0 {
+		return messages
+	}
+	if estimateChatPromptTokens(m, messages) <= targetTokens {
+		return messages
+	}
+
+	trimmed := cloneChatMessages(messages)
+
+	for len(trimmed) > 1 && estimateChatPromptTokens(m, trimmed) > targetTokens {
+		idx := oldestDroppableMessageIndex(trimmed)
+		if idx < 0 {
+			break
+		}
+		trimmed = append(trimmed[:idx], trimmed[idx+1:]...)
+	}
+
+	for estimateChatPromptTokens(m, trimmed) > targetTokens {
+		idx := bestMessageToTruncateIndex(m, trimmed)
+		if idx < 0 {
+			break
+		}
+		next, changed := truncateChatMessageToReduceTokens(m, trimmed[idx], estimateChatPromptTokens(m, trimmed)-targetTokens, idx == len(trimmed)-1)
+		if !changed {
+			break
+		}
+		trimmed[idx] = next
+	}
+
+	return trimmed
+}
+
+func cloneChatMessages(messages []openai.ChatCompletionMessage) []openai.ChatCompletionMessage {
+	cloned := make([]openai.ChatCompletionMessage, len(messages))
+	for i := range messages {
+		cloned[i] = messages[i]
+		if len(messages[i].MultiContent) > 0 {
+			cloned[i].MultiContent = append([]openai.ChatMessagePart(nil), messages[i].MultiContent...)
+		}
+		if len(messages[i].ToolCalls) > 0 {
+			cloned[i].ToolCalls = append([]openai.ToolCall(nil), messages[i].ToolCalls...)
+		}
+	}
+	return cloned
+}
+
+func oldestDroppableMessageIndex(messages []openai.ChatCompletionMessage) int {
+	lastIdx := len(messages) - 1
+	for i := 0; i < len(messages); i++ {
+		if i == lastIdx {
+			continue
+		}
+		if messages[i].Role == RoleSystem || messages[i].Role == openai.ChatMessageRoleTool {
+			continue
+		}
+		return i
+	}
+	return -1
+}
+
+func bestMessageToTruncateIndex(m model.Model, messages []openai.ChatCompletionMessage) int {
+	bestIdx := -1
+	bestScore := 0
+	for i := range messages {
+		if !messageHasTrimmableText(messages[i]) {
+			continue
+		}
+		score := estimateChatMessageTokens(m, messages[i])
+		if score <= 0 {
+			continue
+		}
+		if i == len(messages)-1 {
+			score -= 64
+		}
+		if messages[i].Role == RoleSystem {
+			score -= 32
+		}
+		if bestIdx < 0 || score > bestScore {
+			bestIdx = i
+			bestScore = score
+		}
+	}
+	return bestIdx
+}
+
+func messageHasTrimmableText(msg openai.ChatCompletionMessage) bool {
+	if strings.TrimSpace(msg.Content) != "" {
+		return true
+	}
+	for _, part := range msg.MultiContent {
+		if part.Type == openai.ChatMessagePartTypeText && strings.TrimSpace(part.Text) != "" {
+			return true
+		}
+	}
+	return false
+}
+
+func truncateChatMessageToReduceTokens(m model.Model, msg openai.ChatCompletionMessage, excessTokens int, preserveTail bool) (openai.ChatCompletionMessage, bool) {
+	currentTokens := estimateChatMessageTokens(m, msg)
+	if currentTokens <= 0 {
+		return msg, false
+	}
+	targetTokens := currentTokens - excessTokens - 32
+	if targetTokens < 64 {
+		targetTokens = 64
+	}
+	if targetTokens >= currentTokens {
+		targetTokens = currentTokens - 1
+	}
+	if targetTokens <= 0 {
+		return msg, false
+	}
+
+	apply := func(maxRunes int) openai.ChatCompletionMessage {
+		next := msg
+		if next.Content != "" {
+			next.Content = clipStringForCerebras(next.Content, maxRunes, preserveTail)
+		}
+		if len(next.MultiContent) > 0 {
+			for i := range next.MultiContent {
+				if next.MultiContent[i].Type == openai.ChatMessagePartTypeText {
+					next.MultiContent[i].Text = clipStringForCerebras(next.MultiContent[i].Text, maxRunes, preserveTail)
+				}
+			}
+		}
+		return next
+	}
+
+	totalRunes := messageTextRuneCount(msg)
+	if totalRunes <= 1 {
+		return msg, false
+	}
+
+	low, high := 1, totalRunes
+	best := msg
+	changed := false
+	for low <= high {
+		mid := (low + high) / 2
+		candidate := apply(mid)
+		candidateTokens := estimateChatMessageTokens(m, candidate)
+		if candidateTokens <= targetTokens {
+			best = candidate
+			changed = !chatMessagesEqual(msg, candidate)
+			low = mid + 1
+		} else {
+			high = mid - 1
+		}
+	}
+
+	if !changed {
+		candidate := apply(max(1, totalRunes/2))
+		if chatMessagesEqual(msg, candidate) {
+			return msg, false
+		}
+		return candidate, true
+	}
+	return best, true
+}
+
+func messageTextRuneCount(msg openai.ChatCompletionMessage) int {
+	total := utf8.RuneCountInString(msg.Content)
+	for _, part := range msg.MultiContent {
+		if part.Type == openai.ChatMessagePartTypeText {
+			total += utf8.RuneCountInString(part.Text)
+		}
+	}
+	return total
+}
+
+func clipStringForCerebras(s string, maxRunes int, preserveTail bool) string {
+	if maxRunes <= 0 {
+		return ""
+	}
+	runes := []rune(s)
+	if len(runes) <= maxRunes {
+		return s
+	}
+	if preserveTail {
+		return string(runes[len(runes)-maxRunes:])
+	}
+	return string(runes[:maxRunes])
+}
+
+func chatMessagesEqual(a, b openai.ChatCompletionMessage) bool {
+	if a.Role != b.Role || a.Content != b.Content || len(a.MultiContent) != len(b.MultiContent) {
+		return false
+	}
+	for i := range a.MultiContent {
+		if a.MultiContent[i].Type != b.MultiContent[i].Type || a.MultiContent[i].Text != b.MultiContent[i].Text {
+			return false
+		}
+	}
+	return true
+}
+
 func estimateCompletionUsage(m model.Model, messages []openai.ChatCompletionMessage, response string) Usage {
 	start := time.Now()
 	usage := Usage{
@@ -843,6 +1041,22 @@ func (l *Llmer) requestCompletionInternal2(
 	var response openai.ChatCompletionResponse
 	var usage Usage
 	for toolDepth := 0; ; toolDepth++ {
+		if provider == model.ProviderCerebras {
+			beforeTokens := estimateChatPromptTokens(m, req.Messages)
+			req.Messages = trimMessagesForCerebras(m, req.Messages, providerPromptTrimTarget)
+			afterTokens := estimateChatPromptTokens(m, req.Messages)
+			if afterTokens < beforeTokens {
+				slog.Warn(
+					"trimmed messages for cerebras before request",
+					"model", m.Name,
+					"codename", codename,
+					"provider", provider,
+					"beforeTokens", beforeTokens,
+					"afterTokens", afterTokens,
+					"messages", len(req.Messages),
+				)
+			}
+		}
 		var err error
 		response, err = client.CreateChatCompletion(ctx, req)
 		if err != nil {
