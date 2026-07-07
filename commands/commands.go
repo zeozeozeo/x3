@@ -25,6 +25,7 @@ var AllCommands []discord.ApplicationCommandCreate = []discord.ApplicationComman
 	ImpersonateCommand,
 	ContextCommand,
 	AntiscamCommand,
+	SiteCommand,
 }
 
 func init() {
@@ -106,6 +107,8 @@ func RegisterHandlers(r handler.Router) error {
 	})
 
 	mux.Command("/antiscam", HandleAntiscam)
+	mux.Command("/site", HandleSite)
+	mux.ButtonComponent("/sitecancel/{id}", HandleSiteCancel)
 
 	// image commands
 	//imagecmd.RegisterCommands(mux)

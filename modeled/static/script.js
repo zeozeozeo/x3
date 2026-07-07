@@ -240,6 +240,11 @@ function renderDefaults() {
     currentConfig.default_vision_models,
     "default_vision_models",
   );
+  renderDefaultModels(
+    "site-models",
+    currentConfig.site_models,
+    "site_models",
+  );
 }
 
 function renderDefaultModels(containerId, models, configKey) {
@@ -459,7 +464,7 @@ function moveModel(index, delta, event) {
 }
 
 function initDefaultModelsSortable() {
-  const containers = ["default-models", "narrator-models", "vision-models"];
+  const containers = ["default-models", "narrator-models", "vision-models", "site-models"];
 
   containers.forEach((containerId) => {
     const element = document.getElementById(containerId);
@@ -479,6 +484,8 @@ function initDefaultModelsSortable() {
           currentConfig.narrator_models = newOrder;
         } else if (containerId === "vision-models") {
           currentConfig.default_vision_models = newOrder;
+        } else if (containerId === "site-models") {
+          currentConfig.site_models = newOrder;
         }
     });
   });
@@ -547,6 +554,8 @@ function getCurrentList(configKey) {
       return currentConfig.narrator_models || [];
     case "default_vision_models":
       return currentConfig.default_vision_models || [];
+    case "site_models":
+      return currentConfig.site_models || [];
     default:
       return [];
   }
@@ -560,6 +569,8 @@ function getListDisplayName(configKey) {
       return "Narrator Models";
     case "default_vision_models":
       return "Vision Models";
+    case "site_models":
+      return "Site Models";
     default:
       return "List";
   }
@@ -590,6 +601,9 @@ function addToDefaultModels(configKey) {
     case "default_vision_models":
       currentConfig.default_vision_models = currentList;
       break;
+    case "site_models":
+      currentConfig.site_models = currentList;
+      break;
   }
 
   // Close modal and refresh
@@ -617,6 +631,9 @@ function moveDefaultModel(configKey, modelName, delta, event) {
     case "default_vision_models":
       currentConfig.default_vision_models = currentList;
       break;
+    case "site_models":
+      currentConfig.site_models = currentList;
+      break;
   }
 
   renderConfig();
@@ -639,6 +656,9 @@ function removeFromDefaultModels(configKey, modelName) {
         break;
       case "default_vision_models":
         currentConfig.default_vision_models = currentList;
+        break;
+      case "site_models":
+        currentConfig.site_models = currentList;
         break;
     }
 

@@ -156,6 +156,7 @@ var (
 	DefaultModel        string
 	NarratorModels      []string
 	DefaultVisionModels []string
+	SiteModels          []string
 
 	modelByName = map[string]Model{}
 
@@ -217,6 +218,7 @@ type ModelsConfig struct {
 	DefaultModels       []string                    `json:"default_models"`
 	NarratorModels      []string                    `json:"narrator_models"`
 	DefaultVisionModels []string                    `json:"default_vision_models"`
+	SiteModels          []string                    `json:"site_models,omitempty"`
 	ProvidersOrder      []string                    `json:"providers_order"`
 	ProviderSettings    map[string]ProviderSettings `json:"provider_settings,omitempty"`
 	CurrentVersion      int                         `json:"current_version"`
@@ -273,6 +275,7 @@ func LoadModelsFromJSONData(data []byte) error {
 	}
 	NarratorModels = config.NarratorModels
 	DefaultVisionModels = config.DefaultVisionModels
+	SiteModels = config.SiteModels
 	providerSettings = config.ProviderSettings
 	if providerSettings == nil {
 		providerSettings = map[string]ProviderSettings{}

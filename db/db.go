@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"strings"
 
 	_ "github.com/mattn/go-sqlite3"
 )
@@ -53,6 +54,7 @@ func InitDB(dataSourceName string) error {
 		`CREATE TABLE IF NOT EXISTS image_descriptions ( image_url TEXT PRIMARY KEY, description TEXT, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP )`,
 		`CREATE TABLE IF NOT EXISTS user_cache ( user_id TEXT PRIMARY KEY, cache BLOB )`,
 		`CREATE TABLE IF NOT EXISTS link_metadata ( url TEXT PRIMARY KEY, metadata BLOB, fetched_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP )`,
+		`CREATE TABLE IF NOT EXISTS site_sessions ( site_id TEXT PRIMARY KEY, creator_id TEXT NOT NULL, discord_message_id TEXT, expires_at TEXT NOT NULL, data BLOB NOT NULL )`,
 	}
 
 	for i, migration := range migrations {
@@ -62,6 +64,10 @@ func InitDB(dataSourceName string) error {
 		}
 	}
 	slog.Info("Database tables ensured")
+
+	if err := migrateSiteSessionsSchema(); err != nil {
+		return fmt.Errorf("failed to migrate site_sessions schema: %w", err)
+	}
 
 	// Ensure global_stats has one row
 	var count int
@@ -85,4 +91,59 @@ func InitDB(dataSourceName string) error {
 	AddToWhitelist(890686470556356619)
 
 	return nil
+}
+
+func migrateSiteSessionsSchema() error {
+	rows, err := DB.Query(`PRAGMA table_info(site_sessions)`)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+
+	hasLegacyColumn := false
+	for rows.Next() {
+		var cid int
+		var name string
+		var colType string
+		var notNull int
+		var defaultValue sql.NullString
+		var pk int
+		if err := rows.Scan(&cid, &name, &colType, &notNull, &defaultValue, &pk); err != nil {
+			return err
+		}
+		if strings.EqualFold(name, "interactive_until") {
+			hasLegacyColumn = true
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	if !hasLegacyColumn {
+		return nil
+	}
+
+	tx, err := DB.Begin()
+	if err != nil {
+		return err
+	}
+	defer func() {
+		if err != nil {
+			_ = tx.Rollback()
+		}
+	}()
+
+	statements := []string{
+		`ALTER TABLE site_sessions RENAME TO site_sessions_old`,
+		`CREATE TABLE site_sessions ( site_id TEXT PRIMARY KEY, creator_id TEXT NOT NULL, discord_message_id TEXT, expires_at TEXT NOT NULL, data BLOB NOT NULL )`,
+		`INSERT INTO site_sessions (site_id, creator_id, discord_message_id, expires_at, data)
+		 SELECT site_id, creator_id, discord_message_id, expires_at, data FROM site_sessions_old`,
+		`DROP TABLE site_sessions_old`,
+	}
+	for _, stmt := range statements {
+		if _, err = tx.Exec(stmt); err != nil {
+			return err
+		}
+	}
+	err = tx.Commit()
+	return err
 }

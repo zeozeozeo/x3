@@ -10,8 +10,8 @@ import (
 	"net/http"
 	"os"
 
-	"github.com/zeozeozeo/x3/model"
 	_ "github.com/mattn/go-sqlite3"
+	"github.com/zeozeozeo/x3/model"
 )
 
 const (
@@ -233,6 +233,12 @@ func validateConfig(config model.ModelsConfig) error {
 		}
 		if !m.Vision {
 			return fmt.Errorf("vision model %s does not have vision capability", name)
+		}
+	}
+
+	for _, name := range config.SiteModels {
+		if _, ok := names[name]; !ok {
+			return fmt.Errorf("site model not found: %s", name)
 		}
 	}
 

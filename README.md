@@ -39,6 +39,7 @@ A Discord LLM roleplay and utility bot
 - Can render & embed HTML/SVG blocks (like SillyTavern's frontend does, but in Discord) with [Gotenberg](https://gotenberg.dev/)
 - Has a small local embeddings model that determines whether the model should respond after an interaction for some time (10min by default)
 - No need to write complex system prompts, just steer the behavior to your liking with `/context` commands (`add`, `edit`, `remove`)
+- `/site`: a real-time infinite website generator experiment. As you click on links, the LLM continues to generate new pages
 - Free and Discord based, [add it](https://discord.com/oauth2/authorize?client_id=1307635432632094740)
 - Also is a Matrix bot: [@x3_bot:matrix.org](https://matrix.to/#/@x3_bot:matrix.org)
 

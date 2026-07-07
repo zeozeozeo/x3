@@ -24,6 +24,7 @@ import (
 	"github.com/zeozeozeo/x3/db"
 	"github.com/zeozeozeo/x3/imagedesc"
 	"github.com/zeozeozeo/x3/modeled"
+	"github.com/zeozeozeo/x3/site"
 )
 
 var (
@@ -76,6 +77,15 @@ func main() {
 	imagedesc.DB = db.DB
 
 	commands.StartTime = startTime
+	siteServer := site.NewServerFromEnv()
+	commands.SetSiteManager(siteServer.Manager())
+	defer func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if err := siteServer.Stop(ctx); err != nil && err != http.ErrServerClosed {
+			slog.Error("error closing site server", "err", err)
+		}
+	}()
 
 	r := handler.New()
 	//r.Use(middleware.Logger)
@@ -176,6 +186,11 @@ func main() {
 		modelEditorServer := modeled.NewServer(dbPath)
 		if err := modelEditorServer.Start(); err != nil && err != http.ErrServerClosed {
 			slog.Error("GUI server error", "err", err)
+		}
+	}()
+	go func() {
+		if err := siteServer.Start(); err != nil && err != http.ErrServerClosed {
+			slog.Error("site server error", "err", err)
 		}
 	}()
 
