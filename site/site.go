@@ -715,8 +715,11 @@ func (m *Manager) navigate(ctx context.Context, session *Session, viewerID, from
 	nextHTML, metrics, err := m.generatePage(ctx, theme, session.AdditionalContext, rootHTML, history, intent)
 	if err != nil {
 		m.mu.Lock()
-		if len(session.GeneratedPageTimes) > 0 {
-			session.GeneratedPageTimes = session.GeneratedPageTimes[:len(session.GeneratedPageTimes)-1]
+		for i, t := range session.GeneratedPageTimes {
+			if t.Equal(now) {
+				session.GeneratedPageTimes = append(session.GeneratedPageTimes[:i], session.GeneratedPageTimes[i+1:]...)
+				break
+			}
 		}
 		m.broadcastLocked(session, wsServerMessage{
 			Type:  "generation_error",
@@ -734,8 +737,11 @@ func (m *Manager) navigate(ctx context.Context, session *Session, viewerID, from
 		return "", "", fmt.Errorf("page not found")
 	}
 	if childID, ok := page.Children[intent]; ok {
-		if len(session.GeneratedPageTimes) > 0 {
-			session.GeneratedPageTimes = session.GeneratedPageTimes[:len(session.GeneratedPageTimes)-1]
+		for i, t := range session.GeneratedPageTimes {
+			if t.Equal(now) {
+				session.GeneratedPageTimes = append(session.GeneratedPageTimes[:i], session.GeneratedPageTimes[i+1:]...)
+				break
+			}
 		}
 		session.OwnerPageID = childID
 		_ = m.saveSessionLocked(session)
@@ -1202,7 +1208,7 @@ func (m *Manager) pruneLocked(now time.Time) {
 func (m *Manager) removeSessionLocked(session *Session) {
 	for _, viewer := range session.Viewers {
 		if viewer.Conn != nil {
-			_ = viewer.Conn.WriteJSON(wsServerMessage{Type: "expired", Error: "site expired"})
+			m.sendViewerLocked(viewer, wsServerMessage{Type: "expired", Error: "site expired"})
 			_ = viewer.Conn.Close()
 		}
 	}
