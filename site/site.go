@@ -43,7 +43,7 @@ const (
 	defaultSiteWindow           = time.Hour
 	defaultSiteCreationsPerUser = 10
 	defaultPageWindow           = 30 * time.Minute
-	defaultPagesPerWindow       = 5
+	defaultPagesPerWindow       = 10
 	defaultLlmRequestTimout     = 45 * time.Second
 	defaultMaxJSONBodyBytes     = 8 << 10
 	viewerCookieName            = "x3_site_viewer"
