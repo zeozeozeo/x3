@@ -16,7 +16,7 @@ import (
 
 const (
 	// DefaultContextMessages is the default number of surrounding messages used for LLM context.
-	DefaultContextMessages = 75
+	DefaultContextMessages = 60
 	maxChatMemories        = 67
 	maxChatMemoryRunes     = 500
 )

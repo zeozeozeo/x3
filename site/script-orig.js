@@ -797,17 +797,70 @@
     );
   }
 
-  function intentFor(anchor) {
-    return (
-      anchor.getAttribute("aria-label") ||
-      anchor.getAttribute("title") ||
-      (anchor.textContent || "").trim() ||
-      anchor.getAttribute("href") ||
-      ""
-    );
+  function hrefLooksExternal(href) {
+    return /^(?:[a-z][a-z0-9+.-]*:|\/\/)/i.test(String(href || "").trim());
   }
 
-  async function navigate(anchor) {
+  function parseInlineNavigationTarget(value) {
+    const source = String(value || "").trim();
+    if (!source) {
+      return "";
+    }
+
+    const patterns = [
+      /(?:window|document)?\.?location(?:\.href)?\s*=\s*(['"])(.*?)\1/i,
+      /(?:window|document)?\.?location\.(?:assign|replace)\(\s*(['"])(.*?)\1\s*\)/i,
+    ];
+
+    for (let i = 0; i < patterns.length; i++) {
+      const match = source.match(patterns[i]);
+      if (match && match[2]) {
+        return match[2].trim();
+      }
+    }
+
+    return "";
+  }
+
+  function navigationTargetFor(el) {
+    if (!el) {
+      return null;
+    }
+
+    if (el.tagName === "A") {
+      const href = (el.getAttribute("href") || "").trim();
+      return {
+        kind: "anchor",
+        element: el,
+        href: href,
+        intent:
+          el.getAttribute("aria-label") ||
+          el.getAttribute("title") ||
+          (el.textContent || "").trim() ||
+          href ||
+          "",
+      };
+    }
+
+    const inlineHref = parseInlineNavigationTarget(el.getAttribute("onclick"));
+    if (!inlineHref || hrefLooksExternal(inlineHref)) {
+      return null;
+    }
+
+    return {
+      kind: "inline",
+      element: el,
+      href: inlineHref,
+      intent:
+        el.getAttribute("aria-label") ||
+        el.getAttribute("title") ||
+        (el.textContent || "").trim() ||
+        inlineHref ||
+        "",
+    };
+  }
+
+  async function navigate(target) {
     if (role !== "owner") {
       showToast(
         "Read-only mode: you are watching someone else control this page.",
@@ -823,8 +876,8 @@
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         page_id: currentPageId,
-        intent: intentFor(anchor),
-        href: anchor.getAttribute("href") || "",
+        intent: target.intent || "",
+        href: target.href || "",
       }),
     });
 
@@ -876,14 +929,19 @@
   document.addEventListener(
     "click",
     function (ev) {
-      const anchor = ev.target.closest && ev.target.closest("a");
-      if (!anchor) {
+      const target = ev.target.closest && ev.target.closest("a,button");
+      if (!target) {
+        return;
+      }
+
+      const navTarget = navigationTargetFor(target);
+      if (!navTarget) {
         return;
       }
       if (
-        anchor.dataset.x3External === "true" ||
-        anchor.target === "_blank" ||
-        anchor.hasAttribute("download") ||
+        target.dataset.x3External === "true" ||
+        target.target === "_blank" ||
+        target.hasAttribute("download") ||
         ev.metaKey ||
         ev.ctrlKey ||
         ev.shiftKey ||
@@ -892,7 +950,11 @@
         return;
       }
       ev.preventDefault();
-      navigate(anchor);
+      ev.stopPropagation();
+      if (typeof ev.stopImmediatePropagation === "function") {
+        ev.stopImmediatePropagation();
+      }
+      navigate(navTarget);
     },
     true,
   );

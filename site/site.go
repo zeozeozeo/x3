@@ -15,6 +15,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"regexp"
 	"sort"
 	"strings"
 	"sync"
@@ -22,6 +23,10 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
+	"github.com/tdewolff/minify/v2"
+	minifycss "github.com/tdewolff/minify/v2/css"
+	minifyhtml "github.com/tdewolff/minify/v2/html"
+	minifyjs "github.com/tdewolff/minify/v2/js"
 	"golang.org/x/net/html"
 
 	"github.com/zeozeozeo/x3/db"
@@ -42,12 +47,16 @@ const (
 	defaultLlmRequestTimout     = 45 * time.Second
 	defaultMaxJSONBodyBytes     = 8 << 10
 	viewerCookieName            = "x3_site_viewer"
+	rootSharedCSSStyleID        = "x3-site-root-css"
 )
 
 var (
 	errSiteUnavailable = errors.New("private site unavailable")
 	errSiteExpired     = errors.New("site expired")
 	errViewerSession   = errors.New("viewer session is invalid; reload the page")
+	htmlMIME           = regexp.MustCompile(`^text/html(?:;|$)`)
+	jsMIME             = regexp.MustCompile(`^(application|text)/(x-)?(java|ecma)script(?:;|$)`)
+	siteMinifier       = newSiteMinifier()
 )
 
 type Config struct {
@@ -135,9 +144,14 @@ type Session struct {
 	CreatorID          string
 	DiscordMessageID   string
 	AdditionalContext  []string
+	PersonaSystem      string
 	Capability         string
 	RootPageID         string
 	RootHTML           string
+	RootTitle          string
+	RootStructure      string
+	RootLinkInventory  []string
+	RootSharedCSS      string
 	CreatedAt          time.Time
 	ExpiresAt          time.Time
 	OwnerViewerID      string
@@ -173,6 +187,13 @@ type CreateResult struct {
 	ExpiresAt time.Time
 }
 
+type CreateOptions struct {
+	CreatorID         string
+	Theme             string
+	AdditionalContext []string
+	PersonaSystem     string
+}
+
 type generationStats struct {
 	AvgTokensPerSecond float64
 	AvgDurationMs      float64
@@ -183,6 +204,33 @@ type generationMetrics struct {
 	ResponseTokens  int
 	Duration        time.Duration
 	TokensPerSecond float64
+}
+
+type generationRequest struct {
+	Theme             string
+	AdditionalContext []string
+	PersonaSystem     string
+	RootTitle         string
+	RootStructure     string
+	RootLinkInventory []string
+	RootSharedCSS     string
+	History           []string
+	ClickedIntent     string
+}
+
+type promptAssets struct {
+	Title         string
+	Structure     string
+	LinkInventory []string
+	SharedCSS     string
+}
+
+func newSiteMinifier() *minify.M {
+	m := minify.New()
+	m.Add("text/css", &minifycss.Minifier{})
+	m.AddRegexp(jsMIME, &minifyjs.Minifier{})
+	m.AddRegexp(htmlMIME, &minifyhtml.Minifier{KeepDocumentTags: true})
+	return m
 }
 
 func NewManager(cfg Config) *Manager {
@@ -256,16 +304,23 @@ func (m *Manager) loadPersistedSessions() {
 		if !record.ExpiresAt.IsZero() {
 			session.ExpiresAt = record.ExpiresAt
 		}
+		derivePromptAssetsIfMissing(&session)
 		session.GeneratedPageTimes = pruneTimesSince(session.GeneratedPageTimes, now.Add(-m.cfg.PageWindow))
 		m.sessions[session.ID] = &session
 	}
 	_ = db.DeleteExpiredSiteSessions(now)
 }
 
-func (m *Manager) CreateSite(ctx context.Context, creatorID, theme string, additionalContext []string) (*CreateResult, error) {
-	theme = strings.TrimSpace(theme)
+func (m *Manager) CreateSite(ctx context.Context, opts CreateOptions) (*CreateResult, error) {
+	theme := strings.TrimSpace(opts.Theme)
+	creatorID := strings.TrimSpace(opts.CreatorID)
+	additionalContext := compactPromptItems(opts.AdditionalContext, 240, 0)
+	personaSystem := strings.TrimSpace(opts.PersonaSystem)
 	if theme == "" {
 		return nil, fmt.Errorf("theme is required")
+	}
+	if creatorID == "" {
+		return nil, fmt.Errorf("creator id is required")
 	}
 	if strings.TrimSpace(m.cfg.BaseURL) == "" {
 		return nil, fmt.Errorf("X3_SITE_BASE_URL is not configured")
@@ -283,13 +338,18 @@ func (m *Manager) CreateSite(ctx context.Context, creatorID, theme string, addit
 	}
 	dummyID := randHex(16)
 	m.sessions[dummyID] = &Session{
-		CreatorID: creatorID,
-		CreatedAt: now,
-		ExpiresAt: now.Add(time.Minute),
+		CreatorID:     creatorID,
+		CreatedAt:     now,
+		ExpiresAt:     now.Add(time.Minute),
+		PersonaSystem: personaSystem,
 	}
 	m.mu.Unlock()
 
-	rootHTML, metrics, err := m.generatePage(ctx, theme, additionalContext, "", nil, "")
+	rootHTML, metrics, err := m.generatePage(ctx, generationRequest{
+		Theme:             theme,
+		AdditionalContext: additionalContext,
+		PersonaSystem:     personaSystem,
+	})
 
 	m.mu.Lock()
 	delete(m.sessions, dummyID)
@@ -306,14 +366,20 @@ func (m *Manager) CreateSite(ctx context.Context, creatorID, theme string, addit
 	siteID := randHex(16)
 	pageID := randHex(12)
 	capability := randHex(24)
+	assets := derivePromptAssets(rootHTML)
 	session := &Session{
 		ID:                 siteID,
 		Theme:              theme,
 		CreatorID:          creatorID,
 		AdditionalContext:  append([]string(nil), additionalContext...),
+		PersonaSystem:      personaSystem,
 		Capability:         capability,
 		RootPageID:         pageID,
 		RootHTML:           rootHTML,
+		RootTitle:          assets.Title,
+		RootStructure:      assets.Structure,
+		RootLinkInventory:  append([]string(nil), assets.LinkInventory...),
+		RootSharedCSS:      assets.SharedCSS,
 		CreatedAt:          now,
 		ExpiresAt:          now.Add(m.cfg.RetentionTTL),
 		OwnerPageID:        pageID,
@@ -697,7 +763,7 @@ func (m *Manager) navigate(ctx context.Context, session *Session, viewerID, from
 		return "", "", fmt.Errorf("this site can only create %d new pages per %s", m.cfg.PagesPerWindow, humanWindow(m.cfg.PageWindow))
 	}
 	session.GeneratedPageTimes = append(session.GeneratedPageTimes, now)
-	rootHTML := session.RootHTML
+	derivePromptAssetsIfMissing(session)
 	history := append([]string(nil), page.History...)
 	history = append(history, intent)
 	if len(history) > 10 {
@@ -712,7 +778,17 @@ func (m *Manager) navigate(ctx context.Context, session *Session, viewerID, from
 	})
 	m.mu.Unlock()
 
-	nextHTML, metrics, err := m.generatePage(ctx, theme, session.AdditionalContext, rootHTML, history, intent)
+	nextHTML, metrics, err := m.generatePage(ctx, generationRequest{
+		Theme:             theme,
+		AdditionalContext: session.AdditionalContext,
+		PersonaSystem:     session.PersonaSystem,
+		RootTitle:         session.RootTitle,
+		RootStructure:     session.RootStructure,
+		RootLinkInventory: append([]string(nil), session.RootLinkInventory...),
+		RootSharedCSS:     session.RootSharedCSS,
+		History:           history,
+		ClickedIntent:     intent,
+	})
 	if err != nil {
 		m.mu.Lock()
 		for i, t := range session.GeneratedPageTimes {
@@ -728,6 +804,7 @@ func (m *Manager) navigate(ctx context.Context, session *Session, viewerID, from
 		m.mu.Unlock()
 		return "", "", err
 	}
+	nextHTML = injectRootSharedCSS(nextHTML, session.RootSharedCSS)
 	nextPageID := randHex(12)
 
 	m.mu.Lock()
@@ -1161,7 +1238,11 @@ func (m *Manager) recordGenerationMetricsLocked(metrics generationMetrics) {
 func (m *Manager) estimateGenerationDurationLocked(session *Session, intent string, history []string) time.Duration {
 	estimatedTokens := 2200
 	if session != nil {
-		estimatedTokens += len(session.RootHTML) / 12
+		derivePromptAssetsIfMissing(session)
+		estimatedTokens += len(session.RootStructure) / 10
+		estimatedTokens += len(strings.Join(session.RootLinkInventory, "\n")) / 12
+		estimatedTokens += len(session.RootSharedCSS) / 16
+		estimatedTokens += len(session.PersonaSystem) / 12
 		estimatedTokens += len(session.AdditionalContext) * 120
 	}
 	estimatedTokens += len(intent) * 8
@@ -1240,7 +1321,7 @@ func (m *Manager) removeSessionLocked(session *Session) {
 	delete(m.sessions, session.ID)
 }
 
-func (m *Manager) generatePage(ctx context.Context, theme string, additionalContext []string, rootHTML string, history []string, clickedIntent string) (string, generationMetrics, error) {
+func (m *Manager) generatePage(ctx context.Context, req generationRequest) (string, generationMetrics, error) {
 	requestCtx, cancel := context.WithTimeout(ctx, defaultLlmRequestTimout)
 	defer cancel()
 	models := model.GetModelsByNames(model.SiteModels)
@@ -1252,7 +1333,7 @@ func (m *Manager) generatePage(ctx context.Context, theme string, additionalCont
 	for attempt := 0; attempt < 2; attempt++ {
 		llmer := llm.NewLlmerForKey("site:" + uuid.NewString())
 		llmer.SetPersona(persona.Persona{System: siteSystemPrompt}, nil)
-		llmer.AddMessage(llm.RoleUser, buildSitePrompt(theme, additionalContext, rootHTML, history, clickedIntent, attempt > 0), 0)
+		llmer.AddMessage(llm.RoleUser, buildSitePrompt(req, attempt > 0), 0)
 		start := time.Now()
 		response, usage, err := llmer.RequestCompletion(models, persona.InferenceSettings{}.Fixup(), "", requestCtx)
 		duration := time.Since(start)
@@ -1283,6 +1364,8 @@ Return exactly one complete HTML document for every request.
 Rules:
 - The page must be fully themed around the provided theme and navigation context.
 - Include inline CSS and inline JavaScript as needed.
+- Keep HTML, CSS, and JavaScript compact. Avoid giant text dumps and avoid repeating global styling when shared root CSS is already persisted.
+- Put visible body content first and place scripts only after the core page markup is already complete.
 - Every internal continuation link must be an <a> element with a descriptive aria-label that explains where it goes.
 - Continuation links should feel natural for the page, respect the visited-link history, and keep the site explorable.
 - Do not use alert(), confirm(), prompt(), document.write(), or automatic redirects/popups.
@@ -1292,37 +1375,53 @@ Rules:
 - Do not explain the page outside the HTML document.
 `
 
-func buildSitePrompt(theme string, additionalContext []string, rootHTML string, history []string, clickedIntent string, retry bool) string {
+func buildSitePrompt(req generationRequest, retry bool) string {
 	var b strings.Builder
-	fmt.Fprintf(&b, "Theme: %s\n\n", theme)
-	if len(additionalContext) > 0 {
+	fmt.Fprintf(&b, "Theme: %s\n\n", collapseWhitespace(req.Theme))
+	if req.PersonaSystem != "" {
+		b.WriteString("Full persona system prompt to honor:\n```text\n")
+		b.WriteString(strings.TrimSpace(req.PersonaSystem))
+		b.WriteString("\n```\n\n")
+	}
+	if items := compactPromptItems(req.AdditionalContext, 240, 8); len(items) > 0 {
 		b.WriteString("Additionally, you must follow these user-provided context instructions:\n")
-		for i, item := range additionalContext {
-			item = strings.TrimSpace(item)
-			if item == "" {
-				continue
-			}
+		for i, item := range items {
 			fmt.Fprintf(&b, "%d. %s\n", i+1, item)
 		}
 		b.WriteString("\n")
 	}
-	if rootHTML == "" {
+	if req.RootStructure == "" {
 		b.WriteString("Generate the first page of a brand-new infinite website.\n")
 	} else {
 		b.WriteString("Generate the next page of an existing infinite website.\n\n")
-		b.WriteString("Root page HTML:\n```html\n")
-		b.WriteString(rootHTML)
+		if req.RootTitle != "" {
+			fmt.Fprintf(&b, "Root page title: %s\n\n", req.RootTitle)
+		}
+		if req.RootSharedCSS != "" {
+			b.WriteString("The root page CSS below is already persisted across future pages. Reuse it and add new <style> tags only for deltas or page-specific additions:\n```css\n")
+			b.WriteString(req.RootSharedCSS)
+			b.WriteString("\n```\n\n")
+		}
+		b.WriteString("Root page structure summary:\n```text\n")
+		b.WriteString(req.RootStructure)
 		b.WriteString("\n```\n\n")
+		if links := compactPromptItems(req.RootLinkInventory, 180, 14); len(links) > 0 {
+			b.WriteString("Root page link inventory:\n")
+			for i, item := range links {
+				fmt.Fprintf(&b, "%d. %s\n", i+1, item)
+			}
+			b.WriteString("\n")
+		}
 	}
-	if len(history) > 0 {
+	if history := compactPromptItems(req.History, 160, 6); len(history) > 0 {
 		b.WriteString("Visited link history:\n")
 		for i, item := range history {
 			fmt.Fprintf(&b, "%d. %s\n", i+1, item)
 		}
 		b.WriteString("\n")
 	}
-	if clickedIntent != "" {
-		fmt.Fprintf(&b, "The clicked link intent for this transition: %s\n\n", clickedIntent)
+	if clickedIntent := collapseWhitespace(req.ClickedIntent); clickedIntent != "" {
+		fmt.Fprintf(&b, "The clicked link intent for this transition: %s\n\n", ellipsis(clickedIntent, 240))
 	}
 	b.WriteString("The output must be one full HTML document with natural continuation links so the site can keep expanding.\n")
 	if retry {
@@ -1345,13 +1444,515 @@ func extractHTMLDocument(response string) string {
 	}
 	root, err := html.Parse(strings.NewReader(response))
 	if err != nil {
-		return response
+		return minifyHTML(response)
 	}
 	var buf bytes.Buffer
 	if err := html.Render(&buf, root); err != nil {
-		return response
+		return minifyHTML(response)
 	}
-	return strings.TrimSpace(buf.String())
+	return minifyHTML(strings.TrimSpace(buf.String()))
+}
+
+func derivePromptAssetsIfMissing(session *Session) {
+	if session == nil {
+		return
+	}
+	if session.RootHTML != "" {
+		session.RootHTML = extractHTMLDocument(session.RootHTML)
+	}
+	if session.RootTitle != "" && session.RootStructure != "" && session.RootSharedCSS != "" {
+		return
+	}
+	assets := derivePromptAssets(session.RootHTML)
+	if session.RootTitle == "" {
+		session.RootTitle = assets.Title
+	}
+	if session.RootStructure == "" {
+		session.RootStructure = assets.Structure
+	}
+	if len(session.RootLinkInventory) == 0 {
+		session.RootLinkInventory = append([]string(nil), assets.LinkInventory...)
+	}
+	if session.RootSharedCSS == "" {
+		session.RootSharedCSS = assets.SharedCSS
+	}
+}
+
+func derivePromptAssets(doc string) promptAssets {
+	doc = extractHTMLDocument(doc)
+	if doc == "" {
+		return promptAssets{}
+	}
+	root, err := html.Parse(strings.NewReader(doc))
+	if err != nil {
+		return promptAssets{Structure: collapseWhitespace(doc)}
+	}
+	assets := promptAssets{Title: extractDocumentTitle(root)}
+	collectAndRemoveStyleNodes(root, &assets.SharedCSS)
+	collectLinkInventory(root, &assets.LinkInventory)
+	removeScriptNodes(root)
+	stripNodeText(root)
+	stripHeadToTitle(root)
+	cleanupPromotedHeadNodes(root)
+	assets.Structure = buildStructureSummary(root)
+	assets.SharedCSS = minifyCSS(assets.SharedCSS)
+	assets.LinkInventory = compactPromptItems(assets.LinkInventory, 180, 14)
+	return assets
+}
+
+func injectRootSharedCSS(doc, sharedCSS string) string {
+	sharedCSS = minifyCSS(sharedCSS)
+	if sharedCSS == "" {
+		return doc
+	}
+	root, err := html.Parse(strings.NewReader(doc))
+	if err != nil {
+		return doc
+	}
+	if documentHasRootSharedCSS(root) {
+		return minifyHTML(doc)
+	}
+	head := findFirstElement(root, "head")
+	if head == nil {
+		htmlNode := findFirstElement(root, "html")
+		if htmlNode == nil {
+			return minifyHTML(doc)
+		}
+		head = &html.Node{Type: html.ElementNode, Data: "head"}
+		if htmlNode.FirstChild != nil {
+			htmlNode.InsertBefore(head, htmlNode.FirstChild)
+		} else {
+			htmlNode.AppendChild(head)
+		}
+	}
+	styleNode := &html.Node{
+		Type: html.ElementNode,
+		Data: "style",
+		Attr: []html.Attribute{{Key: "id", Val: rootSharedCSSStyleID}},
+	}
+	styleNode.AppendChild(&html.Node{Type: html.TextNode, Data: sharedCSS})
+	if head.FirstChild != nil {
+		head.InsertBefore(styleNode, head.FirstChild)
+	} else {
+		head.AppendChild(styleNode)
+	}
+	var buf bytes.Buffer
+	if err := html.Render(&buf, root); err != nil {
+		return doc
+	}
+	return minifyHTML(strings.TrimSpace(buf.String()))
+}
+
+func documentHasRootSharedCSS(root *html.Node) bool {
+	return walkHTML(root, func(node *html.Node) bool {
+		return node.Type == html.ElementNode && node.Data == "style" && nodeHasAttrValue(node, "id", rootSharedCSSStyleID)
+	})
+}
+
+func collectAndRemoveStyleNodes(root *html.Node, dst *string) {
+	var collected []string
+	var walk func(*html.Node)
+	walk = func(node *html.Node) {
+		for child := node.FirstChild; child != nil; {
+			next := child.NextSibling
+			if child.Type == html.ElementNode && child.Data == "style" && !nodeHasAttrValue(child, "id", rootSharedCSSStyleID) {
+				if css := strings.TrimSpace(nodeTextContent(child)); css != "" {
+					collected = append(collected, css)
+				}
+				node.RemoveChild(child)
+			} else {
+				walk(child)
+			}
+			child = next
+		}
+	}
+	walk(root)
+	if len(collected) == 0 {
+		return
+	}
+	if *dst != "" {
+		*dst += "\n"
+	}
+	*dst += strings.Join(collected, "\n")
+}
+
+func collectLinkInventory(root *html.Node, dst *[]string) {
+	seen := map[string]struct{}{}
+	walkHTML(root, func(node *html.Node) bool {
+		if node.Type != html.ElementNode || node.Data != "a" {
+			return false
+		}
+		href := collapseWhitespace(nodeAttr(node, "href"))
+		if href == "" || strings.HasPrefix(strings.ToLower(href), "javascript:") {
+			return false
+		}
+		label := firstNonEmptyNonBlank(
+			collapseWhitespace(nodeAttr(node, "aria-label")),
+			collapseWhitespace(nodeAttr(node, "title")),
+			collapseWhitespace(nodeTextContent(node)),
+		)
+		if label == "" {
+			label = "link"
+		}
+		entry := fmt.Sprintf("%s -> %s", ellipsis(label, 72), ellipsis(href, 96))
+		if _, ok := seen[entry]; ok {
+			return false
+		}
+		seen[entry] = struct{}{}
+		*dst = append(*dst, entry)
+		return false
+	})
+}
+
+func removeScriptNodes(root *html.Node) {
+	var walk func(*html.Node)
+	walk = func(node *html.Node) {
+		for child := node.FirstChild; child != nil; {
+			next := child.NextSibling
+			if child.Type == html.ElementNode && (child.Data == "script" || child.Data == "noscript" || child.Data == "template") {
+				node.RemoveChild(child)
+			} else {
+				walk(child)
+			}
+			child = next
+		}
+	}
+	walk(root)
+}
+
+func stripNodeText(root *html.Node) {
+	var walk func(*html.Node)
+	walk = func(node *html.Node) {
+		for child := node.FirstChild; child != nil; child = child.NextSibling {
+			walk(child)
+		}
+		if node.Type != html.TextNode {
+			return
+		}
+		text := collapseWhitespace(node.Data)
+		if text == "" {
+			node.Data = ""
+			return
+		}
+		parent := node.Parent
+		if parent != nil && preserveShortTextForStructure(parent) {
+			node.Data = ellipsis(text, 36)
+			return
+		}
+		node.Data = ""
+	}
+	walk(root)
+}
+
+func preserveShortTextForStructure(node *html.Node) bool {
+	if node == nil || node.Type != html.ElementNode {
+		return false
+	}
+	switch node.Data {
+	case "title", "a", "button", "label", "summary", "legend", "h1", "h2", "h3", "h4", "h5", "h6":
+		return true
+	default:
+		return false
+	}
+}
+
+func buildStructureSummary(root *html.Node) string {
+	body := findFirstElement(root, "body")
+	if body == nil {
+		body = root
+	}
+	lines := make([]string, 0, 48)
+	remaining := 64
+	appendStructureLines(body, 0, &remaining, &lines)
+	if len(lines) == 0 {
+		return "body"
+	}
+	if remaining <= 0 {
+		lines = append(lines, "  ...")
+	}
+	return strings.Join(lines, "\n")
+}
+
+func appendStructureLines(node *html.Node, depth int, remaining *int, lines *[]string) {
+	if node == nil || *remaining <= 0 || node.Type != html.ElementNode {
+		return
+	}
+	include := shouldIncludeStructureNode(node) || depth == 0
+	nextDepth := depth
+	if include {
+		*lines = append(*lines, strings.Repeat("  ", depth)+structureNodeDescriptor(node))
+		*remaining = *remaining - 1
+		nextDepth = depth + 1
+	}
+	for child := node.FirstChild; child != nil && *remaining > 0; child = child.NextSibling {
+		if child.Type == html.ElementNode {
+			appendStructureLines(child, nextDepth, remaining, lines)
+		}
+	}
+}
+
+func shouldIncludeStructureNode(node *html.Node) bool {
+	if node == nil || node.Type != html.ElementNode {
+		return false
+	}
+	switch node.Data {
+	case "body", "header", "nav", "main", "section", "article", "aside", "footer", "form", "input", "button", "a", "ul", "ol", "li", "img", "video", "canvas", "svg", "table", "thead", "tbody", "tr", "td", "th", "figure", "figcaption", "dialog", "details", "summary", "h1", "h2", "h3", "h4", "h5", "h6":
+		return true
+	case "div":
+		return nodeAttr(node, "id") != "" || nodeAttr(node, "class") != "" || nodeAttr(node, "role") != "" || countElementChildren(node) > 1
+	default:
+		return nodeAttr(node, "id") != "" || nodeAttr(node, "class") != "" || nodeAttr(node, "role") != "" || nodeAttr(node, "aria-label") != ""
+	}
+}
+
+func structureNodeDescriptor(node *html.Node) string {
+	var b strings.Builder
+	b.WriteString(node.Data)
+	if id := collapseWhitespace(nodeAttr(node, "id")); id != "" {
+		b.WriteString("#")
+		b.WriteString(ellipsis(id, 24))
+	}
+	if class := collapseWhitespace(nodeAttr(node, "class")); class != "" {
+		classCount := 0
+		for _, part := range strings.Fields(class) {
+			if part == "" {
+				continue
+			}
+			b.WriteString(".")
+			b.WriteString(ellipsis(part, 18))
+			classCount++
+			if classCount >= 3 {
+				break
+			}
+		}
+	}
+	if role := collapseWhitespace(nodeAttr(node, "role")); role != "" {
+		fmt.Fprintf(&b, "[role=%s]", ellipsis(role, 20))
+	}
+	if label := firstNonEmptyNonBlank(
+		collapseWhitespace(nodeAttr(node, "aria-label")),
+		shortNodeText(node),
+	); label != "" && descriptorShouldIncludeLabel(node) {
+		fmt.Fprintf(&b, "{%q}", ellipsis(label, 32))
+	}
+	if href := collapseWhitespace(nodeAttr(node, "href")); href != "" && node.Data == "a" {
+		fmt.Fprintf(&b, "->%s", ellipsis(href, 40))
+	}
+	return b.String()
+}
+
+func descriptorShouldIncludeLabel(node *html.Node) bool {
+	switch node.Data {
+	case "a", "button", "summary", "h1", "h2", "h3", "h4", "h5", "h6":
+		return true
+	default:
+		return false
+	}
+}
+
+func shortNodeText(node *html.Node) string {
+	text := collapseWhitespace(nodeTextContent(node))
+	if text == "" {
+		return ""
+	}
+	return ellipsis(text, 36)
+}
+
+func countElementChildren(node *html.Node) int {
+	count := 0
+	for child := node.FirstChild; child != nil; child = child.NextSibling {
+		if child.Type == html.ElementNode {
+			count++
+		}
+	}
+	return count
+}
+
+func stripHeadToTitle(root *html.Node) {
+	head := findFirstElement(root, "head")
+	if head == nil {
+		return
+	}
+	for child := head.FirstChild; child != nil; {
+		next := child.NextSibling
+		if child.Type == html.ElementNode && child.Data == "title" {
+			child.Attr = nil
+			for grandChild := child.FirstChild; grandChild != nil; grandChild = grandChild.NextSibling {
+				if grandChild.Type == html.TextNode {
+					grandChild.Data = collapseWhitespace(grandChild.Data)
+				}
+			}
+			child = next
+			continue
+		}
+		head.RemoveChild(child)
+		child = next
+	}
+}
+
+func cleanupPromotedHeadNodes(root *html.Node) {
+	body := findFirstElement(root, "body")
+	head := findFirstElement(root, "head")
+	if body == nil || head == nil {
+		return
+	}
+	hasHeadTitle := findFirstElement(head, "title") != nil
+	for child := body.FirstChild; child != nil; {
+		next := child.NextSibling
+		if child.Type == html.TextNode && strings.TrimSpace(child.Data) == "" {
+			body.RemoveChild(child)
+			child = next
+			continue
+		}
+		if child.Type != html.ElementNode {
+			break
+		}
+		switch child.Data {
+		case "title":
+			if !hasHeadTitle {
+				body.RemoveChild(child)
+				head.AppendChild(child)
+				hasHeadTitle = true
+				child = next
+				continue
+			}
+			body.RemoveChild(child)
+			child = next
+			continue
+		case "meta", "base", "link", "script", "noscript", "template":
+			body.RemoveChild(child)
+			child = next
+			continue
+		}
+		break
+	}
+}
+
+func extractDocumentTitle(root *html.Node) string {
+	title := findFirstElement(root, "title")
+	if title == nil {
+		return ""
+	}
+	return collapseWhitespace(nodeTextContent(title))
+}
+
+func findFirstElement(root *html.Node, tag string) *html.Node {
+	var found *html.Node
+	walkHTML(root, func(node *html.Node) bool {
+		if node.Type == html.ElementNode && node.Data == tag {
+			found = node
+			return true
+		}
+		return false
+	})
+	return found
+}
+
+func walkHTML(root *html.Node, visit func(*html.Node) bool) bool {
+	if root == nil {
+		return false
+	}
+	if visit(root) {
+		return true
+	}
+	for child := root.FirstChild; child != nil; child = child.NextSibling {
+		if walkHTML(child, visit) {
+			return true
+		}
+	}
+	return false
+}
+
+func nodeHasAttrValue(node *html.Node, key, value string) bool {
+	for _, attr := range node.Attr {
+		if attr.Key == key && attr.Val == value {
+			return true
+		}
+	}
+	return false
+}
+
+func nodeAttr(node *html.Node, key string) string {
+	for _, attr := range node.Attr {
+		if attr.Key == key {
+			return attr.Val
+		}
+	}
+	return ""
+}
+
+func firstNonEmptyNonBlank(values ...string) string {
+	for _, value := range values {
+		if strings.TrimSpace(value) != "" {
+			return value
+		}
+	}
+	return ""
+}
+
+func nodeTextContent(node *html.Node) string {
+	var b strings.Builder
+	var walk func(*html.Node)
+	walk = func(current *html.Node) {
+		if current.Type == html.TextNode {
+			b.WriteString(current.Data)
+		}
+		for child := current.FirstChild; child != nil; child = child.NextSibling {
+			walk(child)
+		}
+	}
+	walk(node)
+	return b.String()
+}
+
+func compactPromptItems(items []string, maxItemLen, maxItems int) []string {
+	if len(items) == 0 {
+		return nil
+	}
+	start := 0
+	if maxItems > 0 && len(items) > maxItems {
+		start = len(items) - maxItems
+	}
+	compacted := make([]string, 0, len(items)-start)
+	for _, item := range items[start:] {
+		item = collapseWhitespace(item)
+		if item == "" {
+			continue
+		}
+		if maxItemLen > 0 {
+			item = ellipsis(item, maxItemLen)
+		}
+		compacted = append(compacted, item)
+	}
+	return compacted
+}
+
+func collapseWhitespace(s string) string {
+	return strings.Join(strings.Fields(strings.TrimSpace(s)), " ")
+}
+
+func minifyHTML(doc string) string {
+	doc = strings.TrimSpace(doc)
+	if doc == "" {
+		return ""
+	}
+	minified, err := siteMinifier.String("text/html", doc)
+	if err != nil {
+		return doc
+	}
+	return strings.TrimSpace(minified)
+}
+
+func minifyCSS(css string) string {
+	css = strings.TrimSpace(css)
+	if css == "" {
+		return ""
+	}
+	minified, err := siteMinifier.String("text/css", css)
+	if err != nil {
+		return css
+	}
+	return strings.TrimSpace(minified)
 }
 
 type bootstrapConfig struct {

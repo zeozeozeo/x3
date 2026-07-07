@@ -9,6 +9,7 @@ import (
 	"github.com/disgoorg/disgo/discord"
 	"github.com/disgoorg/disgo/handler"
 	"github.com/zeozeozeo/x3/db"
+	"github.com/zeozeozeo/x3/persona"
 	"github.com/zeozeozeo/x3/site"
 )
 
@@ -30,6 +31,11 @@ var SiteCommand = discord.SlashCommandCreate{
 			Description: "What the infinite site should be about",
 			Required:    true,
 		},
+		discord.ApplicationCommandOptionBool{
+			Name:        "include_persona",
+			Description: "Include the active persona system prompt instead of only /context",
+			Required:    false,
+		},
 	},
 }
 
@@ -47,12 +53,28 @@ func HandleSite(event *handler.CommandEvent) error {
 		return err
 	}
 	theme := event.SlashCommandInteractionData().String("theme")
+	includePersona, _ := event.SlashCommandInteractionData().OptBool("include_persona")
 	cache := db.GetChannelCache(event.Channel().ID())
 	additionalContext := append([]string(nil), cache.Context...)
+	var personaSystem string
+	if includePersona {
+		personaSystem = persona.GetPersonaByMeta(
+			cache.PersonaMeta,
+			event.User().EffectiveName(),
+			event.GuildID() == nil,
+			persona.PromptContext{Context: append([]string(nil), cache.Context...)},
+		).System
+		additionalContext = nil
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 	defer cancel()
 
-	result, err := siteManager.CreateSite(ctx, event.User().ID.String(), theme, additionalContext)
+	result, err := siteManager.CreateSite(ctx, site.CreateOptions{
+		CreatorID:         event.User().ID.String(),
+		Theme:             theme,
+		AdditionalContext: additionalContext,
+		PersonaSystem:     personaSystem,
+	})
 	if err != nil {
 		return updateInteractionError(event, err.Error())
 	}
