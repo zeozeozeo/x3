@@ -876,6 +876,7 @@ func (m *Manager) handleWS(w http.ResponseWriter, r *http.Request, siteID string
 				v.Conn = nil
 			}
 			m.tryHandoffLocked(s)
+			m.broadcastStateLocked(s)
 		}
 		m.mu.Unlock()
 		_ = conn.Close()
@@ -903,21 +904,22 @@ type wsClientMessage struct {
 }
 
 type wsServerMessage struct {
-	Type        string         `json:"type"`
-	PageID      string         `json:"page_id,omitempty"`
-	PageURL     string         `json:"page_url,omitempty"`
-	Role        string         `json:"role,omitempty"`
-	X           float64        `json:"x,omitempty"`
-	Y           float64        `json:"y,omitempty"`
-	XPct        float64        `json:"x_pct,omitempty"`
-	YPct        float64        `json:"y_pct,omitempty"`
-	Selector    string         `json:"selector,omitempty"`
-	RX          float64        `json:"rx,omitempty"`
-	RY          float64        `json:"ry,omitempty"`
-	Error       string         `json:"error,omitempty"`
-	EstimatedMs int64          `json:"estimated_ms,omitempty"`
-	Toast       string         `json:"toast,omitempty"`
-	Tree        []pageTreeNode `json:"tree,omitempty"`
+	Type          string         `json:"type"`
+	PageID        string         `json:"page_id,omitempty"`
+	PageURL       string         `json:"page_url,omitempty"`
+	Role          string         `json:"role,omitempty"`
+	X             float64        `json:"x,omitempty"`
+	Y             float64        `json:"y,omitempty"`
+	XPct          float64        `json:"x_pct,omitempty"`
+	YPct          float64        `json:"y_pct,omitempty"`
+	Selector      string         `json:"selector,omitempty"`
+	RX            float64        `json:"rx,omitempty"`
+	RY            float64        `json:"ry,omitempty"`
+	Error         string         `json:"error,omitempty"`
+	EstimatedMs   int64          `json:"estimated_ms,omitempty"`
+	Toast         string         `json:"toast,omitempty"`
+	Tree          []pageTreeNode `json:"tree,omitempty"`
+	ActiveViewers int            `json:"active_viewers,omitempty"`
 }
 
 type pageTreeNode struct {
@@ -1013,12 +1015,19 @@ func (m *Manager) broadcastLocked(session *Session, msg wsServerMessage) {
 }
 
 func (m *Manager) viewerStateMessageLocked(session *Session, viewerID string) wsServerMessage {
+	activeViewers := 0
+	for _, v := range session.Viewers {
+		if v.Conn != nil {
+			activeViewers++
+		}
+	}
 	return wsServerMessage{
-		Type:    "state",
-		PageID:  session.OwnerPageID,
-		PageURL: m.pageURL(session, session.OwnerPageID),
-		Role:    viewerRole(session, viewerID),
-		Tree:    m.pageTreeLocked(session),
+		Type:          "state",
+		PageID:        session.OwnerPageID,
+		PageURL:       m.pageURL(session, session.OwnerPageID),
+		Role:          viewerRole(session, viewerID),
+		Tree:          m.pageTreeLocked(session),
+		ActiveViewers: activeViewers,
 	}
 }
 

@@ -20,6 +20,7 @@
   let hasSeenState = false;
   let treeData = Array.isArray(cfg.tree) ? cfg.tree : [];
   let treeQuery = "";
+  let activeViewers = 1;
 
   const overlay = document.createElement("div");
   overlay.id = "x3-site-owner-cursor";
@@ -185,6 +186,10 @@
       const prevRole = role;
       const prevPageId = currentPageId;
       role = msg.role || "follower";
+
+      if (typeof msg.active_viewers === "number") {
+        activeViewers = msg.active_viewers;
+      }
 
       if (Array.isArray(msg.tree)) {
         treeData = msg.tree;
@@ -983,7 +988,7 @@
   document.addEventListener(
     "mousemove",
     function (ev) {
-      if (role !== "owner") {
+      if (role !== "owner" || activeViewers <= 1) {
         return;
       }
 
