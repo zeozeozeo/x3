@@ -32,7 +32,7 @@ const (
 	RoleAssistant            = openai.ChatMessageRoleAssistant
 	RoleSystem               = openai.ChatMessageRoleSystem
 	SplitWarningPrefix       = "*SYSTEM MESSAGE: you've used >=5 splits in your previous message, try staying within 1-3 splits!*\n"
-	providerPromptTrimTarget = 7000
+	providerPromptTrimTarget = 8000
 )
 
 var (
