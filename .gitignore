@@ -7,3 +7,5 @@ x3-txt-cache/
 x3-temp/
 status/
 models/minilm/*.onnx
+*.db-shm
+*.db-wal
