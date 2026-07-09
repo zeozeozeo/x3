@@ -878,6 +878,7 @@
         page_id: currentPageId,
         intent: target.intent || "",
         href: target.href || "",
+        form_values: target.formValues || null,
       }),
     });
 
@@ -958,6 +959,107 @@
     },
     true,
   );
+
+  function serializeForm(form) {
+    const values = {};
+    const formData = new FormData(form);
+    for (const [key, val] of formData.entries()) {
+      if (values[key] !== undefined) {
+        if (Array.isArray(values[key])) {
+          values[key].push(val);
+        } else {
+          values[key] = [values[key], val];
+        }
+      } else {
+        values[key] = val;
+      }
+    }
+
+    const inputs = form.querySelectorAll("input, textarea, select");
+    inputs.forEach((input) => {
+      const name = input.name || input.id || input.placeholder;
+      if (!name) return;
+      if (input.name && values[input.name] !== undefined) return;
+
+      let val = input.value;
+      if (input.type === "checkbox") {
+        val = input.checked ? "on" : "off";
+      } else if (input.type === "radio") {
+        if (!input.checked) return;
+        val = input.value;
+      }
+
+      if (values[name] !== undefined) {
+        if (Array.isArray(values[name])) {
+          values[name].push(val);
+        } else {
+          values[name] = [values[name], val];
+        }
+      } else {
+        values[name] = val;
+      }
+    });
+
+    return values;
+  }
+
+  document.addEventListener(
+    "submit",
+    function (ev) {
+      const target = ev.target;
+      if (
+        target.dataset.x3External === "true" ||
+        target.target === "_blank"
+      ) {
+        return;
+      }
+      ev.preventDefault();
+      ev.stopPropagation();
+      if (typeof ev.stopImmediatePropagation === "function") {
+        ev.stopImmediatePropagation();
+      }
+
+      const formValues = serializeForm(target);
+      const submitter = ev.submitter;
+      const submitterText = submitter
+        ? submitter.getAttribute("aria-label") ||
+          submitter.getAttribute("title") ||
+          (submitter.textContent || "").trim() ||
+          submitter.value ||
+          "Submit"
+        : "Submit";
+
+      let formDesc = [];
+      for (const [k, v] of Object.entries(formValues)) {
+        formDesc.push(`${k}=${JSON.stringify(v)}`);
+      }
+      let intent = `Submitted form`;
+      if (target.id) intent += ` #${target.id}`;
+      intent += ` via button "${submitterText}"`;
+      if (formDesc.length > 0) {
+        intent += ` with values: ${formDesc.join(", ")}`;
+      }
+      const href = target.getAttribute("action") || "";
+
+      navigate({
+        kind: "form",
+        element: target,
+        href: href,
+        intent: intent,
+        formValues: formValues,
+      });
+    },
+    true,
+  );
+
+  const originalSubmit = HTMLFormElement.prototype.submit;
+  HTMLFormElement.prototype.submit = function () {
+    const event = new Event("submit", { bubbles: true, cancelable: true });
+    const cancelled = !this.dispatchEvent(event);
+    if (!cancelled) {
+      originalSubmit.call(this);
+    }
+  };
 
   window.addEventListener("popstate", async function (ev) {
     const pageId = (ev.state && ev.state.pageId) || currentPageId;

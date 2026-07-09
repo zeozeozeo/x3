@@ -216,6 +216,7 @@ type generationRequest struct {
 	RootSharedCSS     string
 	History           []string
 	ClickedIntent     string
+	FormValues        map[string]any
 }
 
 type promptAssets struct {
@@ -677,9 +678,10 @@ func (m *Manager) handlePage(w http.ResponseWriter, r *http.Request, siteID, pag
 }
 
 type navigateRequest struct {
-	PageID string `json:"page_id"`
-	Intent string `json:"intent"`
-	Href   string `json:"href"`
+	PageID     string         `json:"page_id"`
+	Intent     string         `json:"intent"`
+	Href       string         `json:"href"`
+	FormValues map[string]any `json:"form_values"`
 }
 
 type pageResponse struct {
@@ -724,7 +726,7 @@ func (m *Manager) handleNavigate(w http.ResponseWriter, r *http.Request, siteID 
 		return
 	}
 
-	pageURL, pageID, err := m.navigate(r.Context(), session, viewer.ID, req.PageID, intent)
+	pageURL, pageID, err := m.navigate(r.Context(), session, viewer.ID, req.PageID, intent, req.FormValues)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusForbidden)
 		return
@@ -733,7 +735,7 @@ func (m *Manager) handleNavigate(w http.ResponseWriter, r *http.Request, siteID 
 	_ = json.NewEncoder(w).Encode(pageResponse{PageID: pageID, URL: pageURL})
 }
 
-func (m *Manager) navigate(ctx context.Context, session *Session, viewerID, fromPageID, intent string) (string, string, error) {
+func (m *Manager) navigate(ctx context.Context, session *Session, viewerID, fromPageID, intent string, formValues map[string]any) (string, string, error) {
 	m.mu.Lock()
 	if session.OwnerViewerID != "" && session.OwnerViewerID != viewerID {
 		pageURL := m.pageURL(session, session.OwnerPageID)
@@ -788,6 +790,7 @@ func (m *Manager) navigate(ctx context.Context, session *Session, viewerID, from
 		RootSharedCSS:     session.RootSharedCSS,
 		History:           history,
 		ClickedIntent:     intent,
+		FormValues:        formValues,
 	})
 	if err != nil {
 		m.mu.Lock()
@@ -1368,6 +1371,9 @@ Rules:
 - Put visible body content first and place scripts only after the core page markup is already complete.
 - Every internal continuation link must be an <a> element with a descriptive aria-label that explains where it goes.
 - Continuation links should feel natural for the page, respect the visited-link history, and keep the site explorable.
+- You can include interactive elements like forms, search boxes, text inputs, textareas, checkboxes, radio buttons, and select dropdowns.
+- Ensure any form/search/input interaction uses a standard HTML <form> element with action/method attributes and a submit button (or triggering submit on Enter). Inputs must have descriptive name and/or id attributes.
+- The platform will intercept form submissions and send the values back to you so you can generate the resulting page (e.g. search results, dynamic feedback) matching the user's input.
 - Do not use alert(), confirm(), prompt(), document.write(), or automatic redirects/popups.
 - The page should be visually rich, surprising, and intentional rather than generic.
 - You can use placeholder images from LoremFlickr where suitable (animals, items, but not people or selfies), using this link https://loremflickr.com/<width>/<height> (random image) or this link https://loremflickr.com/<width>/<height>/<search> (image related to search). For example: https://loremflickr.com/320/240/dog
@@ -1422,6 +1428,30 @@ func buildSitePrompt(req generationRequest, retry bool) string {
 	}
 	if clickedIntent := collapseWhitespace(req.ClickedIntent); clickedIntent != "" {
 		fmt.Fprintf(&b, "The clicked link intent for this transition: %s\n\n", ellipsis(clickedIntent, 240))
+	}
+	if len(req.FormValues) > 0 {
+		b.WriteString("User input / Form values submitted:\n")
+		keys := make([]string, 0, len(req.FormValues))
+		for k := range req.FormValues {
+			keys = append(keys, k)
+		}
+		sort.Strings(keys)
+		for _, k := range keys {
+			v := req.FormValues[k]
+			switch val := v.(type) {
+			case []any:
+				var strVals []string
+				for _, sv := range val {
+					strVals = append(strVals, fmt.Sprintf("%v", sv))
+				}
+				fmt.Fprintf(&b, "- %s: [%s]\n", k, strings.Join(strVals, ", "))
+			case []string:
+				fmt.Fprintf(&b, "- %s: [%s]\n", k, strings.Join(val, ", "))
+			default:
+				fmt.Fprintf(&b, "- %s: %q\n", k, fmt.Sprintf("%v", val))
+			}
+		}
+		b.WriteString("\n")
 	}
 	b.WriteString("The output must be one full HTML document with natural continuation links so the site can keep expanding.\n")
 	if retry {
