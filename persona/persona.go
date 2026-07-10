@@ -522,6 +522,7 @@ type PersonaMeta struct {
 	ChatPreset                *STChatPreset     `json:"chat_preset,omitempty"`    // Imported SillyTavern chat-completion preset
 	RenderHTML                bool              `json:"render_html,omitempty"`    // Whether LLM-authored HTML blocks should render to image attachments
 	Tools                     *bool             `json:"tools,omitempty"`          // Whether grounding/search tools are available. nil means enabled.
+	RespondAlways             bool              `json:"respond_always,omitempty"` // Should x3 always respond to messages inthis channel?
 }
 
 // this is kinda hacky, but this is just so i can update the default models
