@@ -268,8 +268,11 @@ func OnMessageCreate(event *events.MessageCreate) {
 		if shouldTriggerContinuation(cache, getMessageContent(event.Message)) {
 			shouldTriggerLlm = true
 		}
+		// do we need to always respond in this channel?
+		if cache.PersonaMeta.RespondAlways {
+			shouldTriggerLlm = true
+		}
 	}
-
 	if shouldTriggerLlm {
 		handleLlmInteraction(event)
 		return

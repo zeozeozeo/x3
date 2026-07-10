@@ -160,6 +160,11 @@ var PersonaCommand = discord.SlashCommandCreate{
 			Required:    false,
 		},
 		discord.ApplicationCommandOptionBool{
+			Name:        "respondalways",
+			Description: "Should x3 always respond to messages in this channel?",
+			Required:    false,
+		},
+		discord.ApplicationCommandOptionBool{
 			Name:        "ephemeral",
 			Description: "If the response should only be visible to you",
 			Required:    false,
@@ -262,10 +267,11 @@ func HandlePersona(event *handler.CommandEvent) error {
 	reasoning, hasReasoning := data.OptBool("reasoning")
 	renderHTML, hasRenderHTML := data.OptBool("html")
 	minilmContinuations, hasMiniLMContinuations := data.OptBool("continuations")
+	respondalways, hasRespondalways := data.OptBool("respondalways")
 	toolsEnabled, hasToolsEnabled := data.OptBool("tools")
 	ephemeral := data.Bool("ephemeral")
 
-	if dataPersona == "" && dataModel == "" && dataSystem == "" && dataCard == "" && !hasDataCardFile && dataPreset == "" && !hasDataPresetFile && !hasContext && !hasTemperature && !hasTopP && !hasFreqPenalty && !hasDataSeed && !hasEnableImages && !hasThinking && !hasReasoning && !hasRenderHTML && !hasMiniLMContinuations && !hasToolsEnabled {
+	if dataPersona == "" && dataModel == "" && dataSystem == "" && dataCard == "" && !hasDataCardFile && dataPreset == "" && !hasDataPresetFile && !hasContext && !hasTemperature && !hasTopP && !hasFreqPenalty && !hasDataSeed && !hasEnableImages && !hasThinking && !hasReasoning && !hasRenderHTML && !hasMiniLMContinuations && !hasToolsEnabled && !hasRespondalways {
 		return handlePersonaInfo(event, ephemeral)
 	}
 
@@ -406,6 +412,9 @@ func HandlePersona(event *handler.CommandEvent) error {
 	if hasToolsEnabled {
 		cache.PersonaMeta.Tools = &toolsEnabled
 	}
+	if hasRespondalways {
+		cache.PersonaMeta.RespondAlways = respondalways
+	}
 
 	if dataPreset != "" || hasDataPresetFile {
 		if dataPreset != "" && hasDataPresetFile {
@@ -540,6 +549,15 @@ func HandlePersona(event *handler.CommandEvent) error {
 			s = "enabled tools"
 		} else {
 			s = "disabled tools"
+		}
+		didWhat = append(didWhat, s)
+	}
+	if cache.PersonaMeta.RespondAlways != prevMeta.RespondAlways {
+		var s string
+		if cache.PersonaMeta.RespondAlways {
+			s = "now always responding to messages in this channel"
+		} else {
+			s = "now sometimes responding to messages in this channel"
 		}
 		didWhat = append(didWhat, s)
 	}
