@@ -9,3 +9,4 @@ status/
 models/minilm/*.onnx
 *.db-shm
 *.db-wal
+/cmd/

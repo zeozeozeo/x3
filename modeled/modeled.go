@@ -10,7 +10,7 @@ import (
 	"net/http"
 	"os"
 
-	_ "github.com/mattn/go-sqlite3"
+	_ "modernc.org/sqlite"
 	"github.com/zeozeozeo/x3/model"
 )
 
@@ -80,7 +80,7 @@ func (s *Server) handleBackup(w http.ResponseWriter, r *http.Request) {
 
 	// Open a temporary database connection to VACUUM into a temp file
 	tmpFile := s.dbPath + ".backup.tmp"
-	tmpConn, err := sql.Open("sqlite3", s.dbPath)
+	tmpConn, err := sql.Open("sqlite", s.dbPath)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("Error opening database for backup: %v", err), http.StatusInternalServerError)
 		return

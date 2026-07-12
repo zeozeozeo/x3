@@ -7,7 +7,7 @@ import (
 	"log/slog"
 	"strings"
 
-	_ "github.com/mattn/go-sqlite3"
+	_ "modernc.org/sqlite"
 )
 
 // DB is the global database connection pool for the commands package.
@@ -16,7 +16,7 @@ var DB *sql.DB
 // InitDB initializes the database connection and ensures tables are created.
 func InitDB(dataSourceName string) error {
 	var err error
-	DB, err = sql.Open("sqlite3", dataSourceName)
+	DB, err = sql.Open("sqlite", dataSourceName)
 	if err != nil {
 		return fmt.Errorf("failed to open database: %w", err)
 	}

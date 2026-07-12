@@ -20,13 +20,13 @@ import (
 	"time"
 
 	"github.com/disgoorg/disgo/discord"
+	"github.com/zeozeozeo/x3/cryptohelper"
 	"github.com/zeozeozeo/x3/db"
 	"github.com/zeozeozeo/x3/llm"
 	"github.com/zeozeozeo/x3/model"
 	"github.com/zeozeozeo/x3/persona"
 	"maunium.net/go/mautrix"
 	"maunium.net/go/mautrix/crypto/attachment"
-	"maunium.net/go/mautrix/crypto/cryptohelper"
 	"maunium.net/go/mautrix/event"
 	"maunium.net/go/mautrix/id"
 )
