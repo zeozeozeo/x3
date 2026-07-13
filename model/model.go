@@ -76,6 +76,7 @@ const (
 	makoraBaseURL       = "https://inference.makora.com/glm-5-1-fp8/v1"
 	openferenceBaseURL  = "https://api.openference.com/v1"
 	cloudflareBaseURLf  = "https://api.cloudflare.com/client/v4/accounts/%s/ai/v1"
+	nimBaseURL          = "https://integrate.api.nvidia.com/v1"
 )
 
 const (
@@ -119,6 +120,7 @@ const (
 	ProviderMiMo         = "mimo"
 	ProviderMakora       = "makora"
 	ProviderOpenference  = "openference"
+	ProviderNim          = "nim"
 )
 
 type ModelProvider struct {
@@ -202,6 +204,7 @@ var (
 		{Name: ProviderMiMo},
 		{Name: ProviderMakora},
 		{Name: ProviderOpenference},
+		{Name: ProviderNim},
 		//{Name: ProviderG4F},
 	}
 
@@ -517,6 +520,8 @@ func (m Model) Client(provider string) (baseUrls []string, tokens []string, code
 		tokenEnvKey, apiVar = "X3_MAKORA_TOKEN", makoraBaseURL
 	case ProviderOpenference:
 		tokenEnvKey, apiVar = "X3_OPENFERENCE_TOKEN", openferenceBaseURL
+	case ProviderNim:
+		tokenEnvKey, apiVar = "X3_NIM_TOKEN", nimBaseURL
 	default:
 		return nil, nil, nil
 	}
