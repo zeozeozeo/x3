@@ -25,6 +25,7 @@ import (
 	"github.com/zeozeozeo/x3/llm"
 	"github.com/zeozeozeo/x3/model"
 	"github.com/zeozeozeo/x3/persona"
+	"github.com/zeozeozeo/x3/site"
 	"maunium.net/go/mautrix"
 	"maunium.net/go/mautrix/crypto/attachment"
 	"maunium.net/go/mautrix/event"
@@ -679,6 +680,8 @@ func (b *MatrixBot) handleCommand(ctx context.Context, msg *matrixMessage, raw s
 		return b.sendText(ctx, msg.RoomID, msg.EventID, b.matrixModelListText(isDM))
 	case "chatlog":
 		return b.handleChatlogCommand(ctx, msg, rest, isDM)
+	case "site":
+		return b.handleSiteCommand(ctx, msg, rest, isDM)
 	case "blacklist":
 		return b.handleBlacklistCommand(ctx, msg, rest, false)
 	case "imageblacklist":
@@ -699,6 +702,7 @@ func (b *MatrixBot) helpText(isDM bool) string {
 	return strings.Join([]string{
 		"x3 commands:",
 		b.commandUsage("chat", isDM) + " <prompt>",
+		b.commandUsage("site", isDM) + " [--persona] <theme>",
 		b.commandUsage("persona", isDM),
 		b.commandUsage("persona", isDM) + " set <name>",
 		b.commandUsage("persona", isDM) + " model <model name>",
@@ -1891,4 +1895,96 @@ func normalizeMatrixPersonaName(value string) string {
 		filtered = append(filtered, part)
 	}
 	return strings.Join(filtered, " ")
+}
+
+func (b *MatrixBot) handleSiteCommand(ctx context.Context, msg *matrixMessage, rest string, isDM bool) error {
+	if siteManager == nil {
+		return b.sendText(ctx, msg.RoomID, msg.EventID, "Site runtime is not available.")
+	}
+	parsed := parseMatrixCommandArgs(rest)
+	if len(parsed.Args) == 0 {
+		return b.sendText(ctx, msg.RoomID, msg.EventID, "Usage:\n"+
+			b.commandUsage("site", isDM)+" <theme>\n"+
+			b.commandUsage("site", isDM)+" [--persona|-p] <theme>\n"+
+			b.commandUsage("site", isDM)+" cancel <site_id>")
+	}
+
+	firstArg := strings.ToLower(parsed.Args[0].Text)
+	if firstArg == "cancel" {
+		if len(parsed.Args) < 2 {
+			return b.sendText(ctx, msg.RoomID, msg.EventID, "Missing site ID. Usage: "+b.commandUsage("site", isDM)+" cancel <site_id>")
+		}
+		siteID := parsed.Args[1].Text
+		if err := siteManager.CancelSite(siteID, msg.Sender.String()); err != nil {
+			return b.sendText(ctx, msg.RoomID, msg.EventID, "Failed to cancel site: "+err.Error())
+		}
+		return b.sendText(ctx, msg.RoomID, msg.EventID, "Site canceled.")
+	}
+
+	var includePersona bool
+	themeStartIdx := 0
+	if firstArg == "--persona" || firstArg == "-p" || firstArg == "include_persona" {
+		includePersona = true
+		themeStartIdx = 1
+	}
+
+	if themeStartIdx >= len(parsed.Args) {
+		return b.sendText(ctx, msg.RoomID, msg.EventID, "Missing theme. Usage: "+b.commandUsage("site", isDM)+" [--persona] <theme>")
+	}
+
+	var theme string
+	if includePersona {
+		theme = parsed.RestAfter(0)
+	} else {
+		theme = rest
+	}
+	theme = strings.TrimSpace(theme)
+
+	key := b.roomKey(msg.RoomID)
+	cache := db.GetChannelCacheByKey(key)
+	additionalContext := append([]string(nil), cache.Context...)
+	var personaSystem string
+	if includePersona {
+		personaSystem = persona.GetPersonaByMeta(
+			cache.PersonaMeta,
+			msg.Author,
+			b.isDMRoom(ctx, msg.RoomID),
+			persona.PromptContext{Context: append([]string(nil), cache.Context...)},
+		).System
+		additionalContext = nil
+	}
+
+	ctx, cancel := context.WithTimeout(ctx, time.Minute)
+	defer cancel()
+
+	result, err := siteManager.CreateSite(ctx, site.CreateOptions{
+		CreatorID:         msg.Sender.String(),
+		Theme:             theme,
+		AdditionalContext: additionalContext,
+		PersonaSystem:     personaSystem,
+	})
+	if err != nil {
+		return b.sendText(ctx, msg.RoomID, msg.EventID, "Failed to create site: "+err.Error())
+	}
+
+	duration := time.Until(result.ExpiresAt).Round(time.Minute)
+	if duration < time.Minute {
+		duration = time.Until(result.ExpiresAt).Round(time.Second)
+	}
+	content := fmt.Sprintf(
+		"Live site: %s\nDeleted automatically in %s (at %s)\nTo cancel: `%s`",
+		result.URL,
+		duration.String(),
+		result.ExpiresAt.Local().Format("15:04:05 MST"),
+		b.commandUsage("site", isDM)+" cancel "+result.SiteID,
+	)
+
+	sentID, err := b.sendFiles(ctx, msg.RoomID, msg.EventID, content, nil)
+	if err != nil {
+		return err
+	}
+	if sentID != "" {
+		_ = siteManager.AttachDiscordMessage(result.SiteID, sentID.String())
+	}
+	return nil
 }
