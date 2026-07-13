@@ -186,7 +186,7 @@ func firstNonEmpty(values ...string) string {
 }
 
 func applyReasoningSettings(req *openai.ChatCompletionRequest, provider string, reasoning bool) {
-	if provider == model.ProviderMistral || provider == model.ProviderCerebras {
+	if provider == model.ProviderMistral || provider == model.ProviderCerebras || provider == model.ProviderNim {
 		return //oh cool yeah.
 	}
 	thinkingType := "disabled"
