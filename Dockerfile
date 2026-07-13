@@ -12,12 +12,13 @@ RUN --mount=type=cache,target=/root/.cache/go-build \
 # Final Stage
 FROM alpine
 
-RUN apk add --no-cache \
+RUN apk update && apk add --no-cache \
     exiftool \
     libgcc \
     libstdc++ \
-    --repository=http://dl-cdn.alpinelinux.org/alpine/edge/testing/ \
-    onnxruntime
+    onnxruntime \
+    --repository=http://dl-cdn.alpinelinux.org/alpine/edge/main \
+    --repository=http://dl-cdn.alpinelinux.org/alpine/edge/community
 
 WORKDIR /app
 
