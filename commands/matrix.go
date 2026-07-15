@@ -551,6 +551,9 @@ func (b *MatrixBot) buildMessage(ctx context.Context, evt *event.Event) *matrixM
 		Timestamp: time.UnixMilli(evt.Timestamp),
 		IsBot:     evt.Sender == b.client.UserID,
 	}
+	if alias := strings.TrimSpace(db.GetUserCacheByKey(b.userKey(evt.Sender)).Username); alias != "" {
+		msg.Author = alias
+	}
 	if msg.Author == "" {
 		msg.Author = evt.Sender.String()
 	}
@@ -595,6 +598,20 @@ func (b *MatrixBot) displayName(ctx context.Context, roomID id.RoomID, userID id
 		return strings.TrimSpace(member.Displayname)
 	}
 	return strings.TrimPrefix(strings.SplitN(userID.String(), ":", 2)[0], "@")
+}
+
+func (b *MatrixBot) userName(msg *matrixMessage) string {
+	if msg == nil {
+		return ""
+	}
+	if alias := strings.TrimSpace(db.GetUserCacheByKey(b.userKey(msg.Sender)).Username); alias != "" {
+		return alias
+	}
+	return msg.Author
+}
+
+func (b *MatrixBot) matrixBotName(ctx context.Context, roomID id.RoomID) string {
+	return b.displayName(ctx, roomID, b.client.UserID)
 }
 
 func (b *MatrixBot) attachmentFromContent(ctx context.Context, content *event.MessageEventContent) (*matrixAttachment, error) {
@@ -705,6 +722,8 @@ func (b *MatrixBot) helpText(isDM bool) string {
 		b.commandUsage("site", isDM) + " [--persona] <theme>",
 		b.commandUsage("persona", isDM),
 		b.commandUsage("persona", isDM) + " set <name>",
+		b.commandUsage("persona", isDM) + " username <name|reset>",
+		b.commandUsage("persona", isDM) + " botname <name|reset>",
 		b.commandUsage("persona", isDM) + " model <model name>",
 		b.commandUsage("persona", isDM) + " system <prompt>",
 		b.commandUsage("persona", isDM) + " card <url> | preset <url>",
@@ -714,7 +733,7 @@ func (b *MatrixBot) helpText(isDM bool) string {
 		b.commandUsage("context", isDM) + " add|list|clear|delete|get|edit ...",
 		b.commandUsage("lobotomy", isDM) + " [turns] [reset_persona]",
 		b.commandUsage("regenerate", isDM) + " [prepend]",
-		b.commandUsage("chatlog", isDM) + " export",
+		b.commandUsage("chatlog", isDM) + " export|import",
 	}, "\n")
 }
 
@@ -727,6 +746,8 @@ func (b *MatrixBot) personaHelpText(isDM bool) string {
 		base + " list                    list built-in personas",
 		base + " models                  list available model short names",
 		base + " set <name>              set persona",
+		base + " username <name>        set your name in bot context (reset to clear)",
+		base + " botname <name>         set the bot persona name (reset to clear)",
 		base + " model <model>           set model by name or command",
 		base + " system <prompt>         set custom system prompt",
 		base + " card [url]              import character card from URL or attachment",
@@ -742,6 +763,7 @@ func (b *MatrixBot) personaHelpText(isDM bool) string {
 		base + " html on|off             toggle HTML rendering",
 		base + " continuations           on|off toggle smart continuation trigger",
 		base + " tools on|off            toggle web and Discord search tools",
+		"Use spaces, not key=value, for persona settings.",
 	}, "\n")
 }
 
@@ -828,7 +850,7 @@ func (b *MatrixBot) handlePersonaCommand(ctx context.Context, msg *matrixMessage
 	key := b.roomKey(msg.RoomID)
 	cache := db.GetChannelCacheByKey(key)
 	if strings.TrimSpace(rest) == "" {
-		return b.sendText(ctx, msg.RoomID, msg.EventID, matrixPersonaInfo(cache, msg.Author, b.isDMRoom(ctx, msg.RoomID)))
+		return b.sendText(ctx, msg.RoomID, msg.EventID, matrixPersonaInfo(cache, b.userName(msg), b.matrixBotName(ctx, msg.RoomID), b.isDMRoom(ctx, msg.RoomID)))
 	}
 	parsed := parseMatrixCommandArgs(rest)
 	actionToken := parsed.At(0)
@@ -873,6 +895,24 @@ func (b *MatrixBot) handlePersonaCommand(ctx context.Context, msg *matrixMessage
 
 	prev := cache.PersonaMeta.DeepCopy()
 	switch action {
+	case "username":
+		userCache := db.GetUserCacheByKey(b.userKey(msg.Sender))
+		if strings.EqualFold(value, "reset") {
+			userCache.Username = ""
+		} else {
+			userCache.Username = strings.TrimSpace(valueRest)
+		}
+		if err := userCache.WriteKey(b.userKey(msg.Sender)); err != nil {
+			return err
+		}
+		return b.sendText(ctx, msg.RoomID, msg.EventID, "Updated username.")
+	case "botname":
+		if strings.EqualFold(value, "reset") {
+			cache.PersonaMeta.BotName = ""
+		} else {
+			cache.PersonaMeta.BotName = strings.TrimSpace(valueRest)
+		}
+		return b.writePersonaUpdate(ctx, msg, key, cache, prev)
 	case "set":
 		meta, ok := findMatrixPersona(value)
 		if !ok {
@@ -883,8 +923,10 @@ func (b *MatrixBot) handlePersonaCommand(ctx context.Context, msg *matrixMessage
 					pName = userCache.Personas[i].Name
 				}
 				if pName == value {
+					botName := cache.PersonaMeta.BotName
 					cache.PersonaMeta = persona.PersonaMeta{
 						Name:                      pName,
+						BotName:                   botName,
 						TavernCard:                v1ToV2(userCache.Personas[i]),
 						Models:                    persona.PersonaProto.Models,
 						Settings:                  persona.PersonaProto.Settings,
@@ -896,7 +938,9 @@ func (b *MatrixBot) handlePersonaCommand(ctx context.Context, msg *matrixMessage
 			}
 			return b.sendText(ctx, msg.RoomID, msg.EventID, "Unknown persona: "+value)
 		}
+		botName := cache.PersonaMeta.BotName
 		cache.PersonaMeta = meta
+		cache.PersonaMeta.BotName = botName
 		cache.PersonaMeta.TavernCard = nil
 	case "model":
 		m, ok := findMatrixModel(value)
@@ -1063,7 +1107,7 @@ func (b *MatrixBot) writePersonaUpdate(ctx context.Context, msg *matrixMessage, 
 	return b.sendText(ctx, msg.RoomID, msg.EventID, "Updated persona: "+strings.Join(changes, ", "))
 }
 
-func matrixPersonaInfo(cache *db.ChannelCache, username string, isDM bool) string {
+func matrixPersonaInfo(cache *db.ChannelCache, username, botName string, isDM bool) string {
 	settings := cache.PersonaMeta.Settings.Fixup()
 	remapped := settings
 	remapped.Remap()
@@ -1074,7 +1118,7 @@ func matrixPersonaInfo(cache *db.ChannelCache, username string, isDM bool) strin
 	if summariesEnabled() {
 		promptContext.Summaries = append([]persona.Summary(nil), cache.Summaries...)
 	}
-	system := persona.GetPersonaByMeta(cache.PersonaMeta, username, isDM, promptContext).System
+	system := persona.GetPersonaByMetaWithBotName(cache.PersonaMeta, username, botName, isDM, promptContext).System
 	models := cache.PersonaMeta.Models
 	if len(models) == 0 {
 		models = persona.PersonaProto.Models
@@ -1419,8 +1463,8 @@ func (b *MatrixBot) handleLlm(ctx context.Context, msg *matrixMessage, isRegener
 		llmer.LobotomizeUntilMessageID(lastID)
 	} else {
 		promptContext := matrixPromptContext(cache)
-		p := persona.GetPersonaByMeta(cache.PersonaMeta, msg.Author, b.isDMRoom(ctx, msg.RoomID), promptContext)
-		content := matrixFormatMsg(augmentContentWithLinkMetadata(msg.Content), msg.Author, msg.ReplyTo)
+		p := persona.GetPersonaByMetaWithBotName(cache.PersonaMeta, b.userName(msg), b.matrixBotName(ctx, msg.RoomID), b.isDMRoom(ctx, msg.RoomID), promptContext)
+		content := matrixFormatMsg(augmentContentWithLinkMetadata(msg.Content), b.userName(msg), msg.ReplyTo)
 		llmer.AddMessageWithID(llm.RoleUser, content, 0, msg.EventID.String())
 		if len(llmer.Messages) > 0 {
 			added := &llmer.Messages[len(llmer.Messages)-1]

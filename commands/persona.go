@@ -68,6 +68,16 @@ var PersonaCommand = discord.SlashCommandCreate{
 			Required:     false,
 		},
 		discord.ApplicationCommandOptionString{
+			Name:        "username",
+			Description: "Set your name in bot context; use reset to use your display name",
+			Required:    false,
+		},
+		discord.ApplicationCommandOptionString{
+			Name:        "botname",
+			Description: "Set the bot's persona name; use reset to use its display name",
+			Required:    false,
+		},
+		discord.ApplicationCommandOptionString{
 			Name:        "system",
 			Description: "Set a custom system prompt for this chat",
 			Required:    false,
@@ -228,7 +238,7 @@ func handlePersonaInfo(event *handler.CommandEvent, ephemeral bool) error {
 	}
 
 	var files []*discord.File
-	systemPrompt := persona.GetPersonaByMeta(cache.PersonaMeta, "user", event.GuildID() == nil, promptContext).System
+	systemPrompt := persona.GetPersonaByMetaWithBotName(cache.PersonaMeta, "user", discordBotName(event.Client()), event.GuildID() == nil, promptContext).System
 	if systemPrompt != "" {
 		builder.AddField("System prompt", ellipsisTrim(systemPrompt, 1024), false)
 		if utf8.RuneCountInString(systemPrompt) > 1024 {
@@ -251,6 +261,8 @@ func handlePersonaInfo(event *handler.CommandEvent, ephemeral bool) error {
 func HandlePersona(event *handler.CommandEvent) error {
 	data := event.SlashCommandInteractionData()
 	dataPersona := data.String("persona")
+	dataUsername := data.String("username")
+	dataBotName := data.String("botname")
 	dataModel := data.String("model")
 	dataSystem := data.String("system")
 	dataCard := data.String("card")
@@ -271,8 +283,42 @@ func HandlePersona(event *handler.CommandEvent) error {
 	toolsEnabled, hasToolsEnabled := data.OptBool("tools")
 	ephemeral := data.Bool("ephemeral")
 
-	if dataPersona == "" && dataModel == "" && dataSystem == "" && dataCard == "" && !hasDataCardFile && dataPreset == "" && !hasDataPresetFile && !hasContext && !hasTemperature && !hasTopP && !hasFreqPenalty && !hasDataSeed && !hasEnableImages && !hasThinking && !hasReasoning && !hasRenderHTML && !hasMiniLMContinuations && !hasToolsEnabled && !hasRespondalways {
+	if dataPersona == "" && dataUsername == "" && dataBotName == "" && dataModel == "" && dataSystem == "" && dataCard == "" && !hasDataCardFile && dataPreset == "" && !hasDataPresetFile && !hasContext && !hasTemperature && !hasTopP && !hasFreqPenalty && !hasDataSeed && !hasEnableImages && !hasThinking && !hasReasoning && !hasRenderHTML && !hasMiniLMContinuations && !hasToolsEnabled && !hasRespondalways {
 		return handlePersonaInfo(event, ephemeral)
+	}
+	if dataUsername != "" || dataBotName != "" {
+		userCache := db.GetUserCache(event.User().ID)
+		changes := []string{}
+		if dataUsername != "" {
+			if strings.EqualFold(strings.TrimSpace(dataUsername), "reset") {
+				userCache.Username = ""
+			} else {
+				userCache.Username = strings.TrimSpace(dataUsername)
+			}
+			changes = append(changes, "username")
+		}
+		if dataBotName != "" {
+			if strings.EqualFold(strings.TrimSpace(dataBotName), "reset") {
+				cache := db.GetChannelCache(event.Channel().ID())
+				cache.PersonaMeta.BotName = ""
+				if err := cache.Write(event.Channel().ID()); err != nil {
+					return err
+				}
+			} else {
+				cache := db.GetChannelCache(event.Channel().ID())
+				cache.PersonaMeta.BotName = strings.TrimSpace(dataBotName)
+				if err := cache.Write(event.Channel().ID()); err != nil {
+					return err
+				}
+			}
+			changes = append(changes, "bot name")
+		}
+		if err := userCache.Write(event.User().ID); err != nil {
+			return err
+		}
+		if dataPersona == "" && dataModel == "" && dataSystem == "" && dataCard == "" && !hasDataCardFile && dataPreset == "" && !hasDataPresetFile && !hasContext && !hasTemperature && !hasTopP && !hasFreqPenalty && !hasDataSeed && !hasEnableImages && !hasThinking && !hasReasoning && !hasRenderHTML && !hasMiniLMContinuations && !hasToolsEnabled && !hasRespondalways {
+			return sendInteractionOk(event, "Names updated", "Updated "+strings.Join(changes, " and ")+".", ephemeral)
+		}
 	}
 
 	if dataCard != "" || hasDataCardFile || dataPreset != "" || hasDataPresetFile {
@@ -312,8 +358,10 @@ func HandlePersona(event *handler.CommandEvent) error {
 			if personaName == "" {
 				personaName = foundCustom.Name
 			}
+			botName := cache.PersonaMeta.BotName
 			cache.PersonaMeta = persona.PersonaMeta{
 				Name:                      personaName,
+				BotName:                   botName,
 				TavernCard:                v1ToV2(*foundCustom),
 				Models:                    persona.PersonaProto.Models,
 				Settings:                  persona.PersonaProto.Settings,
@@ -333,7 +381,9 @@ func HandlePersona(event *handler.CommandEvent) error {
 	// update persona meta in channel cache
 	prevMeta := cache.PersonaMeta.DeepCopy()
 	if dataPersona != "" {
+		botName := cache.PersonaMeta.BotName
 		cache.PersonaMeta = personaMeta
+		cache.PersonaMeta.BotName = botName
 		cache.PersonaMeta.TavernCard = nil
 	}
 	if dataSystem != "" {

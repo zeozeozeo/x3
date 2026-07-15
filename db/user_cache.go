@@ -10,6 +10,8 @@ import (
 )
 
 type UserCache struct {
+	// Username is the optional name used for this user in bot context. Empty means platform display name.
+	Username string `json:"username,omitempty"`
 	// Personas are all the personas made or imported in /personamaker
 	Personas []persona.TavernCardV1
 }

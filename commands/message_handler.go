@@ -115,7 +115,7 @@ func handleLlmInteraction(event *events.MessageCreate) error {
 		event.ChannelID,
 		event.MessageID,
 		content,
-		event.Message.Author.EffectiveName(),
+		discordUserName(event.Message.Author),
 		event.Message.Author.ID,
 		event.Message.Attachments,
 		event.Message.Embeds,

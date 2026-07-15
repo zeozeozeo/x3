@@ -24,6 +24,21 @@ import (
 
 var lobotomyMessagesRegex = regexp.MustCompile(`(?i)Removed last (\d+) (messages|turns) from the context`)
 
+func discordUserName(user discord.User) string {
+	name := user.EffectiveName()
+	if alias := strings.TrimSpace(db.GetUserCache(user.ID).Username); alias != "" {
+		return alias
+	}
+	return name
+}
+
+func discordBotName(client *bot.Client) string {
+	if self, ok := client.Caches.SelfUser(); ok {
+		return self.EffectiveName()
+	}
+	return "x3"
+}
+
 var imageURLRegexp = regexp.MustCompile(`https?://[^\s<>"']+`)
 
 var imageURLExtensions = map[string]struct{}{
@@ -599,6 +614,7 @@ func addContextMessages(
 	// add messages (oldest to newest)
 	for i := len(messages) - 1; i >= 0; i-- {
 		msg := messages[i]
+		username := discordUserName(msg.Author)
 		role := llm.RoleUser
 		content := ""
 		rawContent := ""
@@ -679,16 +695,16 @@ func addContextMessages(
 			if reference != nil && reference.ID == lastAssistantMessageID {
 				reference = nil
 			}
-			content = formatMsg(content, msg.Author.EffectiveName(), reference)
+			content = formatMsg(content, username, reference)
 		}
 
 		if content != "" {
 			llmer.AddMessage(role, content, msg.ID)
 			added := &llmer.Messages[len(llmer.Messages)-1]
-			added.Author = msg.Author.EffectiveName()
+			added.Author = username
 			added.Timestamp = msg.CreatedAt
 			added.MessageID = msg.ID.String()
-			usernames[msg.Author.EffectiveName()] = struct{}{} // track username
+			usernames[username] = struct{}{} // track username
 		}
 
 		// add image sources if this is the newest message containing one

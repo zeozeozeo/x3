@@ -120,28 +120,29 @@ func HandleLlm(event *handler.CommandEvent, models []model.Model) error {
 				if isLobotomyMessage(*msg) {
 					llmer.Lobotomize(getLobotomyAmountFromMessage(*msg))
 				} else {
-					msgPersona := persona.GetPersonaByMeta(cache.PersonaMeta, msg.Author.EffectiveName(), isDM, promptContext)
+					msgPersona := persona.GetPersonaByMetaWithBotName(cache.PersonaMeta, discordUserName(msg.Author), discordBotName(event.Client()), isDM, promptContext)
 					llmer.SetPersona(msgPersona, nil)
 					content := getMessageContent(*msg)
 					rawContent := content
 					content = augmentContentWithLinkMetadata(content)
 					content = appendImageLinks(content, messageImageURLs(rawContent, msg.Attachments, msg.Embeds))
-					llmer.AddMessage(llm.RoleUser, formatMsg(content, msg.Author.EffectiveName(), msg.ReferencedMessage), msg.ID)
+					llmer.AddMessage(llm.RoleUser, formatMsg(content, discordUserName(msg.Author), msg.ReferencedMessage), msg.ID)
 					addImageSources(llmer, rawContent, msg.Attachments, msg.Embeds)
 				}
 			}
 		}
 	}
 	configureDiscordSearchTool(llmer, event.Client(), event.GuildID(), event.User().ID, event.User().EffectiveName(), interactionChannelNSFW(event.Channel()))
-	usernames[event.User().EffectiveName()] = struct{}{} // to be safe when not using cache
+	username := discordUserName(event.User())
+	usernames[username] = struct{}{} // to be safe when not using cache
 	slog.Debug("prepared initial context", slog.Int("num_messages", llmer.NumMessages()))
 
-	currentPersona := persona.GetPersonaByMeta(cache.PersonaMeta, event.User().EffectiveName(), isDM, promptContext)
+	currentPersona := persona.GetPersonaByMetaWithBotName(cache.PersonaMeta, username, discordBotName(event.Client()), isDM, promptContext)
 	llmer.SetPersona(currentPersona, &cache.PersonaMeta.ExcessiveSplit)
-	llmer.AddMessage(llm.RoleUser, formatMsg(prompt, event.User().EffectiveName(), nil), 0)
+	llmer.AddMessage(llm.RoleUser, formatMsg(prompt, username, nil), 0)
 	if len(llmer.Messages) > 0 {
 		msg := &llmer.Messages[len(llmer.Messages)-1]
-		msg.Author = event.User().EffectiveName()
+		msg.Author = username
 		msg.Timestamp = event.ID().Time()
 		msg.MessageID = event.ID().String()
 	}

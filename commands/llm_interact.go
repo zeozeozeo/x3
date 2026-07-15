@@ -343,7 +343,7 @@ func handleLlmInteraction2(
 	}
 
 	promptContext := buildPromptContext(client, channelID, nil, cache)
-	p := persona.GetPersonaByMeta(cache.PersonaMeta, username, isDM, promptContext)
+	p := persona.GetPersonaByMetaWithBotName(cache.PersonaMeta, username, discordBotName(client), isDM, promptContext)
 
 	// avoid formatting reply if the reference is the message we're about to regenerate
 	if reference != nil && isRegenerate && reference.ID == lastResponseMessage.ID {
