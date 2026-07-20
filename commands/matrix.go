@@ -25,6 +25,7 @@ import (
 	"github.com/zeozeozeo/x3/llm"
 	"github.com/zeozeozeo/x3/model"
 	"github.com/zeozeozeo/x3/persona"
+	"github.com/zeozeozeo/x3/schematic"
 	"github.com/zeozeozeo/x3/site"
 	"maunium.net/go/mautrix"
 	"maunium.net/go/mautrix/crypto/attachment"
@@ -699,6 +700,8 @@ func (b *MatrixBot) handleCommand(ctx context.Context, msg *matrixMessage, raw s
 		return b.handleChatlogCommand(ctx, msg, rest, isDM)
 	case "site":
 		return b.handleSiteCommand(ctx, msg, rest, isDM)
+	case "schematic":
+		return b.handleSchematicCommand(ctx, msg, rest, isDM)
 	case "blacklist":
 		return b.handleBlacklistCommand(ctx, msg, rest, false)
 	case "imageblacklist":
@@ -720,6 +723,7 @@ func (b *MatrixBot) helpText(isDM bool) string {
 		"x3 commands:",
 		b.commandUsage("chat", isDM) + " <prompt>",
 		b.commandUsage("site", isDM) + " [--persona] <theme>",
+		b.commandUsage("schematic", isDM) + " [--size 128|WxHxD] <prompt>",
 		b.commandUsage("persona", isDM),
 		b.commandUsage("persona", isDM) + " set <name>",
 		b.commandUsage("persona", isDM) + " username <name|reset>",
@@ -1939,6 +1943,85 @@ func normalizeMatrixPersonaName(value string) string {
 		filtered = append(filtered, part)
 	}
 	return strings.Join(filtered, " ")
+}
+
+func (b *MatrixBot) handleSchematicCommand(ctx context.Context, msg *matrixMessage, rest string, isDM bool) error {
+	parsed := parseMatrixCommandArgs(rest)
+	if len(parsed.Args) > 0 {
+		first := strings.ToLower(parsed.At(0).Text)
+		if first == "help" || first == "-h" || first == "--help" || first == "?" {
+			return b.sendText(ctx, msg.RoomID, msg.EventID, "Schematic command:\n"+b.commandUsage("schematic", isDM)+" [--size 128|WIDTHxHEIGHTxDEPTH] <prompt>\nCanvas axes default to 128 and may be 1..320.")
+		}
+	}
+	size := ""
+	prompt := strings.TrimSpace(rest)
+	if len(parsed.Args) > 0 && strings.EqualFold(parsed.At(0).Text, "--size") {
+		if len(parsed.Args) < 2 {
+			return b.sendText(ctx, msg.RoomID, msg.EventID, matrixCommandDiagnostic(rest, parsed.At(0), "Missing value for --size.", "Expected: `"+b.commandUsage("schematic", isDM)+" --size 128x64x96 <prompt>`"))
+		}
+		size = parsed.At(1).Text
+		prompt = parsed.RestAfter(1)
+	}
+	if strings.TrimSpace(prompt) == "" {
+		return b.sendText(ctx, msg.RoomID, msg.EventID, matrixCommandDiagnostic(rest, matrixCommandEndToken(rest), "Missing schematic prompt.", "Expected: `"+b.commandUsage("schematic", isDM)+" [--size 128] <prompt>`"))
+	}
+	bounds, err := schematic.ParseBounds(size)
+	if err != nil {
+		token := parsed.At(1)
+		if size == "" {
+			token = parsed.At(0)
+		}
+		return b.sendText(ctx, msg.RoomID, msg.EventID, matrixCommandDiagnostic(rest, token, "Invalid schematic size: "+err.Error(), "Use one number or WIDTHxHEIGHTxDEPTH; each axis must be 1..320."))
+	}
+	progressID, err := b.sendFiles(ctx, msg.RoomID, msg.EventID, "Generating schematic: **Queued**", nil)
+	if err != nil {
+		return err
+	}
+	key := b.roomKey(msg.RoomID)
+	cache := db.GetChannelCacheByKey(key)
+	jobCtx, cancel := context.WithTimeout(ctx, 15*time.Minute)
+	defer cancel()
+	throttle := &schematicProgressThrottle{}
+	result, genErr := newSchematicGenerator().Generate(jobCtx, schematic.Request{Prompt: prompt, Bounds: bounds, Models: cache.PersonaMeta.GetModels(), Settings: cache.PersonaMeta.Settings}, func(p schematic.Progress) {
+		if !throttle.Allow(p) {
+			return
+		}
+		_, _ = b.editText(jobCtx, msg.RoomID, progressID, schematicProgressText(p), nil)
+	})
+	if !result.Usage.IsEmpty() {
+		cache.Usage = cache.Usage.Add(result.Usage)
+		cache.LastUsage = result.Usage
+		cache.UpdateInteractionTime()
+		_ = cache.WriteKey(key)
+		_ = db.UpdateGlobalStats(result.Usage)
+	}
+	if genErr != nil {
+		text := "Schematic generation failed: " + genErr.Error()
+		var attempts *schematic.GenerationError
+		if errors.As(genErr, &attempts) {
+			text = "Schematic generation failed after five attempts:\n" + formatSchematicAttemptErrors(attempts.Attempts, 3000)
+			debug, _ := schematic.DebugArchive(attempts.Attempts)
+			_, editErr := b.editText(ctx, msg.RoomID, progressID, text, nil)
+			if len(debug) > 0 {
+				_, uploadErr := b.sendFiles(ctx, msg.RoomID, progressID, "", []matrixOutFile{{Name: "schematic-debug.zip", ContentType: "application/zip", Data: debug}})
+				if editErr == nil {
+					editErr = uploadErr
+				}
+			}
+			return editErr
+		}
+		_, err = b.editText(ctx, msg.RoomID, progressID, text, nil)
+		return err
+	}
+	finalText := fmt.Sprintf("Schematic generated in %d attempt(s): %d blocks, %dx%dx%d occupied bounds. Target: Minecraft Java %s.", result.Attempts, result.Occupied, result.Dimensions.X, result.Dimensions.Y, result.Dimensions.Z, schematic.DefaultCatalog().MinecraftVersion)
+	if len(result.Repairs) > 0 {
+		finalText += "\n\nEarlier model errors that were repaired:\n" + formatSchematicAttemptErrors(result.Repairs, 1200)
+	}
+	if _, err = b.editText(ctx, msg.RoomID, progressID, finalText, nil); err != nil {
+		return err
+	}
+	_, err = b.sendFiles(ctx, msg.RoomID, progressID, "", []matrixOutFile{{Name: schematicArchiveName(prompt), ContentType: "application/zip", Data: result.Archive}})
+	return err
 }
 
 func (b *MatrixBot) handleSiteCommand(ctx context.Context, msg *matrixMessage, rest string, isDM bool) error {

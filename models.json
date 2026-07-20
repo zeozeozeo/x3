@@ -37,6 +37,17 @@
       }
     },
     {
+      "name": "Thinkingmachines Inkling",
+      "command": "inkling",
+      "vision": true,
+      "reasoning": true,
+      "providers": {
+        "nim": {
+          "codenames": ["thinkingmachines/inkling"]
+        }
+      }
+    },
+    {
       "name": "DeepSeek V4 Flash",
       "command": "deepseek",
       "reasoning": true,
@@ -96,19 +107,6 @@
       }
     },
     {
-      "name": "Gemma 4 31B",
-      "command": "gemma",
-      "vision": true,
-      "providers": {
-        "cerebras": {
-          "codenames": ["gemma-4-31b"]
-        },
-        "nim": {
-          "codenames": ["google/gemma-4-31b-it"]
-        }
-      }
-    },
-    {
       "name": "Mistral Large Latest",
       "command": "mistrallarge",
       "vision": true,
@@ -127,6 +125,19 @@
       "providers": {
         "mistral": {
           "codenames": ["mistral-medium-latest"]
+        }
+      }
+    },
+    {
+      "name": "Gemma 4 31B",
+      "command": "gemma",
+      "vision": true,
+      "providers": {
+        "cerebras": {
+          "codenames": ["gemma-4-31b"]
+        },
+        "nim": {
+          "codenames": ["google/gemma-4-31b-it"]
         }
       }
     },
@@ -355,6 +366,7 @@
   ],
   "default_models": [
     "GLM 5.2",
+    "Step 3.7 Flash",
     "DeepSeek V4 Pro",
     "GLM 4.7",
     "GLM 4.7 Flash",
@@ -370,7 +382,12 @@
     "Meta Llama 4 Maverick 400B/17A"
   ],
   "default_vision_models": ["NVIDIA Nemotron 3 Nano Omni 30B/A3B"],
-  "site_models": ["GLM 4.7", "GLM 4.7 Flash", "Mistral Medium Latest"],
+  "site_models": [
+    "GLM 4.7",
+    "GLM 5.2",
+    "GLM 4.7 Flash",
+    "Mistral Medium Latest"
+  ],
   "providers_order": [
     "nim",
     "openrouter",
@@ -425,5 +442,5 @@
       "native_tool_calling": true
     }
   },
-  "current_version": 57
+  "current_version": 56
 }
