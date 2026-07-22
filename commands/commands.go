@@ -26,7 +26,6 @@ var AllCommands []discord.ApplicationCommandCreate = []discord.ApplicationComman
 	ContextCommand,
 	AntiscamCommand,
 	SiteCommand,
-	SchematicCommand,
 }
 
 func init() {
@@ -109,7 +108,6 @@ func RegisterHandlers(r handler.Router) error {
 
 	mux.Command("/antiscam", HandleAntiscam)
 	mux.Command("/site", HandleSite)
-	mux.Command("/schematic", HandleSchematic)
 	mux.ButtonComponent("/sitecancel/{id}", HandleSiteCancel)
 
 	// image commands
