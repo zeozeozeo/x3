@@ -41,6 +41,7 @@ const (
 	SplitWarningPrefix       = "*SYSTEM MESSAGE: you've used >=5 splits in your previous message, try staying within 1-3 splits!*\n"
 	providerPromptTrimTarget = 8000
 	estimateCacheTTL         = 30 * time.Minute
+	providerCircuitCooldown  = 30 * time.Minute
 )
 
 var (
@@ -1370,7 +1371,7 @@ func (l *Llmer) requestCompletionInternal2(
 	if elapsed > 0 {
 		tokPerSec = float64(usage.ResponseTokens) / elapsed.Seconds()
 	}
-	slog.Info("completion received", "duration", elapsed, "tok/s", tokPerSec, "has_reasoning", reasoning != "")
+	slog.Info("completion received", "duration", elapsed, "ttft", timeToFirstToken, "tok/s", tokPerSec, "has_reasoning", reasoning != "")
 
 	unescaped := html.UnescapeString(text)
 	unescaped = strings.TrimSpace(unescaped)
@@ -1495,31 +1496,31 @@ func classifyProviderFailure(err error) model.ProviderFailure {
 		return model.ProviderFailure{}
 	}
 	if errors.Is(err, context.DeadlineExceeded) {
-		return model.ProviderFailure{Weight: 1, Cooldown: time.Minute}
+		return model.ProviderFailure{Weight: 1, Cooldown: providerCircuitCooldown}
 	}
 
 	var apiErr *openai.APIError
 	if errors.As(err, &apiErr) {
 		switch apiErr.HTTPStatusCode {
 		case http.StatusUnauthorized, http.StatusForbidden:
-			return model.ProviderFailure{Weight: 3, Cooldown: 10 * time.Minute}
+			return model.ProviderFailure{Weight: 3, Cooldown: providerCircuitCooldown}
 		case http.StatusTooManyRequests:
-			return model.ProviderFailure{Weight: 2, Cooldown: 2 * time.Minute}
+			return model.ProviderFailure{Weight: 2, Cooldown: providerCircuitCooldown}
 		default:
 			if apiErr.HTTPStatusCode >= http.StatusInternalServerError {
-				return model.ProviderFailure{Weight: 1, Cooldown: time.Minute}
+				return model.ProviderFailure{Weight: 1, Cooldown: providerCircuitCooldown}
 			}
 			if apiErr.HTTPStatusCode >= http.StatusBadRequest {
-				return model.ProviderFailure{Weight: 3, Cooldown: 5 * time.Minute}
+				return model.ProviderFailure{Weight: 3, Cooldown: providerCircuitCooldown}
 			}
 		}
 	}
 
 	var networkErr net.Error
 	if errors.As(err, &networkErr) && networkErr.Timeout() {
-		return model.ProviderFailure{Weight: 1, Cooldown: time.Minute}
+		return model.ProviderFailure{Weight: 1, Cooldown: providerCircuitCooldown}
 	}
-	return model.ProviderFailure{Weight: 1, Cooldown: 30 * time.Second}
+	return model.ProviderFailure{Weight: 1, Cooldown: providerCircuitCooldown}
 }
 
 func (l *Llmer) getDiscordSearchResults(ctx context.Context, search string) (string, map[int]string) {

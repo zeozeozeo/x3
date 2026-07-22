@@ -157,9 +157,7 @@ const (
 	// AdaptiveProviderSlowThreshold is the request duration that triggers a
 	// one-request probe of another provider for the same model.
 	AdaptiveProviderSlowThreshold = 10 * time.Second
-	adaptiveProviderRouteTTL      = 10 * time.Minute
-	adaptiveLatencyMinSamples     = 3
-	adaptiveLatencyEWMAAlpha      = 0.35
+	adaptiveProviderRouteTTL      = 30 * time.Minute
 	providerCircuitFailureLimit   = 3
 )
 
@@ -184,11 +182,6 @@ type ProviderFailure struct {
 type ProviderFailureResult struct {
 	AdaptiveFallback bool
 	CircuitOpened    bool
-}
-
-type providerLatency struct {
-	ewma    time.Duration
-	samples int
 }
 
 type providerCircuit struct {
@@ -261,7 +254,6 @@ var (
 
 	adaptiveProviderRoutesMu sync.Mutex
 	adaptiveProviderRoutes   = map[string]adaptiveProviderRoute{}
-	providerLatencies        = map[string]providerLatency{}
 	providerCircuits         = map[string]providerCircuit{}
 	adaptiveProviderNow      = time.Now
 )
@@ -493,9 +485,9 @@ func ProvidersForModel(m Model, reasoning bool) []*ScoredProvider {
 	return ordered
 }
 
-// RecordProviderSuccess records the duration of a successful request. A slow
-// provider triggers a one-request probe of another configured provider. If the
-// probe is faster than the slow request, it is preferred for ten minutes.
+// RecordProviderSuccess records the duration of a successful request. One slow
+// request triggers a trial of another configured provider; if it is faster, it
+// is preferred temporarily, otherwise the route returns to the slow provider.
 func RecordProviderSuccess(m Model, provider string, duration time.Duration) {
 	if provider == "" {
 		return
@@ -504,16 +496,7 @@ func RecordProviderSuccess(m Model, provider string, duration time.Duration) {
 
 	adaptiveProviderRoutesMu.Lock()
 	defer adaptiveProviderRoutesMu.Unlock()
-	key := providerRouteKey(m.Name, provider)
-	delete(providerCircuits, key)
-	latency := providerLatencies[key]
-	if latency.samples == 0 {
-		latency.ewma = duration
-	} else {
-		latency.ewma = time.Duration((1-adaptiveLatencyEWMAAlpha)*float64(latency.ewma) + adaptiveLatencyEWMAAlpha*float64(duration))
-	}
-	latency.samples++
-	providerLatencies[key] = latency
+	delete(providerCircuits, providerRouteKey(m.Name, provider))
 	route, probing := adaptiveProviderRoutes[m.Name]
 	if probing && !route.expiresAt.IsZero() && !now.Before(route.expiresAt) {
 		delete(adaptiveProviderRoutes, m.Name)
@@ -532,7 +515,7 @@ func RecordProviderSuccess(m Model, provider string, duration time.Duration) {
 		return
 	}
 
-	if probing || latency.samples < adaptiveLatencyMinSamples || latency.ewma <= AdaptiveProviderSlowThreshold {
+	if probing || duration <= AdaptiveProviderSlowThreshold {
 		return
 	}
 	for _, candidate := range ScoreProviders(false) {
@@ -541,7 +524,7 @@ func RecordProviderSuccess(m Model, provider string, duration time.Duration) {
 				adaptiveProviderRoutes[m.Name] = adaptiveProviderRoute{
 					slowProvider:  provider,
 					probeProvider: candidate.Name,
-					slowDuration:  latency.ewma,
+					slowDuration:  duration,
 				}
 				return
 			}
@@ -600,7 +583,6 @@ func resetAdaptiveProviderRoutes() {
 	adaptiveProviderRoutesMu.Lock()
 	defer adaptiveProviderRoutesMu.Unlock()
 	adaptiveProviderRoutes = map[string]adaptiveProviderRoute{}
-	providerLatencies = map[string]providerLatency{}
 	providerCircuits = map[string]providerCircuit{}
 }
 
