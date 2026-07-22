@@ -9,7 +9,10 @@ import (
 	"hash"
 	"hash/fnv"
 	"html"
+	"io"
 	"log/slog"
+	"net"
+	"net/http"
 	"net/url"
 	"path/filepath"
 	"regexp"
@@ -1119,6 +1122,102 @@ func (l *Llmer) executeSearchTool(ctx context.Context, name, query string, searc
 	return results, mergeCitemaps(searchCitemap, citemap)
 }
 
+// createChatCompletionWithTTFT consumes the provider's stream internally so
+// callers retain the existing non-streaming interface while the router can use
+// time-to-first-token rather than the length-dependent total response time.
+func createChatCompletionWithTTFT(ctx context.Context, client *openai.Client, req openai.ChatCompletionRequest) (openai.ChatCompletionResponse, time.Duration, error) {
+	start := time.Now()
+	stream, err := client.CreateChatCompletionStream(ctx, req)
+	if err != nil {
+		if streamingUnsupported(err) {
+			response, fallbackErr := client.CreateChatCompletion(ctx, req)
+			return response, 0, fallbackErr
+		}
+		return openai.ChatCompletionResponse{}, 0, err
+	}
+	defer stream.Close()
+
+	var response openai.ChatCompletionResponse
+	var firstToken time.Duration
+	for {
+		chunk, err := stream.Recv()
+		if errors.Is(err, io.EOF) {
+			break
+		}
+		if err != nil {
+			return openai.ChatCompletionResponse{}, firstToken, err
+		}
+		if response.ID == "" {
+			response.ID = chunk.ID
+			response.Object = chunk.Object
+			response.Created = chunk.Created
+			response.Model = chunk.Model
+			response.SystemFingerprint = chunk.SystemFingerprint
+		}
+		if chunk.Usage != nil {
+			response.Usage = *chunk.Usage
+		}
+		for _, streamedChoice := range chunk.Choices {
+			for len(response.Choices) <= streamedChoice.Index {
+				response.Choices = append(response.Choices, openai.ChatCompletionChoice{Index: len(response.Choices)})
+			}
+			choice := &response.Choices[streamedChoice.Index]
+			delta := streamedChoice.Delta
+			if delta.Role != "" {
+				choice.Message.Role = delta.Role
+			}
+			choice.Message.Content += delta.Content
+			choice.Message.Refusal += delta.Refusal
+			choice.Message.ReasoningContent += delta.ReasoningContent
+			choice.Message.Reasoning += delta.Reasoning
+			if delta.FunctionCall != nil {
+				if choice.Message.FunctionCall == nil {
+					choice.Message.FunctionCall = &openai.FunctionCall{}
+				}
+				choice.Message.FunctionCall.Name += delta.FunctionCall.Name
+				choice.Message.FunctionCall.Arguments += delta.FunctionCall.Arguments
+			}
+			for _, streamedCall := range delta.ToolCalls {
+				index := len(choice.Message.ToolCalls)
+				if streamedCall.Index != nil {
+					index = *streamedCall.Index
+				}
+				for len(choice.Message.ToolCalls) <= index {
+					choice.Message.ToolCalls = append(choice.Message.ToolCalls, openai.ToolCall{})
+				}
+				call := &choice.Message.ToolCalls[index]
+				if streamedCall.ID != "" {
+					call.ID = streamedCall.ID
+				}
+				if streamedCall.Type != "" {
+					call.Type = streamedCall.Type
+				}
+				call.Function.Name += streamedCall.Function.Name
+				call.Function.Arguments += streamedCall.Function.Arguments
+			}
+			if streamedChoice.FinishReason != "" {
+				choice.FinishReason = streamedChoice.FinishReason
+			}
+			if firstToken == 0 && (delta.Content != "" || delta.ReasoningContent != "" || delta.Reasoning != "" || delta.Refusal != "" || delta.FunctionCall != nil || len(delta.ToolCalls) > 0) {
+				firstToken = time.Since(start)
+			}
+		}
+	}
+	if len(response.Choices) == 0 {
+		return openai.ChatCompletionResponse{}, firstToken, errors.New("completion response had no choices")
+	}
+	return response, firstToken, nil
+}
+
+func streamingUnsupported(err error) bool {
+	var apiErr *openai.APIError
+	if !errors.As(err, &apiErr) || (apiErr.HTTPStatusCode != http.StatusBadRequest && apiErr.HTTPStatusCode != http.StatusNotImplemented) {
+		return false
+	}
+	message := strings.ToLower(apiErr.Message)
+	return strings.Contains(message, "stream") && (strings.Contains(message, "unsupported") || strings.Contains(message, "not support") || strings.Contains(message, "disabled"))
+}
+
 func (l *Llmer) requestCompletionInternal2(
 	m model.Model,
 	codename,
@@ -1130,7 +1229,7 @@ func (l *Llmer) requestCompletionInternal2(
 	searchDepth int,
 	searchCitemap map[int]string,
 	searchResults string,
-) (string, Usage, error) {
+) (string, Usage, time.Duration, error) {
 	if m.Limited {
 		settings = persona.InferenceSettings{}
 	}
@@ -1167,6 +1266,7 @@ func (l *Llmer) requestCompletionInternal2(
 	var message openai.ChatCompletionMessage
 	var response openai.ChatCompletionResponse
 	var usage Usage
+	var timeToFirstToken time.Duration
 	for toolDepth := 0; ; toolDepth++ {
 		if provider == model.ProviderCerebras {
 			beforeTokens := estimateChatPromptTokens(m, req.Messages)
@@ -1185,13 +1285,17 @@ func (l *Llmer) requestCompletionInternal2(
 			}
 		}
 		var err error
-		response, err = client.CreateChatCompletion(ctx, req)
+		var requestTimeToFirstToken time.Duration
+		response, requestTimeToFirstToken, err = createChatCompletionWithTTFT(ctx, client, req)
+		if timeToFirstToken == 0 {
+			timeToFirstToken = requestTimeToFirstToken
+		}
 		if err != nil {
-			return "", Usage{}, err
+			return "", Usage{}, timeToFirstToken, err
 		}
 
 		if len(response.Choices) == 0 {
-			return "", Usage{}, errors.New("completion response had no choices")
+			return "", Usage{}, timeToFirstToken, errors.New("completion response had no choices")
 		}
 
 		message = response.Choices[0].Message
@@ -1275,19 +1379,19 @@ func (l *Llmer) requestCompletionInternal2(
 	if searchDepth < 4 && l.searchToolsEnabled() {
 		if search := extractDiscordSearch(unescaped); search != "" {
 			results, citemap := l.getDiscordSearchResults(ctx, search)
-			nextRes, nextUsage, nextErr := l.requestCompletionInternal2(
+			nextRes, nextUsage, _, nextErr := l.requestCompletionInternal2(
 				m, codename, provider, settings, client, prepend, ctx,
 				searchDepth+1, citemap, results,
 			)
-			return nextRes, usage.Add(nextUsage), nextErr
+			return nextRes, usage.Add(nextUsage), timeToFirstToken, nextErr
 		}
 		if search := extractSearch(unescaped); search != "" {
 			results, citemap := getSearchResults(search)
-			nextRes, nextUsage, nextErr := l.requestCompletionInternal2(
+			nextRes, nextUsage, _, nextErr := l.requestCompletionInternal2(
 				m, codename, provider, settings, client, prepend, ctx,
 				searchDepth+1, citemap, results,
 			)
-			return nextRes, usage.Add(nextUsage), nextErr
+			return nextRes, usage.Add(nextUsage), timeToFirstToken, nextErr
 		}
 	}
 
@@ -1313,7 +1417,7 @@ func (l *Llmer) requestCompletionInternal2(
 		display = "<think>" + reasoning + "</think>\n" + display
 	}
 
-	return display, usage, nil
+	return display, usage, timeToFirstToken, nil
 }
 
 func (l *Llmer) requestCompletionInternal(
@@ -1322,7 +1426,7 @@ func (l *Llmer) requestCompletionInternal(
 	settings persona.InferenceSettings,
 	prepend string,
 	ctx context.Context,
-) (string, Usage, error) {
+) (string, Usage, time.Duration, error) {
 	slog.Debug(
 		"request completion.. message history follows..",
 		slog.String("model", m.Name),
@@ -1337,7 +1441,7 @@ func (l *Llmer) requestCompletionInternal(
 
 	baseUrls, tokens, codenames := m.Client(provider)
 	if len(baseUrls) == 0 || len(tokens) == 0 || len(codenames) == 0 {
-		return "", Usage{}, fmt.Errorf("no valid client configurations for provider %s", provider)
+		return "", Usage{}, 0, fmt.Errorf("no valid client configurations for provider %s", provider)
 	}
 
 	var lastErr error
@@ -1364,7 +1468,7 @@ func (l *Llmer) requestCompletionInternal(
 			var tokenSucceeded bool
 			for _, codename := range codenames {
 				slog.Info("attempting request", "provider", provider, "baseUrl", baseUrl, "codename", codename)
-				res, usage, err := l.requestCompletionInternal2(m, codename, provider, settings, client, prepend, ctx, 0, nil, "")
+				res, usage, timeToFirstToken, err := l.requestCompletionInternal2(m, codename, provider, settings, client, prepend, ctx, 0, nil, "")
 				if err == nil {
 					tokenSucceeded = true
 					// we got a response, but if we used a prefill, we should indicate that it was used
@@ -1372,7 +1476,7 @@ func (l *Llmer) requestCompletionInternal(
 					if prepend != "" {
 						res = fmt.Sprintf("**%s** %s", strings.ReplaceAll(strings.TrimSpace(prepend), "**", ""), res)
 					}
-					return res, usage, nil
+					return res, usage, timeToFirstToken, nil
 				}
 				lastErr = err
 				slog.Warn("request failed, trying next config", "provider", provider, "baseUrl", baseUrl, "codename", codename, "error", err)
@@ -1383,7 +1487,39 @@ func (l *Llmer) requestCompletionInternal(
 		}
 	}
 
-	return "", Usage{}, fmt.Errorf("all configurations for provider %s failed: %w", provider, lastErr) // all baseUrls/tokens/codenames errored
+	return "", Usage{}, 0, fmt.Errorf("all configurations for provider %s failed: %w", provider, lastErr) // all baseUrls/tokens/codenames errored
+}
+
+func classifyProviderFailure(err error) model.ProviderFailure {
+	if err == nil || errors.Is(err, context.Canceled) {
+		return model.ProviderFailure{}
+	}
+	if errors.Is(err, context.DeadlineExceeded) {
+		return model.ProviderFailure{Weight: 1, Cooldown: time.Minute}
+	}
+
+	var apiErr *openai.APIError
+	if errors.As(err, &apiErr) {
+		switch apiErr.HTTPStatusCode {
+		case http.StatusUnauthorized, http.StatusForbidden:
+			return model.ProviderFailure{Weight: 3, Cooldown: 10 * time.Minute}
+		case http.StatusTooManyRequests:
+			return model.ProviderFailure{Weight: 2, Cooldown: 2 * time.Minute}
+		default:
+			if apiErr.HTTPStatusCode >= http.StatusInternalServerError {
+				return model.ProviderFailure{Weight: 1, Cooldown: time.Minute}
+			}
+			if apiErr.HTTPStatusCode >= http.StatusBadRequest {
+				return model.ProviderFailure{Weight: 3, Cooldown: 5 * time.Minute}
+			}
+		}
+	}
+
+	var networkErr net.Error
+	if errors.As(err, &networkErr) && networkErr.Timeout() {
+		return model.ProviderFailure{Weight: 1, Cooldown: time.Minute}
+	}
+	return model.ProviderFailure{Weight: 1, Cooldown: 30 * time.Second}
 }
 
 func (l *Llmer) getDiscordSearchResults(ctx context.Context, search string) (string, map[int]string) {
@@ -1595,7 +1731,8 @@ func (l *Llmer) RequestCompletion(models []model.Model, settings persona.Inferen
 				}
 
 				requestStart := time.Now()
-				res, usage, err = l.requestCompletionInternal(m, provider.Name, settings.Fixup(), prepend, ctx)
+				var timeToFirstToken time.Duration
+				res, usage, timeToFirstToken, err = l.requestCompletionInternal(m, provider.Name, settings.Fixup(), prepend, ctx)
 				requestDuration := time.Since(requestStart)
 
 				// check for empty response first
@@ -1606,11 +1743,14 @@ func (l *Llmer) RequestCompletion(models []model.Model, settings persona.Inferen
 
 				if err != nil {
 					// A cancelled caller is not evidence that this provider is unhealthy.
-					adaptiveFallback := ctx.Err() == nil && model.RecordProviderFailure(m, provider.Name)
-					slog.Warn("requestCompletionInternal failed", "model", m.Name, "provider", provider.Name, "error", err, "retries", retries, "adaptiveFallback", adaptiveFallback)
+					failure := model.ProviderFailureResult{}
+					if ctx.Err() == nil {
+						failure = model.RecordProviderFailure(m, provider.Name, classifyProviderFailure(err))
+					}
+					slog.Warn("requestCompletionInternal failed", "model", m.Name, "provider", provider.Name, "error", err, "retries", retries, "adaptiveFallback", failure.AdaptiveFallback, "circuitOpened", failure.CircuitOpened)
 					lastErr = err
 					provider.Errors++
-					if adaptiveFallback {
+					if failure.AdaptiveFallback || failure.CircuitOpened {
 						// A probe or temporary preferred provider only gets one request.
 						// The next configured provider is the adaptive fallback.
 						adaptiveFallbackTriggered = true
@@ -1618,7 +1758,11 @@ func (l *Llmer) RequestCompletion(models []model.Model, settings persona.Inferen
 					}
 					continue
 				}
-				model.RecordProviderSuccess(m, provider.Name, requestDuration)
+				latency := timeToFirstToken
+				if latency <= 0 {
+					latency = requestDuration
+				}
+				model.RecordProviderSuccess(m, provider.Name, latency)
 
 				if usage.IsEmpty() {
 					usage = l.estimateUsage(m)

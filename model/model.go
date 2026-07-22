@@ -158,6 +158,9 @@ const (
 	// one-request probe of another provider for the same model.
 	AdaptiveProviderSlowThreshold = 10 * time.Second
 	adaptiveProviderRouteTTL      = 10 * time.Minute
+	adaptiveLatencyMinSamples     = 3
+	adaptiveLatencyEWMAAlpha      = 0.35
+	providerCircuitFailureLimit   = 3
 )
 
 type adaptiveProviderRoute struct {
@@ -168,6 +171,29 @@ type adaptiveProviderRoute struct {
 	preferred     string
 	fallback      string
 	expiresAt     time.Time
+}
+
+// ProviderFailure describes how strongly a failed request should count toward
+// a model/provider circuit breaker. A zero value is ignored.
+type ProviderFailure struct {
+	Weight   int
+	Cooldown time.Duration
+}
+
+// ProviderFailureResult describes routing changes caused by a failed request.
+type ProviderFailureResult struct {
+	AdaptiveFallback bool
+	CircuitOpened    bool
+}
+
+type providerLatency struct {
+	ewma    time.Duration
+	samples int
+}
+
+type providerCircuit struct {
+	failureScore int
+	openUntil    time.Time
 }
 
 var (
@@ -235,6 +261,8 @@ var (
 
 	adaptiveProviderRoutesMu sync.Mutex
 	adaptiveProviderRoutes   = map[string]adaptiveProviderRoute{}
+	providerLatencies        = map[string]providerLatency{}
+	providerCircuits         = map[string]providerCircuit{}
 	adaptiveProviderNow      = time.Now
 )
 
@@ -445,6 +473,9 @@ func ProvidersForModel(m Model, reasoning bool) []*ScoredProvider {
 		if _, configured := m.Providers[name]; !configured {
 			return
 		}
+		if providerCircuitOpen(m.Name, name, now) {
+			return
+		}
 		for _, provider := range providers {
 			if provider.Name == name {
 				ordered = append(ordered, provider)
@@ -473,6 +504,16 @@ func RecordProviderSuccess(m Model, provider string, duration time.Duration) {
 
 	adaptiveProviderRoutesMu.Lock()
 	defer adaptiveProviderRoutesMu.Unlock()
+	key := providerRouteKey(m.Name, provider)
+	delete(providerCircuits, key)
+	latency := providerLatencies[key]
+	if latency.samples == 0 {
+		latency.ewma = duration
+	} else {
+		latency.ewma = time.Duration((1-adaptiveLatencyEWMAAlpha)*float64(latency.ewma) + adaptiveLatencyEWMAAlpha*float64(duration))
+	}
+	latency.samples++
+	providerLatencies[key] = latency
 	route, probing := adaptiveProviderRoutes[m.Name]
 	if probing && !route.expiresAt.IsZero() && !now.Before(route.expiresAt) {
 		delete(adaptiveProviderRoutes, m.Name)
@@ -491,7 +532,7 @@ func RecordProviderSuccess(m Model, provider string, duration time.Duration) {
 		return
 	}
 
-	if probing || duration <= AdaptiveProviderSlowThreshold {
+	if probing || latency.samples < adaptiveLatencyMinSamples || latency.ewma <= AdaptiveProviderSlowThreshold {
 		return
 	}
 	for _, candidate := range ScoreProviders(false) {
@@ -500,7 +541,7 @@ func RecordProviderSuccess(m Model, provider string, duration time.Duration) {
 				adaptiveProviderRoutes[m.Name] = adaptiveProviderRoute{
 					slowProvider:  provider,
 					probeProvider: candidate.Name,
-					slowDuration:  duration,
+					slowDuration:  latency.ewma,
 				}
 				return
 			}
@@ -508,42 +549,82 @@ func RecordProviderSuccess(m Model, provider string, duration time.Duration) {
 	}
 }
 
-// RecordProviderFailure returns true when the failed provider was the active
-// adaptive choice. Callers should move to the next provider rather than retry
-// it, because the route has already been switched back to the slow provider.
-func RecordProviderFailure(m Model, provider string) bool {
-	if provider == "" {
-		return false
+// RecordProviderFailure updates the weighted circuit breaker and adaptive
+// route. Callers should move to the next provider when either result is set.
+func RecordProviderFailure(m Model, provider string, failure ProviderFailure) ProviderFailureResult {
+	if provider == "" || failure.Weight <= 0 {
+		return ProviderFailureResult{}
 	}
 	now := adaptiveProviderNow()
 	adaptiveProviderRoutesMu.Lock()
 	defer adaptiveProviderRoutesMu.Unlock()
+	key := providerRouteKey(m.Name, provider)
+	circuit := providerCircuits[key]
+	if !circuit.openUntil.IsZero() && !now.Before(circuit.openUntil) {
+		circuit = providerCircuit{}
+	}
+	circuit.failureScore += failure.Weight
+	result := ProviderFailureResult{}
+	if circuit.failureScore >= providerCircuitFailureLimit {
+		circuit.failureScore = 0
+		circuit.openUntil = now.Add(failure.Cooldown)
+		result.CircuitOpened = true
+	}
+	providerCircuits[key] = circuit
+
 	route, ok := adaptiveProviderRoutes[m.Name]
 	if !ok {
-		return false
+		return result
 	}
 	if !route.expiresAt.IsZero() && !now.Before(route.expiresAt) {
 		delete(adaptiveProviderRoutes, m.Name)
-		return false
+		return result
 	}
 	if route.preferred == provider {
 		route.preferred = route.fallback
 		route.fallback = ""
 		route.expiresAt = now.Add(adaptiveProviderRouteTTL)
 		adaptiveProviderRoutes[m.Name] = route
-		return true
+		result.AdaptiveFallback = true
+		return result
 	}
 	if route.probeInFlight && route.probeProvider == provider {
 		delete(adaptiveProviderRoutes, m.Name)
-		return true
+		result.AdaptiveFallback = true
+		return result
 	}
-	return false
+	return result
 }
 
 func resetAdaptiveProviderRoutes() {
 	adaptiveProviderRoutesMu.Lock()
 	defer adaptiveProviderRoutesMu.Unlock()
 	adaptiveProviderRoutes = map[string]adaptiveProviderRoute{}
+	providerLatencies = map[string]providerLatency{}
+	providerCircuits = map[string]providerCircuit{}
+}
+
+func providerRouteKey(modelName, provider string) string {
+	return modelName + "\x00" + provider
+}
+
+func circuitOpenLocked(modelName, provider string, now time.Time) bool {
+	key := providerRouteKey(modelName, provider)
+	circuit, ok := providerCircuits[key]
+	if !ok || circuit.openUntil.IsZero() {
+		return false
+	}
+	if !now.Before(circuit.openUntil) {
+		delete(providerCircuits, key)
+		return false
+	}
+	return true
+}
+
+func providerCircuitOpen(modelName, provider string, now time.Time) bool {
+	adaptiveProviderRoutesMu.Lock()
+	defer adaptiveProviderRoutesMu.Unlock()
+	return circuitOpenLocked(modelName, provider, now)
 }
 
 func init() {
