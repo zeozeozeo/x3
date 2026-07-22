@@ -1585,51 +1585,60 @@ func (l *Llmer) RequestCompletion(models []model.Model, settings persona.Inferen
 		}
 
 		slog.Info("attempting completion with model", "model", m.Name)
-		for _, provider := range model.ScoreProviders(m.Reasoning && settings.Reasoning) {
-			retries := 0
-		retry:
-			if retries >= 3 {
+		for _, provider := range model.ProvidersForModel(m, m.Reasoning && settings.Reasoning) {
+			adaptiveFallbackTriggered := false
+			for retries := 0; retries < 3; retries++ {
+				slog.Info("requesting completion", "model", m.Name, "provider", provider.Name, "providerErrors", provider.Errors, "retries", retries)
+
+				if ctx.Err() != nil {
+					return "", Usage{}, ctx.Err()
+				}
+
+				requestStart := time.Now()
+				res, usage, err = l.requestCompletionInternal(m, provider.Name, settings.Fixup(), prepend, ctx)
+				requestDuration := time.Since(requestStart)
+
+				// check for empty response first
+				if err == nil && res == "" {
+					slog.Warn("got an empty response from requestCompletionInternal", "model", m.Name, "provider", provider.Name)
+					err = errors.New("empty response received")
+				}
+
+				if err != nil {
+					// A cancelled caller is not evidence that this provider is unhealthy.
+					adaptiveFallback := ctx.Err() == nil && model.RecordProviderFailure(m, provider.Name)
+					slog.Warn("requestCompletionInternal failed", "model", m.Name, "provider", provider.Name, "error", err, "retries", retries, "adaptiveFallback", adaptiveFallback)
+					lastErr = err
+					provider.Errors++
+					if adaptiveFallback {
+						// A probe or temporary preferred provider only gets one request.
+						// The next configured provider is the adaptive fallback.
+						adaptiveFallbackTriggered = true
+						break
+					}
+					continue
+				}
+				model.RecordProviderSuccess(m, provider.Name, requestDuration)
+
+				if usage.IsEmpty() {
+					usage = l.estimateUsage(m)
+				} else if usage.ResponseTokens <= 1 {
+					// unrealistic
+					estimatedUsage := l.estimateUsage(m)
+					usage.ResponseTokens = estimatedUsage.ResponseTokens
+					usage = usage.WithTotal()
+				} else if usage.TotalTokens <= 0 || usage.TotalTokens < usage.PromptTokens+usage.ResponseTokens {
+					usage = usage.WithTotal()
+				}
+
+				slog.Info("request successful", "model", m.Name, "provider", provider.Name, "usage", usage.String())
+				return res, usage, nil // return on success
+			}
+			if adaptiveFallbackTriggered {
+				slog.Info("adaptive provider failed; trying fallback", "provider", provider.Name, "model", m.Name)
+			} else {
 				slog.Warn("max retries reached for provider", "provider", provider.Name, "model", m.Name)
-				continue
 			}
-			if _, ok := m.Providers[provider.Name]; !ok {
-				continue
-			}
-			slog.Info("requesting completion", "model", m.Name, "provider", provider.Name, "providerErrors", provider.Errors, "retries", retries)
-
-			if ctx.Err() != nil {
-				return "", Usage{}, ctx.Err()
-			}
-
-			res, usage, err = l.requestCompletionInternal(m, provider.Name, settings.Fixup(), prepend, ctx)
-
-			// check for empty response first
-			if err == nil && res == "" {
-				slog.Warn("got an empty response from requestCompletionInternal", "model", m.Name, "provider", provider.Name)
-				err = errors.New("empty response received")
-			}
-
-			if err != nil {
-				slog.Warn("requestCompletionInternal failed", "model", m.Name, "provider", provider.Name, "error", err, "retries", retries)
-				lastErr = err
-				retries++
-				provider.Errors++
-				goto retry
-			}
-
-			if usage.IsEmpty() {
-				usage = l.estimateUsage(m)
-			} else if usage.ResponseTokens <= 1 {
-				// unrealistic
-				estimatedUsage := l.estimateUsage(m)
-				usage.ResponseTokens = estimatedUsage.ResponseTokens
-				usage = usage.WithTotal()
-			} else if usage.TotalTokens <= 0 || usage.TotalTokens < usage.PromptTokens+usage.ResponseTokens {
-				usage = usage.WithTotal()
-			}
-
-			slog.Info("request successful", "model", m.Name, "provider", provider.Name, "usage", usage.String())
-			return res, usage, nil // return on success
 		}
 		slog.Warn("all providers failed for model", "model", m.Name)
 	}

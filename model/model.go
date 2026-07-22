@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/tiktoken-go/tokenizer"
@@ -152,6 +153,23 @@ type ScoredProvider struct {
 	Errors          int
 }
 
+const (
+	// AdaptiveProviderSlowThreshold is the request duration that triggers a
+	// one-request probe of another provider for the same model.
+	AdaptiveProviderSlowThreshold = 10 * time.Second
+	adaptiveProviderRouteTTL      = 10 * time.Minute
+)
+
+type adaptiveProviderRoute struct {
+	slowProvider  string
+	probeProvider string
+	slowDuration  time.Duration
+	probeInFlight bool
+	preferred     string
+	fallback      string
+	expiresAt     time.Time
+}
+
 var (
 	AllModels           []Model
 	DefaultModels       []string
@@ -214,6 +232,10 @@ var (
 	lastTokenErrorReset = time.Now()
 
 	CurrentVersion = 35
+
+	adaptiveProviderRoutesMu sync.Mutex
+	adaptiveProviderRoutes   = map[string]adaptiveProviderRoute{}
+	adaptiveProviderNow      = time.Now
 )
 
 type ModelsConfig struct {
@@ -296,6 +318,7 @@ func LoadModelsFromJSONData(data []byte) error {
 	for _, m := range AllModels {
 		modelByName[m.Name] = m
 	}
+	resetAdaptiveProviderRoutes()
 
 	return nil
 }
@@ -383,6 +406,144 @@ func ScoreProviders(reasoning bool) []*ScoredProvider {
 		return getErrors(providers[i], reasoning) < getErrors(providers[j], reasoning)
 	})
 	return providers
+}
+
+// ProvidersForModel returns configured providers in their normal score order,
+// with any temporary model-specific adaptive route moved to the front.
+// A provider that takes longer than AdaptiveProviderSlowThreshold schedules one
+// probe of the next configured provider on a later request.
+func ProvidersForModel(m Model, reasoning bool) []*ScoredProvider {
+	providers := ScoreProviders(reasoning)
+	now := adaptiveProviderNow()
+
+	adaptiveProviderRoutesMu.Lock()
+	route, ok := adaptiveProviderRoutes[m.Name]
+	if ok && !route.expiresAt.IsZero() && !now.Before(route.expiresAt) {
+		delete(adaptiveProviderRoutes, m.Name)
+		ok = false
+	}
+
+	priority := make([]string, 0, 2)
+	if ok {
+		switch {
+		case route.preferred != "":
+			priority = append(priority, route.preferred, route.fallback)
+		case !route.probeInFlight:
+			route.probeInFlight = true
+			adaptiveProviderRoutes[m.Name] = route
+			priority = append(priority, route.probeProvider, route.slowProvider)
+		}
+	}
+	adaptiveProviderRoutesMu.Unlock()
+
+	ordered := make([]*ScoredProvider, 0, len(providers))
+	added := make(map[string]bool, len(providers))
+	appendProvider := func(name string) {
+		if name == "" || added[name] {
+			return
+		}
+		if _, configured := m.Providers[name]; !configured {
+			return
+		}
+		for _, provider := range providers {
+			if provider.Name == name {
+				ordered = append(ordered, provider)
+				added[name] = true
+				return
+			}
+		}
+	}
+	for _, name := range priority {
+		appendProvider(name)
+	}
+	for _, provider := range providers {
+		appendProvider(provider.Name)
+	}
+	return ordered
+}
+
+// RecordProviderSuccess records the duration of a successful request. A slow
+// provider triggers a one-request probe of another configured provider. If the
+// probe is faster than the slow request, it is preferred for ten minutes.
+func RecordProviderSuccess(m Model, provider string, duration time.Duration) {
+	if provider == "" {
+		return
+	}
+	now := adaptiveProviderNow()
+
+	adaptiveProviderRoutesMu.Lock()
+	defer adaptiveProviderRoutesMu.Unlock()
+	route, probing := adaptiveProviderRoutes[m.Name]
+	if probing && !route.expiresAt.IsZero() && !now.Before(route.expiresAt) {
+		delete(adaptiveProviderRoutes, m.Name)
+		probing = false
+	}
+	if probing && route.probeInFlight && route.probeProvider == provider {
+		route.probeInFlight = false
+		if duration < route.slowDuration {
+			route.preferred = provider
+			route.fallback = route.slowProvider
+			route.expiresAt = now.Add(adaptiveProviderRouteTTL)
+			adaptiveProviderRoutes[m.Name] = route
+			return
+		}
+		delete(adaptiveProviderRoutes, m.Name)
+		return
+	}
+
+	if probing || duration <= AdaptiveProviderSlowThreshold {
+		return
+	}
+	for _, candidate := range ScoreProviders(false) {
+		if candidate.Name != provider {
+			if _, configured := m.Providers[candidate.Name]; configured {
+				adaptiveProviderRoutes[m.Name] = adaptiveProviderRoute{
+					slowProvider:  provider,
+					probeProvider: candidate.Name,
+					slowDuration:  duration,
+				}
+				return
+			}
+		}
+	}
+}
+
+// RecordProviderFailure returns true when the failed provider was the active
+// adaptive choice. Callers should move to the next provider rather than retry
+// it, because the route has already been switched back to the slow provider.
+func RecordProviderFailure(m Model, provider string) bool {
+	if provider == "" {
+		return false
+	}
+	now := adaptiveProviderNow()
+	adaptiveProviderRoutesMu.Lock()
+	defer adaptiveProviderRoutesMu.Unlock()
+	route, ok := adaptiveProviderRoutes[m.Name]
+	if !ok {
+		return false
+	}
+	if !route.expiresAt.IsZero() && !now.Before(route.expiresAt) {
+		delete(adaptiveProviderRoutes, m.Name)
+		return false
+	}
+	if route.preferred == provider {
+		route.preferred = route.fallback
+		route.fallback = ""
+		route.expiresAt = now.Add(adaptiveProviderRouteTTL)
+		adaptiveProviderRoutes[m.Name] = route
+		return true
+	}
+	if route.probeInFlight && route.probeProvider == provider {
+		delete(adaptiveProviderRoutes, m.Name)
+		return true
+	}
+	return false
+}
+
+func resetAdaptiveProviderRoutes() {
+	adaptiveProviderRoutesMu.Lock()
+	defer adaptiveProviderRoutesMu.Unlock()
+	adaptiveProviderRoutes = map[string]adaptiveProviderRoute{}
 }
 
 func init() {
