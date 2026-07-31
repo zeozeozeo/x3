@@ -12,6 +12,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode"
 
 	"unicode/utf8"
 
@@ -77,6 +78,88 @@ func isIndentedListContinuation(line string) bool {
 	return strings.HasPrefix(line, " ") || strings.HasPrefix(line, "\t")
 }
 
+func normalizeLlmMarkdownLine(line string) string {
+	trimmed := strings.TrimSpace(line)
+	if len(trimmed) >= 3 && strings.Trim(trimmed, "*") == "" {
+		return ""
+	}
+
+	runes := []rune(line)
+	remove := make([]bool, len(runes))
+	openers := make([]int, 0, 4)
+	inCodeSpan := false
+
+	for i := 0; i < len(runes); {
+		if runes[i] == '`' && !isEscapedRune(runes, i) {
+			inCodeSpan = !inCodeSpan
+			i++
+			continue
+		}
+		if inCodeSpan || runes[i] != '*' || isEscapedRune(runes, i) {
+			i++
+			continue
+		}
+
+		start := i
+		for i < len(runes) && runes[i] == '*' && !isEscapedRune(runes, i) {
+			i++
+		}
+		end := i
+		before := start > 0 && !unicode.IsSpace(runes[start-1])
+		after := end < len(runes) && !unicode.IsSpace(runes[end])
+		if !before && !after {
+			continue
+		}
+
+		canClose := before
+		canOpen := after
+		if canClose && len(openers) > 0 {
+			matched := min(end-start, len(openers))
+			for range matched {
+				openers = openers[:len(openers)-1]
+			}
+			for j := start; j < start+matched; j++ {
+				remove[j] = false
+			}
+			start += matched
+		}
+
+		if canOpen {
+			for j := start; j < end; j++ {
+				openers = append(openers, j)
+			}
+		} else {
+			for j := start; j < end; j++ {
+				remove[j] = true
+			}
+		}
+	}
+
+	for _, index := range openers {
+		remove[index] = true
+	}
+	if !slices.Contains(remove, true) {
+		return line
+	}
+
+	var normalized strings.Builder
+	normalized.Grow(len(line))
+	for i, r := range runes {
+		if !remove[i] {
+			normalized.WriteRune(r)
+		}
+	}
+	return normalized.String()
+}
+
+func isEscapedRune(runes []rune, index int) bool {
+	backslashes := 0
+	for i := index - 1; i >= 0 && runes[i] == '\\'; i-- {
+		backslashes++
+	}
+	return backslashes%2 == 1
+}
+
 func splitResponseChunk(response string) (messages []string) {
 	response = strings.ReplaceAll(response, "\r\n", "\n")
 	response = strings.ReplaceAll(response, "\r", "\n")
@@ -107,6 +190,13 @@ func splitResponseChunk(response string) (messages []string) {
 
 	lines := strings.Split(response, "\n")
 	for _, line := range lines {
+		if !inCodeBlock {
+			normalized := normalizeLlmMarkdownLine(line)
+			if normalized == "" && strings.TrimSpace(line) != "" {
+				continue
+			}
+			line = normalized
+		}
 		trimmed := strings.TrimSpace(line)
 		isFence := strings.HasPrefix(trimmed, "```")
 		isBlank := trimmed == ""
