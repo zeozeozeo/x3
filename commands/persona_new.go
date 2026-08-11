@@ -98,6 +98,21 @@ func personaMakerBarebonesSuggestionMessage() discord.MessageCreate {
 		WithComponents(personaMakerBarebonesSuggestionButtons())
 }
 
+func personaMakerContextEmbed(description string) discord.Embed {
+	return discord.NewEmbed().
+		WithColor(0x0085ff).
+		WithTitle("Context mode active").
+		WithDescription(description).
+		WithFooter("x3", x3Icon).
+		WithTimestamp(time.Now())
+}
+
+func personaMakerContextMessage(description string) discord.MessageCreate {
+	return discord.NewMessageCreate().
+		AddEmbeds(personaMakerContextEmbed(description)).
+		WithComponents(personaMakerContextStopButton())
+}
+
 func formatCardField(s string) string {
 	if s == "" {
 		return "`<unset>`"
@@ -307,42 +322,44 @@ func handlePersonaMakerContext(event *handler.CommandEvent) error {
 		cache.PersonaNewFlow = nil
 	}
 
-	cache.PersonaMakerContextMode = true
-	cache.PersonaMakerContextUserID = event.User().ID
-	cache.PersonaMakerContextSuggestionUserID = 0
-	if err := cache.Write(event.Channel().ID()); err != nil {
-		return sendInteractionError(event, "Failed to start context mode: "+err.Error(), true)
+	if cache.PersonaMakerContextMessageID != 0 {
+		if err := event.Client().Rest.DeleteMessage(event.Channel().ID(), cache.PersonaMakerContextMessageID); err != nil {
+			slog.Debug("failed to delete previous persona maker context message", "err", err)
+		}
 	}
 
-	return event.CreateMessage(
-		discord.NewMessageCreate().
-			AddEmbeds(discord.NewEmbed().
-				WithColor(0x0085ff).
-				WithTitle("Context mode active").
-				WithDescription("Every message you send will be added to this channel's context. Click ❌ to stop.").
-				WithFooter("x3", x3Icon).
-				WithTimestamp(time.Now())).
+	if err := event.DeferCreateMessage(false); err != nil {
+		return err
+	}
+	message, err := event.UpdateInteractionResponse(
+		discord.NewMessageUpdate().
+			AddEmbeds(personaMakerContextEmbed("Every message you send will be added to this channel's context. Click ❌ to stop.")).
 			WithComponents(personaMakerContextStopButton()),
 	)
+	if err != nil {
+		return err
+	}
+
+	cache.PersonaMakerContextMode = true
+	cache.PersonaMakerContextMessageID = message.ID
+	if err := cache.Write(event.Channel().ID()); err != nil {
+		slog.Error("failed to save persona maker context mode", "err", err, "channel_id", event.Channel().ID())
+	}
+	return nil
 }
 
 func HandlePersonaMakerContextStop(data discord.ButtonInteractionData, event *handler.ComponentEvent) error {
-	cache := db.GetChannelCache(event.Channel().ID())
-	if cache.PersonaMakerContextUserID != event.User().ID {
-		return event.CreateMessage(discord.NewMessageCreate().WithContent("Only the user who started context mode can stop it.").WithEphemeral(true))
+	if event.GuildID() != nil {
+		return event.CreateMessage(discord.NewMessageCreate().WithContent("Context mode is only available in DMs.").WithEphemeral(true))
 	}
+	cache := db.GetChannelCache(event.Channel().ID())
 	if !cache.PersonaMakerContextMode {
 		return event.CreateMessage(discord.NewMessageCreate().WithContent("Context mode is already stopped.").WithEphemeral(true))
 	}
 
 	shouldSuggestBarebones := cache.PersonaMeta.Name != persona.PersonaBarebones.Name
 	cache.PersonaMakerContextMode = false
-	cache.PersonaMakerContextUserID = 0
-	if shouldSuggestBarebones {
-		cache.PersonaMakerContextSuggestionUserID = event.User().ID
-	} else {
-		cache.PersonaMakerContextSuggestionUserID = 0
-	}
+	cache.PersonaMakerContextMessageID = 0
 	if err := cache.Write(event.Channel().ID()); err != nil {
 		return sendInteractionErrorComponent(event, "Failed to stop context mode: "+err.Error(), true)
 	}
@@ -376,20 +393,18 @@ func preservePersonaMakerContextState(cache, latest *db.ChannelCache) {
 		return
 	}
 	cache.PersonaMakerContextMode = latest.PersonaMakerContextMode
-	cache.PersonaMakerContextUserID = latest.PersonaMakerContextUserID
-	cache.PersonaMakerContextSuggestionUserID = latest.PersonaMakerContextSuggestionUserID
+	cache.PersonaMakerContextMessageID = latest.PersonaMakerContextMessageID
 }
 
 func HandlePersonaMakerBarebonesSuggestion(data discord.ButtonInteractionData, event *handler.ComponentEvent) error {
-	cache := db.GetChannelCache(event.Channel().ID())
-	if cache.PersonaMakerContextSuggestionUserID != event.User().ID {
-		return event.CreateMessage(discord.NewMessageCreate().WithContent("Only the user who stopped context mode can use this suggestion.").WithEphemeral(true))
+	if event.GuildID() != nil {
+		return event.CreateMessage(discord.NewMessageCreate().WithContent("This suggestion is only available in DMs.").WithEphemeral(true))
 	}
+	cache := db.GetChannelCache(event.Channel().ID())
 
 	switch data.CustomID() {
 	case personaMakerBarebonesAcceptID:
 		applyBarebonesPersona(cache)
-		cache.PersonaMakerContextSuggestionUserID = 0
 		if err := cache.Write(event.Channel().ID()); err != nil {
 			return sendInteractionErrorComponent(event, "Failed to switch to Barebones: "+err.Error(), true)
 		}
@@ -411,10 +426,6 @@ func HandlePersonaMakerBarebonesSuggestion(data discord.ButtonInteractionData, e
 		return err
 
 	case personaMakerBarebonesDeclineID:
-		cache.PersonaMakerContextSuggestionUserID = 0
-		if err := cache.Write(event.Channel().ID()); err != nil {
-			return sendInteractionErrorComponent(event, "Failed to dismiss Barebones suggestion: "+err.Error(), true)
-		}
 		if err := event.DeferUpdateMessage(); err != nil {
 			return err
 		}

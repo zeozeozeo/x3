@@ -216,14 +216,35 @@ func OnMessageCreate(event *events.MessageCreate) {
 	cache := db.GetChannelCache(event.ChannelID)
 
 	// /personamaker context captures each user message as a context item.
-	if cache.PersonaMakerContextMode && cache.PersonaMakerContextUserID == event.Message.Author.ID {
+	if event.GuildID == nil && cache.PersonaMakerContextMode {
 		content := strings.TrimSpace(getMessageContent(event.Message))
 		if content != "" {
 			cache.Context = append(cache.Context, content)
+			if cache.PersonaMakerContextMessageID != 0 {
+				if err := event.Client().Rest.DeleteMessage(event.ChannelID, cache.PersonaMakerContextMessageID); err != nil {
+					slog.Debug("failed to delete previous persona maker context message", "err", err, "channel_id", event.ChannelID)
+				}
+			}
+
+			message, err := event.Client().Rest.CreateMessage(
+				event.ChannelID,
+				personaMakerContextMessage("Added your message to context. Every message you send will be added to this channel's context. Click ❌ to stop."),
+			)
+			if err != nil {
+				slog.Error("failed to post persona maker context confirmation", "err", err, "channel_id", event.ChannelID)
+			} else {
+				cache.PersonaMakerContextMessageID = message.ID
+			}
+
 			if err := cache.Write(event.ChannelID); err != nil {
 				slog.Error("failed to save captured persona maker context", "err", err, "channel_id", event.ChannelID)
 			}
+
+			if err := event.Client().Rest.AddReaction(event.ChannelID, event.MessageID, "✅"); err != nil {
+				slog.Debug("failed to add context confirmation reaction", "err", err, "channel_id", event.ChannelID, "message_id", event.MessageID)
+			}
 		}
+		return
 	}
 
 	// trigger commands (e.g. "x3 say" "x3 quote"), available when blacklisted
