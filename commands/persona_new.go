@@ -78,7 +78,7 @@ func personaMakerBarebonesSuggestionButtons() discord.LayoutComponent {
 			CustomID: personaMakerBarebonesAcceptID,
 		},
 		discord.ButtonComponent{
-			Style:    discord.ButtonStyleDanger,
+			Style:    discord.ButtonStyleSecondary,
 			Emoji:    &discord.ComponentEmoji{Name: "\u274c"},
 			CustomID: personaMakerBarebonesDeclineID,
 		},
