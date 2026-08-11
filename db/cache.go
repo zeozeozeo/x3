@@ -60,6 +60,10 @@ type ChannelCache struct {
 	Memories []string `json:"memories,omitempty"`
 	// Context is a list of user-defined context strings.
 	Context []string `json:"context,omitempty"`
+	// PersonaMakerContextMode enables automatic context capture for /personamaker context.
+	PersonaMakerContextMode             bool         `json:"persona_maker_context_mode,omitempty"`
+	PersonaMakerContextUserID           snowflake.ID `json:"persona_maker_context_user_id,omitempty"`
+	PersonaMakerContextSuggestionUserID snowflake.ID `json:"persona_maker_context_suggestion_user_id,omitempty"`
 	// MessagesSinceSummary tracks the number of messages since the last summary update.
 	MessagesSinceSummary int                  `json:"messages_since_summary"`
 	PersonaNewFlow       *PersonaNewFlow      `json:"persona_new_flow,omitempty"`

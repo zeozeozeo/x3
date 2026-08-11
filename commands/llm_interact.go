@@ -641,6 +641,7 @@ func handleLlmInteraction2(
 		}
 	}
 	cache.UpdateInteractionTime()
+	preservePersonaMakerContextState(cache, db.GetChannelCache(channelID))
 	if err := cache.Write(channelID); err != nil {
 		slog.Error("failed to write channel cache after interaction", "err", err, slog.String("channel_id", channelID.String()))
 	}

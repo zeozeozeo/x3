@@ -46,7 +46,56 @@ var PersonaMakerCommand = discord.SlashCommandCreate{
 				},
 			},
 		},
+		discord.ApplicationCommandOptionSubCommand{
+			Name:        "context",
+			Description: "Automatically add your messages to this channel's context",
+		},
 	},
+}
+
+const (
+	personaMakerContextStopID        = "/personamaker/contextstop"
+	personaMakerBarebonesAcceptID    = "/personamaker/barebones/accept"
+	personaMakerBarebonesDeclineID   = "/personamaker/barebones/decline"
+	personaMakerBarebonesPromptTitle = "Switch to Barebones persona?"
+)
+
+func personaMakerContextStopButton() discord.LayoutComponent {
+	return discord.NewActionRow(
+		discord.ButtonComponent{
+			Style:    discord.ButtonStyleSecondary,
+			Emoji:    &discord.ComponentEmoji{Name: "❌"},
+			CustomID: personaMakerContextStopID,
+		},
+	)
+}
+
+func personaMakerBarebonesSuggestionButtons() discord.LayoutComponent {
+	return discord.NewActionRow(
+		discord.ButtonComponent{
+			Style:    discord.ButtonStyleSuccess,
+			Emoji:    &discord.ComponentEmoji{Name: "\u2705"},
+			CustomID: personaMakerBarebonesAcceptID,
+		},
+		discord.ButtonComponent{
+			Style:    discord.ButtonStyleDanger,
+			Emoji:    &discord.ComponentEmoji{Name: "\u274c"},
+			CustomID: personaMakerBarebonesDeclineID,
+		},
+	)
+}
+
+func personaMakerBarebonesSuggestionMessage() discord.MessageCreate {
+	return discord.NewMessageCreate().
+		AddEmbeds(
+			discord.NewEmbed().
+				WithColor(0x5865f2).
+				WithTitle(personaMakerBarebonesPromptTitle).
+				WithDescription("Barebones keeps the useful chat formatting and your additional context instructions, without imposing a character persona. It can make building a new persona easier.").
+				WithFooter("x3", x3Icon).
+				WithTimestamp(time.Now()),
+		).
+		WithComponents(personaMakerBarebonesSuggestionButtons())
 }
 
 func formatCardField(s string) string {
@@ -239,8 +288,140 @@ func HandlePersonaMaker(event *handler.CommandEvent) error {
 		return handlePersonaMakerEdit(event)
 	case "delete":
 		return handlePersonaMakerDelete(event)
+	case "context":
+		return handlePersonaMakerContext(event)
 	default:
 		return sendInteractionError(event, "Unknown subcommand", true)
+	}
+}
+
+func handlePersonaMakerContext(event *handler.CommandEvent) error {
+	cache := db.GetChannelCache(event.Channel().ID())
+
+	if cache.PersonaNewFlow != nil {
+		if cache.PersonaNewFlow.FlowMessageID != 0 {
+			if err := event.Client().Rest.DeleteMessage(event.Channel().ID(), cache.PersonaNewFlow.FlowMessageID); err != nil {
+				slog.Debug("failed to delete previous persona maker flow message", "err", err)
+			}
+		}
+		cache.PersonaNewFlow = nil
+	}
+
+	cache.PersonaMakerContextMode = true
+	cache.PersonaMakerContextUserID = event.User().ID
+	cache.PersonaMakerContextSuggestionUserID = 0
+	if err := cache.Write(event.Channel().ID()); err != nil {
+		return sendInteractionError(event, "Failed to start context mode: "+err.Error(), true)
+	}
+
+	return event.CreateMessage(
+		discord.NewMessageCreate().
+			AddEmbeds(discord.NewEmbed().
+				WithColor(0x0085ff).
+				WithTitle("Context mode active").
+				WithDescription("Every message you send will be added to this channel's context. Click ❌ to stop.").
+				WithFooter("x3", x3Icon).
+				WithTimestamp(time.Now())).
+			WithComponents(personaMakerContextStopButton()),
+	)
+}
+
+func HandlePersonaMakerContextStop(data discord.ButtonInteractionData, event *handler.ComponentEvent) error {
+	cache := db.GetChannelCache(event.Channel().ID())
+	if cache.PersonaMakerContextUserID != event.User().ID {
+		return event.CreateMessage(discord.NewMessageCreate().WithContent("Only the user who started context mode can stop it.").WithEphemeral(true))
+	}
+	if !cache.PersonaMakerContextMode {
+		return event.CreateMessage(discord.NewMessageCreate().WithContent("Context mode is already stopped.").WithEphemeral(true))
+	}
+
+	shouldSuggestBarebones := cache.PersonaMeta.Name != persona.PersonaBarebones.Name
+	cache.PersonaMakerContextMode = false
+	cache.PersonaMakerContextUserID = 0
+	if shouldSuggestBarebones {
+		cache.PersonaMakerContextSuggestionUserID = event.User().ID
+	} else {
+		cache.PersonaMakerContextSuggestionUserID = 0
+	}
+	if err := cache.Write(event.Channel().ID()); err != nil {
+		return sendInteractionErrorComponent(event, "Failed to stop context mode: "+err.Error(), true)
+	}
+
+	if err := event.DeferUpdateMessage(); err != nil {
+		return err
+	}
+	_, err := event.UpdateInteractionResponse(discord.NewMessageUpdate().ClearComponents())
+	if err != nil || !shouldSuggestBarebones {
+		return err
+	}
+	_, err = event.CreateFollowupMessage(personaMakerBarebonesSuggestionMessage())
+	return err
+}
+
+func applyBarebonesPersona(cache *db.ChannelCache) {
+	meta := cache.PersonaMeta.DeepCopy()
+	meta.Name = persona.PersonaBarebones.Name
+	meta.Desc = persona.PersonaBarebones.Desc
+	meta.System = ""
+	meta.FirstMes = nil
+	meta.NextMes = nil
+	meta.IsFirstMes = false
+	meta.TavernCard = nil
+	meta.ChatPreset = nil
+	cache.PersonaMeta = meta
+}
+
+func preservePersonaMakerContextState(cache, latest *db.ChannelCache) {
+	if cache == nil || latest == nil {
+		return
+	}
+	cache.PersonaMakerContextMode = latest.PersonaMakerContextMode
+	cache.PersonaMakerContextUserID = latest.PersonaMakerContextUserID
+	cache.PersonaMakerContextSuggestionUserID = latest.PersonaMakerContextSuggestionUserID
+}
+
+func HandlePersonaMakerBarebonesSuggestion(data discord.ButtonInteractionData, event *handler.ComponentEvent) error {
+	cache := db.GetChannelCache(event.Channel().ID())
+	if cache.PersonaMakerContextSuggestionUserID != event.User().ID {
+		return event.CreateMessage(discord.NewMessageCreate().WithContent("Only the user who stopped context mode can use this suggestion.").WithEphemeral(true))
+	}
+
+	switch data.CustomID() {
+	case personaMakerBarebonesAcceptID:
+		applyBarebonesPersona(cache)
+		cache.PersonaMakerContextSuggestionUserID = 0
+		if err := cache.Write(event.Channel().ID()); err != nil {
+			return sendInteractionErrorComponent(event, "Failed to switch to Barebones: "+err.Error(), true)
+		}
+		if err := event.DeferUpdateMessage(); err != nil {
+			return err
+		}
+		_, err := event.UpdateInteractionResponse(
+			discord.NewMessageUpdate().
+				AddEmbeds(
+					discord.NewEmbed().
+						WithColor(0x57f287).
+						WithTitle("Switched to Barebones").
+						WithDescription("The neutral Barebones persona is now active.").
+						WithFooter("x3", x3Icon).
+						WithTimestamp(time.Now()),
+				).
+				ClearComponents(),
+		)
+		return err
+
+	case personaMakerBarebonesDeclineID:
+		cache.PersonaMakerContextSuggestionUserID = 0
+		if err := cache.Write(event.Channel().ID()); err != nil {
+			return sendInteractionErrorComponent(event, "Failed to dismiss Barebones suggestion: "+err.Error(), true)
+		}
+		if err := event.DeferUpdateMessage(); err != nil {
+			return err
+		}
+		return event.Client().Rest.DeleteMessage(event.Channel().ID(), event.Message.ID)
+
+	default:
+		return fmt.Errorf("invalid Barebones suggestion button: %s", data.CustomID())
 	}
 }
 
@@ -519,12 +700,11 @@ func HandlePersonaNewSetButton(data discord.ButtonInteractionData, event *handle
 	)
 }
 
-func maybeHandlePersonaNewFlowMessage(event *events.MessageCreate) bool {
+func maybeHandlePersonaNewFlowMessage(event *events.MessageCreate, cache *db.ChannelCache) bool {
 	if event.GuildID != nil || event.Message.Content == "" {
 		return false
 	}
 
-	cache := db.GetChannelCache(event.ChannelID)
 	if cache.PersonaNewFlow == nil {
 		return false
 	}

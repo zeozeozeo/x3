@@ -75,6 +75,9 @@ func RegisterHandlers(r handler.Router) error {
 	mux.Command("/blacklist", HandleBlacklist)
 	mux.Command("/personamaker", HandlePersonaMaker)
 	mux.Autocomplete("/personamaker", HandlePersonaMakerDeleteAutocomplete)
+	r.ButtonComponent(personaMakerBarebonesAcceptID, HandlePersonaMakerBarebonesSuggestion)
+	r.ButtonComponent(personaMakerBarebonesDeclineID, HandlePersonaMakerBarebonesSuggestion)
+	r.ButtonComponent(personaMakerContextStopID, HandlePersonaMakerContextStop)
 	r.ButtonComponent("/personamaker/{id}", HandlePersonaNewSetButton)
 
 	// /quote

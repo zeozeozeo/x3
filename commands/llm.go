@@ -298,6 +298,7 @@ func HandleLlm(event *handler.CommandEvent, models []model.Model) error {
 			cache.Summaries[i].Age++
 		}
 	}
+	preservePersonaMakerContextState(cache, db.GetChannelCache(event.Channel().ID()))
 	if useCache {
 		cache.Llmer = llmer
 		if cache.ImportedHistory != nil {

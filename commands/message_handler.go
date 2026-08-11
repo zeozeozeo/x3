@@ -213,6 +213,18 @@ func OnMessageCreate(event *events.MessageCreate) {
 	if handleCharacterCardImage(event) {
 		return
 	}
+	cache := db.GetChannelCache(event.ChannelID)
+
+	// /personamaker context captures each user message as a context item.
+	if cache.PersonaMakerContextMode && cache.PersonaMakerContextUserID == event.Message.Author.ID {
+		content := strings.TrimSpace(getMessageContent(event.Message))
+		if content != "" {
+			cache.Context = append(cache.Context, content)
+			if err := cache.Write(event.ChannelID); err != nil {
+				slog.Error("failed to save captured persona maker context", "err", err, "channel_id", event.ChannelID)
+			}
+		}
+	}
 
 	// trigger commands (e.g. "x3 say" "x3 quote"), available when blacklisted
 	if isTriggerCommand(event, "quote") {
@@ -236,7 +248,7 @@ func OnMessageCreate(event *events.MessageCreate) {
 
 	// is this a DM?
 	if !shouldTriggerLlm && event.GuildID == nil {
-		if maybeHandlePersonaNewFlowMessage(event) {
+		if maybeHandlePersonaNewFlowMessage(event, cache) {
 			return
 		}
 		shouldTriggerLlm = true
@@ -264,7 +276,6 @@ func OnMessageCreate(event *events.MessageCreate) {
 
 	// recent interaction?
 	if !shouldTriggerLlm && event.Message.ReferencedMessage == nil {
-		cache := db.GetChannelCache(event.ChannelID)
 		if shouldTriggerContinuation(cache, getMessageContent(event.Message)) {
 			shouldTriggerLlm = true
 		}
