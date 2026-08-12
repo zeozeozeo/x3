@@ -1,6 +1,8 @@
 package commands
 
 import (
+	cryptorand "crypto/rand"
+	"encoding/hex"
 	"fmt"
 	"log/slog"
 	"math/rand/v2"
@@ -35,18 +37,19 @@ type abCompletionResult struct {
 type abComparison struct {
 	mu sync.Mutex
 
-	RequesterID  snowflake.ID
-	ChannelID    snowflake.ID
-	messageID    snowflake.ID
-	DefaultModel string
-	ABModel      string
-	ResponseA    string
-	ResponseB    string
-	Selected     rune
-	Completed    bool
+	RequesterID   snowflake.ID
+	ChannelID     snowflake.ID
+	messageID     snowflake.ID
+	interactionID string
+	DefaultModel  string
+	ABModel       string
+	ResponseA     string
+	ResponseB     string
+	Selected      rune
+	Completed     bool
 }
 
-var abComparisons sync.Map // message ID string -> *abComparison
+var abComparisons sync.Map // interaction ID string -> *abComparison
 
 func isABComparisonMessage(message discord.Message) bool {
 	return strings.HasPrefix(message.Content, abComparisonIntro)
@@ -171,10 +174,9 @@ func abComparisonComponents(comparison *abComparison) discord.LayoutComponent {
 	)
 }
 
-// comparisonID is replaced by the map key when the prompt is created. The
-// field is intentionally kept out of the public state object.
+// comparisonID is a locally generated token used in component custom IDs.
 func comparisonID(comparison *abComparison) string {
-	return comparison.messageID.String()
+	return comparison.interactionID
 }
 
 func buttonStyleForSelection(selected, button rune) discord.ButtonStyle {
@@ -185,8 +187,16 @@ func buttonStyleForSelection(selected, button rune) discord.ButtonStyle {
 }
 
 func sendABComparison(client *bot.Client, comparison *abComparison, referenceID snowflake.ID) error {
+	var tokenBytes [8]byte
+	if _, err := cryptorand.Read(tokenBytes[:]); err != nil {
+		return fmt.Errorf("generate A/B interaction ID: %w", err)
+	}
+	comparison.interactionID = hex.EncodeToString(tokenBytes[:])
+	comparison.Selected = 'A'
+
 	message := discord.NewMessageCreate().
-		WithContent(comparisonContent("", "")).
+		WithContent(comparisonContent("A", comparison.ResponseA)).
+		WithComponents(abComparisonComponents(comparison)).
 		WithAllowedMentions(&discord.AllowedMentions{RepliedUser: false})
 	if referenceID != 0 {
 		message = message.WithMessageReferenceByID(referenceID)
@@ -197,15 +207,9 @@ func sendABComparison(client *bot.Client, comparison *abComparison, referenceID 
 		return err
 	}
 	comparison.messageID = sent.ID
-	abComparisons.Store(sent.ID.String(), comparison)
-	if _, err := client.Rest.UpdateMessage(comparison.ChannelID, sent.ID,
-		discord.NewMessageUpdate().WithComponents(abComparisonComponents(comparison))); err != nil {
-		abComparisons.Delete(sent.ID.String())
-		_ = client.Rest.DeleteMessage(comparison.ChannelID, sent.ID)
-		return err
-	}
+	abComparisons.Store(comparison.interactionID, comparison)
 	time.AfterFunc(abComparisonTTL, func() {
-		abComparisons.Delete(sent.ID.String())
+		abComparisons.Delete(comparison.interactionID)
 	})
 
 	if err := db.RecordABComparison(comparison.DefaultModel, comparison.ABModel); err != nil {
