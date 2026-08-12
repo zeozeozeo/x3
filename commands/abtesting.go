@@ -79,17 +79,39 @@ func chooseABModel(active []model.Model, shouldTry bool) (model.Model, bool) {
 		activeNames[current.Name] = struct{}{}
 	}
 
+	configuredModels := make(map[string]model.Model, len(model.AllModels))
+	for _, configured := range model.AllModels {
+		configuredModels[configured.Name] = configured
+	}
+
 	candidates := make([]model.Model, 0, len(model.ABPool))
-	for _, candidate := range model.GetModelsByNames(model.ABPool) {
+	seen := make(map[string]struct{}, len(model.ABPool))
+	for _, candidateName := range model.ABPool {
+		candidate, exists := configuredModels[candidateName]
+		if !exists {
+			slog.Warn("skipping unknown A/B pool model", "model", candidateName)
+			continue
+		}
 		if _, exists := activeNames[candidate.Name]; exists {
 			continue
 		}
+		if _, exists := seen[candidate.Name]; exists {
+			continue
+		}
+		seen[candidate.Name] = struct{}{}
 		candidates = append(candidates, candidate)
 	}
 	if len(candidates) == 0 {
 		return model.Model{}, false
 	}
-	return candidates[rand.IntN(len(candidates))], true
+
+	picked := candidates[rand.IntN(len(candidates))]
+	candidateNames := make([]string, len(candidates))
+	for i, candidate := range candidates {
+		candidateNames[i] = candidate.Name
+	}
+	slog.Debug("selected A/B model", "candidates", candidateNames, "selected", picked.Name)
+	return picked, true
 }
 
 func comparisonContent(responseLabel, response string) string {
