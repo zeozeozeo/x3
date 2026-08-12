@@ -632,12 +632,26 @@ func handleLlmInteraction2(
 
 	if abDone != nil {
 		abResult := <-abDone // default response has already been sent above
+		defaultMessageID := snowflake.ID(0)
+		if botMessage != nil {
+			defaultMessageID = botMessage.ID
+		}
+		slog.Info("A/B completion finished",
+			"model", abModel.Name,
+			"error", abResult.err,
+			"response_len", len(abResult.response),
+			"default_message_id", defaultMessageID,
+		)
 		if !abResult.usage.IsEmpty() {
 			usage = usage.Add(abResult.usage)
 		}
-		if abResult.err == nil && botMessage != nil {
+		if abResult.err == nil {
 			abResponse := cleanABResponse(abResult.response)
 			if strings.TrimSpace(abResponse) != "" {
+				referenceID := messageID
+				if botMessage != nil {
+					referenceID = botMessage.ID
+				}
 				comparison := &abComparison{
 					RequesterID:  userID,
 					ChannelID:    channelID,
@@ -646,9 +660,11 @@ func handleLlmInteraction2(
 					ResponseA:    response,
 					ResponseB:    abResponse,
 				}
-				if err := sendABComparison(client, comparison, botMessage.ID); err != nil {
+				if err := sendABComparison(client, comparison, referenceID); err != nil {
 					slog.Warn("failed to send A/B comparison", "err", err)
 				}
+			} else {
+				slog.Warn("A/B response was empty after cleanup", "model", abModel.Name)
 			}
 		} else if abResult.err != nil {
 			slog.Debug("A/B completion failed", "model", abModel.Name, "err", abResult.err)
