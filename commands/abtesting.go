@@ -247,9 +247,17 @@ func HandleABTestButton(data discord.ButtonInteractionData, event *handler.Compo
 			return err
 		}
 		abComparisons.Delete(comparisonID)
-		_, err := event.UpdateInteractionResponse(discord.NewMessageUpdate().
-			WithContent(comparisonContent(string(selected), map[rune]string{'A': comparison.ResponseA, 'B': comparison.ResponseB}[selected]) + "\n\nVote recorded.").
-			ClearComponents())
+		if err := event.Client().Rest.DeleteMessage(event.Message.ChannelID, event.Message.ID); err != nil {
+			return err
+		}
+
+		modelName := comparison.DefaultModel
+		if selected == 'B' {
+			modelName = comparison.ABModel
+		}
+		_, err := event.CreateFollowupMessage(discord.NewMessageCreate().
+			WithContent(fmt.Sprintf("The model was: %s", modelName)).
+			WithEphemeral(true))
 		return err
 	case "close":
 		comparison.Completed = true
