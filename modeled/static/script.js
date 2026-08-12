@@ -85,7 +85,9 @@ async function loadConfig() {
     if (!response.ok) throw new Error("Failed to load configuration");
 
     currentConfig = await response.json();
+    currentConfig.ab_pool = currentConfig.ab_pool || [];
     renderConfig();
+    await loadABStats();
     showStatus("Configuration loaded successfully", "success");
   } catch (error) {
     showStatus(`Error loading configuration: ${error.message}`, "error");
@@ -245,6 +247,57 @@ function renderDefaults() {
     currentConfig.site_models,
     "site_models",
   );
+  renderDefaultModels("ab-pool", currentConfig.ab_pool, "ab_pool");
+}
+
+async function loadABStats() {
+  const container = document.getElementById("ab-stats");
+  if (!container) return;
+  try {
+    const response = await fetch("/api/ab-stats");
+    if (!response.ok) throw new Error("Failed to load A/B statistics");
+    renderABStats(await response.json());
+  } catch (error) {
+    container.innerHTML = `<div class="empty-state"><p>${escapeHtml(error.message)}</p></div>`;
+  }
+}
+
+function renderABStats(stats) {
+  const summary = document.getElementById("ab-stats-summary");
+  const container = document.getElementById("ab-stats");
+  if (!summary || !container) return;
+
+  const totals = stats.totals || {};
+  summary.innerHTML = `
+    <span class="stat-chip">Comparisons: ${totals.comparisons || 0}</span>
+    <span class="stat-chip">A wins: ${totals.a_votes || 0}</span>
+    <span class="stat-chip">B wins: ${totals.b_votes || 0}</span>
+    <span class="stat-chip">Unanswered: ${totals.unanswered || 0}</span>
+    <span class="stat-chip">Closed: ${totals.closed || 0}</span>`;
+
+  if (!stats.pairs || stats.pairs.length === 0) {
+    container.innerHTML = '<div class="empty-state"><p>No A/B comparisons yet</p></div>';
+    return;
+  }
+
+  container.innerHTML = `
+    <table class="stats-table">
+      <thead><tr><th>Default model</th><th>A/B model</th><th>Tests</th><th>A wins</th><th>B wins</th><th>Win rates</th><th>Open</th></tr></thead>
+      <tbody>${stats.pairs.map((pair) => {
+        const votes = (pair.a_votes || 0) + (pair.b_votes || 0);
+        const aRate = votes ? `${((pair.a_votes * 100) / votes).toFixed(1)}%` : "—";
+        const bRate = votes ? `${((pair.b_votes * 100) / votes).toFixed(1)}%` : "—";
+        return `<tr>
+          <td>${escapeHtml(pair.default_model)}</td>
+          <td>${escapeHtml(pair.ab_model)}</td>
+          <td>${pair.comparisons}</td>
+          <td>${pair.a_votes}</td>
+          <td>${pair.b_votes}</td>
+          <td>A ${aRate} / B ${bRate}</td>
+          <td>${pair.unanswered}</td>
+        </tr>`;
+      }).join("")}</tbody>
+    </table>`;
 }
 
 function renderDefaultModels(containerId, models, configKey) {
@@ -464,7 +517,7 @@ function moveModel(index, delta, event) {
 }
 
 function initDefaultModelsSortable() {
-  const containers = ["default-models", "narrator-models", "vision-models", "site-models"];
+  const containers = ["default-models", "narrator-models", "vision-models", "site-models", "ab-pool"];
 
   containers.forEach((containerId) => {
     const element = document.getElementById(containerId);
@@ -486,6 +539,8 @@ function initDefaultModelsSortable() {
           currentConfig.default_vision_models = newOrder;
         } else if (containerId === "site-models") {
           currentConfig.site_models = newOrder;
+        } else if (containerId === "ab-pool") {
+          currentConfig.ab_pool = newOrder;
         }
     });
   });
@@ -556,6 +611,8 @@ function getCurrentList(configKey) {
       return currentConfig.default_vision_models || [];
     case "site_models":
       return currentConfig.site_models || [];
+    case "ab_pool":
+      return currentConfig.ab_pool || [];
     default:
       return [];
   }
@@ -571,6 +628,8 @@ function getListDisplayName(configKey) {
       return "Vision Models";
     case "site_models":
       return "Site Models";
+    case "ab_pool":
+      return "A/B Pool";
     default:
       return "List";
   }
@@ -604,6 +663,9 @@ function addToDefaultModels(configKey) {
     case "site_models":
       currentConfig.site_models = currentList;
       break;
+    case "ab_pool":
+      currentConfig.ab_pool = currentList;
+      break;
   }
 
   // Close modal and refresh
@@ -634,6 +696,9 @@ function moveDefaultModel(configKey, modelName, delta, event) {
     case "site_models":
       currentConfig.site_models = currentList;
       break;
+    case "ab_pool":
+      currentConfig.ab_pool = currentList;
+      break;
   }
 
   renderConfig();
@@ -657,9 +722,12 @@ function removeFromDefaultModels(configKey, modelName) {
       case "default_vision_models":
         currentConfig.default_vision_models = currentList;
         break;
-      case "site_models":
-        currentConfig.site_models = currentList;
-        break;
+    case "site_models":
+      currentConfig.site_models = currentList;
+      break;
+    case "ab_pool":
+      currentConfig.ab_pool = currentList;
+      break;
     }
 
     renderConfig();

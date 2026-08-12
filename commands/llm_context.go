@@ -650,6 +650,8 @@ func addContextMessages(
 			} else if strings.HasPrefix(msg.Content, latexAPI) {
 				content = fromLatexAPI(msg.Content)
 				isSplitAnyway = true
+			} else if isABComparisonMessage(msg) {
+				continue
 			} else {
 				content = cleanupCites(getMessageContent(msg))
 			}
@@ -686,6 +688,7 @@ func addContextMessages(
 			} else {
 				content = getMessageContent(msg)
 			}
+			content = strings.ReplaceAll(content, forceABTestTag, "")
 			rawContent = content
 			content = augmentContentWithLinkMetadata(content)
 			content = appendImageLinks(content, messageImageURLs(rawContent, msg.Attachments, msg.Embeds))

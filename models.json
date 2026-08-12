@@ -5,9 +5,6 @@
       "command": "glm5",
       "reasoning": true,
       "providers": {
-        "cloudflare": {
-          "codenames": ["@cf/zai-org/glm-5.2"]
-        },
         "nim": {
           "codenames": ["z-ai/glm-5.2"]
         },
@@ -17,22 +14,13 @@
       }
     },
     {
-      "name": "Tencent Hy3",
-      "command": "hy3",
-      "reasoning": true,
-      "providers": {
-        "openrouter": {
-          "codenames": ["tencent/hy3:free"]
-        }
-      }
-    },
-    {
-      "name": "DeepSeek V4 Pro",
-      "command": "deepseekpro",
+      "name": "Thinkingmachines Inkling",
+      "command": "inkling",
+      "vision": true,
       "reasoning": true,
       "providers": {
         "nim": {
-          "codenames": ["deepseek-ai/deepseek-v4-pro"]
+          "codenames": ["thinkingmachines/inkling"]
         }
       }
     },
@@ -79,6 +67,27 @@
       }
     },
     {
+      "name": "NVIDIA Nemotron 3 Ultra",
+      "command": "nemotronultra",
+      "reasoning": true,
+      "providers": {
+        "nim": {
+          "codenames": ["nvidia/nemotron-3-ultra-550b-a55b"]
+        }
+      }
+    },
+    {
+      "name": "Gemini 3.6 Flash",
+      "command": "gemini",
+      "vision": true,
+      "reasoning": true,
+      "providers": {
+        "google": {
+          "codenames": ["gemini-3.6-flash"]
+        }
+      }
+    },
+    {
       "name": "Kimi K2.6",
       "command": "kimi",
       "vision": true,
@@ -92,19 +101,6 @@
         },
         "vercel": {
           "codenames": ["moonshotai/kimi-k2.6"]
-        }
-      }
-    },
-    {
-      "name": "Gemma 4 31B",
-      "command": "gemma",
-      "vision": true,
-      "providers": {
-        "cerebras": {
-          "codenames": ["gemma-4-31b"]
-        },
-        "nim": {
-          "codenames": ["google/gemma-4-31b-it"]
         }
       }
     },
@@ -127,6 +123,16 @@
       "providers": {
         "mistral": {
           "codenames": ["mistral-medium-latest"]
+        }
+      }
+    },
+    {
+      "name": "NVIDIA Nemotron 3 Super",
+      "command": "nemotronsuper",
+      "reasoning": true,
+      "providers": {
+        "nim": {
+          "codenames": ["nvidia/nemotron-3-super-120b-a12b"]
         }
       }
     },
@@ -161,6 +167,19 @@
       "providers": {
         "mistral": {
           "codenames": ["mistral-small-latest"]
+        }
+      }
+    },
+    {
+      "name": "Gemma 4 31B",
+      "command": "gemma",
+      "vision": true,
+      "providers": {
+        "cerebras": {
+          "codenames": ["gemma-4-31b"]
+        },
+        "nim": {
+          "codenames": ["google/gemma-4-31b-it"]
         }
       }
     },
@@ -205,19 +224,6 @@
       "providers": {
         "zenmux": {
           "codenames": ["z-ai/glm-4.6v-flash-free"]
-        }
-      }
-    },
-    {
-      "name": "NVIDIA Nemotron 3 Ultra",
-      "command": "nemotronultra",
-      "reasoning": true,
-      "providers": {
-        "nim": {
-          "codenames": ["nvidia/nemotron-3-ultra-550b-a55b"]
-        },
-        "openrouter": {
-          "codenames": ["nvidia/nemotron-3-ultra-550b-a55b:free"]
         }
       }
     },
@@ -338,6 +344,26 @@
       }
     },
     {
+      "name": "inclusionAI Ling 3.0 Tiny",
+      "command": "ling",
+      "reasoning": true,
+      "providers": {
+        "openrouter": {
+          "codenames": ["inclusionai/ling-3.0-tiny:free"]
+        }
+      }
+    },
+    {
+      "name": "Poolside Laguna S 2.1",
+      "command": "laguna",
+      "reasoning": true,
+      "providers": {
+        "openrouter": {
+          "codenames": ["poolside/laguna-s-2.1:free"]
+        }
+      }
+    },
+    {
       "name": "Markov Chain (not an LLM)",
       "command": "markov",
       "is_markov": true
@@ -354,14 +380,16 @@
     }
   ],
   "default_models": [
-    "GLM 5.2",
-    "DeepSeek V4 Pro",
+    "Gemini 3.6 Flash",
+    "NVIDIA Nemotron 3 Ultra",
     "GLM 4.7",
+    "GLM 5.2",
+    "NVIDIA Nemotron 3 Super",
+    "Kimi K2.6",
+    "Step 3.7 Flash",
     "GLM 4.7 Flash",
     "Mistral Medium Latest",
-    "DeepSeek V4 Flash",
-    "Kimi K2.6",
-    "Tencent Hy3"
+    "DeepSeek V4 Flash"
   ],
   "narrator_models": [
     "GLM 4.7 Flash",
@@ -370,7 +398,13 @@
     "Meta Llama 4 Maverick 400B/17A"
   ],
   "default_vision_models": ["NVIDIA Nemotron 3 Nano Omni 30B/A3B"],
-  "site_models": ["GLM 4.7", "GLM 4.7 Flash", "Mistral Medium Latest"],
+  "site_models": [
+    "GLM 4.7",
+    "GLM 5.2",
+    "GLM 4.7 Flash",
+    "Mistral Medium Latest"
+  ],
+  "ab_pool": [],
   "providers_order": [
     "nim",
     "openrouter",
@@ -425,5 +459,5 @@
       "native_tool_calling": true
     }
   },
-  "current_version": 57
+  "current_version": 59
 }

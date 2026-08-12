@@ -10,8 +10,9 @@ import (
 	"net/http"
 	"os"
 
-	_ "modernc.org/sqlite"
+	"github.com/zeozeozeo/x3/db"
 	"github.com/zeozeozeo/x3/model"
+	_ "modernc.org/sqlite"
 )
 
 const (
@@ -39,6 +40,7 @@ func NewServer(dbPath string) *Server {
 	// API endpoints
 	mux.HandleFunc("/api/models", handleModels)
 	mux.HandleFunc("/api/models/save", handleSaveModels)
+	mux.HandleFunc("/api/ab-stats", handleABStats)
 	mux.HandleFunc("/", handleIndex)
 
 	server := &http.Server{
@@ -54,6 +56,24 @@ func NewServer(dbPath string) *Server {
 	mux.HandleFunc("/api/backup", s.handleBackup)
 
 	return s
+}
+
+func handleABStats(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	stats, err := db.GetABTestStats()
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Error reading A/B stats: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	if err := json.NewEncoder(w).Encode(stats); err != nil {
+		slog.Error("failed to encode A/B stats", "err", err)
+	}
 }
 
 type backupRequest struct {
@@ -239,6 +259,12 @@ func validateConfig(config model.ModelsConfig) error {
 	for _, name := range config.SiteModels {
 		if _, ok := names[name]; !ok {
 			return fmt.Errorf("site model not found: %s", name)
+		}
+	}
+
+	for _, name := range config.ABPool {
+		if _, ok := names[name]; !ok {
+			return fmt.Errorf("A/B pool model not found: %s", name)
 		}
 	}
 

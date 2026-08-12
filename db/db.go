@@ -45,6 +45,7 @@ func InitDB(dataSourceName string) error {
 		`CREATE TABLE IF NOT EXISTS message_interaction_cache ( message_id TEXT PRIMARY KEY, prompt TEXT )`,
 		`CREATE TABLE IF NOT EXISTS message_render_cache ( message_id TEXT PRIMARY KEY, content TEXT )`,
 		`CREATE TABLE IF NOT EXISTS global_stats ( stats BLOB )`,
+		`CREATE TABLE IF NOT EXISTS ab_test_stats ( default_model TEXT NOT NULL, ab_model TEXT NOT NULL, comparisons INTEGER NOT NULL DEFAULT 0, a_votes INTEGER NOT NULL DEFAULT 0, b_votes INTEGER NOT NULL DEFAULT 0, closed INTEGER NOT NULL DEFAULT 0, PRIMARY KEY (default_model, ab_model) )`,
 		`CREATE TABLE IF NOT EXISTS server_stats ( server_id TEXT PRIMARY KEY, stats BLOB )`,
 		`CREATE TABLE IF NOT EXISTS blacklist ( channel_id TEXT PRIMARY KEY )`,
 		`CREATE TABLE IF NOT EXISTS image_blacklist ( channel_id TEXT PRIMARY KEY )`,

@@ -343,6 +343,7 @@ func handleLlmInteraction2(
 	defer unlock()
 
 	cache := db.GetChannelCache(channelID)
+	content, forceABTest := stripForceABTestTag(content)
 
 	// might be the first message for a character card
 	exit, err := handleCard(client, channelID, messageID, cache, preMsgWg)
@@ -474,6 +475,28 @@ func handleLlmInteraction2(
 		prepend = cache.PersonaMeta.Prepend
 	}
 
+	var abDone chan abCompletionResult
+	var abModel model.Model
+	if !isRegenerate && !timeInteraction && !isImpersonate {
+		scheduledABTest := shouldTryABTest(cache)
+		if candidate, ok := chooseABModel(models, forceABTest || scheduledABTest); ok {
+			abModel = candidate
+			abDone = make(chan abCompletionResult, 1)
+			abLlmer := cloneLlmerForCompletion(llmer)
+			go func() {
+				abResponse, abUsage, abErr := requestCompletionCacheFriendly(
+					abLlmer,
+					[]model.Model{abModel},
+					cache.PersonaMeta.Settings,
+					prepend,
+					ctxLen,
+					ctx,
+				)
+				abDone <- abCompletionResult{response: abResponse, usage: abUsage, err: abErr}
+			}()
+		}
+	}
+
 	slog.Info("requesting LLM completion",
 		"num_models", len(models),
 		"num_messages", llmer.NumMessages(),
@@ -495,9 +518,6 @@ func handleLlmInteraction2(
 		// prefix with a \u200B to detect this inside addContextMessages
 		response = "\u200B" + response
 	}
-
-	cache.Usage = cache.Usage.Add(usage)
-	cache.LastUsage = usage
 
 	// extract <think> tags
 	var thinking string
@@ -609,6 +629,34 @@ func handleLlmInteraction2(
 			}
 		}
 	}
+
+	if abDone != nil {
+		abResult := <-abDone // default response has already been sent above
+		if !abResult.usage.IsEmpty() {
+			usage = usage.Add(abResult.usage)
+		}
+		if abResult.err == nil && botMessage != nil {
+			abResponse := cleanABResponse(abResult.response)
+			if strings.TrimSpace(abResponse) != "" {
+				comparison := &abComparison{
+					RequesterID:  userID,
+					ChannelID:    channelID,
+					DefaultModel: models[0].Name,
+					ABModel:      abModel.Name,
+					ResponseA:    response,
+					ResponseB:    abResponse,
+				}
+				if err := sendABComparison(client, comparison, botMessage.ID); err != nil {
+					slog.Warn("failed to send A/B comparison", "err", err)
+				}
+			}
+		} else if abResult.err != nil {
+			slog.Debug("A/B completion failed", "model", abModel.Name, "err", abResult.err)
+		}
+	}
+
+	cache.Usage = cache.Usage.Add(usage)
+	cache.LastUsage = usage
 
 	{
 		// since this function may run for seconds,

@@ -70,6 +70,7 @@ func RegisterHandlers(r handler.Router) error {
 	mux.Command("/stats", HandleStats)
 	mux.Command("/chatlog", HandleChatArchive)
 	mux.ButtonComponent("/chatlog/{id}", HandleChatArchiveBrowser)
+	mux.ButtonComponent("/abtest/{id}/{action}", HandleABTestButton)
 	mux.Command("/random_dms", HandleRandomDMs)
 	mux.Command("/regenerate", HandleRegenerate)
 	mux.Command("/blacklist", HandleBlacklist)

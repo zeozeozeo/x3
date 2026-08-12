@@ -482,6 +482,47 @@ header h1 {
   margin-bottom: 15px;
 }
 
+.stats-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+.stat-chip {
+  background: #e8f4fd;
+  border-radius: 12px;
+  color: #2474a6;
+  font-size: 12px;
+  font-weight: 500;
+  padding: 5px 10px;
+}
+
+.stats-table-container {
+  overflow-x: auto;
+}
+
+.stats-table {
+  border-collapse: collapse;
+  font-size: 13px;
+  min-width: 720px;
+  width: 100%;
+}
+
+.stats-table th,
+.stats-table td {
+  border-bottom: 1px solid #e9ecef;
+  padding: 9px 10px;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.stats-table th {
+  background: #f8f9fa;
+  color: #2c3e50;
+  font-weight: 600;
+}
+
 .section-header {
   display: flex;
   justify-content: flex-end;

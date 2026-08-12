@@ -64,9 +64,11 @@ type ChannelCache struct {
 	PersonaMakerContextMode      bool         `json:"persona_maker_context_mode,omitempty"`
 	PersonaMakerContextMessageID snowflake.ID `json:"persona_maker_context_message_id,omitempty"`
 	// MessagesSinceSummary tracks the number of messages since the last summary update.
-	MessagesSinceSummary int                  `json:"messages_since_summary"`
-	PersonaNewFlow       *PersonaNewFlow      `json:"persona_new_flow,omitempty"`
-	ImportedHistory      *ImportedChatHistory `json:"imported_history,omitempty"`
+	MessagesSinceSummary int `json:"messages_since_summary"`
+	// ABMessageCount tracks ordinary chat messages for scheduled A/B tests.
+	ABMessageCount  uint8                `json:"ab_message_count,omitempty"`
+	PersonaNewFlow  *PersonaNewFlow      `json:"persona_new_flow,omitempty"`
+	ImportedHistory *ImportedChatHistory `json:"imported_history,omitempty"`
 }
 
 func (cache *ChannelCache) UpdateSummary(summary persona.Summary) {
@@ -119,6 +121,16 @@ func (cache *ChannelCache) AddMemory(memory string) bool {
 // updateInteractionTime updates the LastInteraction timestamp to now.
 func (cache *ChannelCache) UpdateInteractionTime() {
 	cache.LastInteraction = time.Now()
+}
+
+// AdvanceABMessageCount advances the persisted channel-level A/B cadence counter.
+func (cache *ChannelCache) AdvanceABMessageCount(interval uint8) uint8 {
+	if interval == 0 {
+		return 0
+	}
+	next := (cache.ABMessageCount % interval) + 1
+	cache.ABMessageCount = next
+	return next
 }
 
 // NewChannelCache creates a ChannelCache with default values.
