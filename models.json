@@ -1,68 +1,13 @@
 {
   "models": [
     {
-      "name": "GLM 5.2",
-      "command": "glm5",
-      "reasoning": true,
-      "providers": {
-        "nim": {
-          "codenames": ["z-ai/glm-5.2"]
-        },
-        "openference": {
-          "codenames": ["GLM-5.2"]
-        }
-      }
-    },
-    {
-      "name": "Thinkingmachines Inkling",
-      "command": "inkling",
+      "name": "Gemini 3.6 Flash",
+      "command": "gemini",
       "vision": true,
       "reasoning": true,
       "providers": {
-        "nim": {
-          "codenames": ["thinkingmachines/inkling"]
-        }
-      }
-    },
-    {
-      "name": "DeepSeek V4 Flash",
-      "command": "deepseek",
-      "reasoning": true,
-      "providers": {
-        "mnn": {
-          "codenames": ["deepseek-v4-flash"]
-        },
-        "nim": {
-          "codenames": ["deepseek-ai/deepseek-v4-flash"]
-        },
-        "openference": {
-          "codenames": ["DeepSeek-V4-Flash"]
-        },
-        "vercel": {
-          "codenames": ["deepseek/deepseek-v4-flash"]
-        },
-        "zen": {
-          "codenames": ["deepseek-v4-flash-free"]
-        }
-      }
-    },
-    {
-      "name": "GLM 4.7",
-      "command": "glm47",
-      "reasoning": true,
-      "providers": {
-        "cerebras": {
-          "codenames": ["zai-glm-4.7"]
-        }
-      }
-    },
-    {
-      "name": "GLM 4.7 Flash",
-      "command": "glmflash",
-      "reasoning": true,
-      "providers": {
-        "zhipu": {
-          "codenames": ["glm-4.7-flash"]
+        "google": {
+          "codenames": ["gemini-3.6-flash", "gemini-3.5-flash"]
         }
       }
     },
@@ -77,13 +22,65 @@
       }
     },
     {
-      "name": "Gemini 3.6 Flash",
-      "command": "gemini",
+      "name": "Xiaomi MiMo V2.5",
+      "command": "mimo",
       "vision": true,
       "reasoning": true,
       "providers": {
-        "google": {
-          "codenames": ["gemini-3.6-flash"]
+        "zen": {
+          "codenames": ["mimo-v2.5-free"]
+        }
+      }
+    },
+    {
+      "name": "GLM 4.7",
+      "command": "glm47",
+      "reasoning": true,
+      "providers": {
+        "cerebras": {
+          "codenames": ["zai-glm-4.7"]
+        }
+      }
+    },
+    {
+      "name": "DeepSeek V4 Flash",
+      "command": "deepseek",
+      "reasoning": true,
+      "providers": {
+        "mnn": {
+          "codenames": ["deepseek-v4-flash"]
+        },
+        "openference": {
+          "codenames": ["DeepSeek-V4-Flash"]
+        },
+        "vercel": {
+          "codenames": ["deepseek/deepseek-v4-flash"]
+        },
+        "zen": {
+          "codenames": ["deepseek-v4-flash-free"]
+        }
+      }
+    },
+    {
+      "name": "GLM 4.7 Flash",
+      "command": "glmflash",
+      "reasoning": true,
+      "providers": {
+        "zhipu": {
+          "codenames": ["glm-4.7-flash"]
+        }
+      }
+    },
+    {
+      "name": "GLM 5.2",
+      "command": "glm5",
+      "reasoning": true,
+      "providers": {
+        "nim": {
+          "codenames": ["z-ai/glm-5.2"]
+        },
+        "openference": {
+          "codenames": ["GLM-5.2"]
         }
       }
     },
@@ -160,6 +157,29 @@
       }
     },
     {
+      "name": "Tencent Hy3",
+      "command": "hy3",
+      "reasoning": true,
+      "providers": {
+        "zen": {
+          "codenames": ["hy3-free"]
+        }
+      }
+    },
+    {
+      "name": "NVIDIA Nemotron 3.5 Lightning",
+      "command": "lightning",
+      "reasoning": true,
+      "providers": {
+        "nim": {
+          "codenames": ["nvidia/nemotron-3.5-lightning-30b-a3b"]
+        },
+        "zen": {
+          "codenames": ["nemotron-3.5-lightning-free"]
+        }
+      }
+    },
+    {
       "name": "Mistral Small Latest",
       "command": "mistralsmall",
       "vision": true,
@@ -178,8 +198,8 @@
         "cerebras": {
           "codenames": ["gemma-4-31b"]
         },
-        "nim": {
-          "codenames": ["google/gemma-4-31b-it"]
+        "google": {
+          "codenames": ["gemma-4-31b-it"]
         }
       }
     },
@@ -224,6 +244,17 @@
       "providers": {
         "zenmux": {
           "codenames": ["z-ai/glm-4.6v-flash-free"]
+        }
+      }
+    },
+    {
+      "name": "Muse Glimmer",
+      "command": "glimmer",
+      "vision": true,
+      "reasoning": true,
+      "providers": {
+        "nim": {
+          "codenames": ["meta/muse-glimmer-30b"]
         }
       }
     },
@@ -350,6 +381,9 @@
       "providers": {
         "openrouter": {
           "codenames": ["inclusionai/ling-3.0-tiny:free"]
+        },
+        "zen": {
+          "codenames": ["ling-3.0-tiny-free"]
         }
       }
     },
@@ -360,6 +394,31 @@
       "providers": {
         "openrouter": {
           "codenames": ["poolside/laguna-s-2.1:free"]
+        },
+        "zen": {
+          "codenames": ["laguna-s-2.1-free"]
+        }
+      }
+    },
+    {
+      "name": "Gemma 4 26B A4B",
+      "command": "gemma26b",
+      "vision": true,
+      "reasoning": true,
+      "providers": {
+        "google": {
+          "codenames": ["gemma-4-26b-a4b-it"]
+        }
+      }
+    },
+    {
+      "name": "Gemini 3.5 Flash-Lite",
+      "command": "flashlite",
+      "vision": true,
+      "reasoning": true,
+      "providers": {
+        "google": {
+          "codenames": ["gemini-3.5-flash-lite"]
         }
       }
     },
@@ -383,13 +442,14 @@
     "Gemini 3.6 Flash",
     "NVIDIA Nemotron 3 Ultra",
     "GLM 4.7",
+    "DeepSeek V4 Flash",
     "GLM 5.2",
+    "Gemma 4 31B",
+    "Xiaomi MiMo V2.5",
     "NVIDIA Nemotron 3 Super",
     "Kimi K2.6",
-    "Step 3.7 Flash",
     "GLM 4.7 Flash",
-    "Mistral Medium Latest",
-    "DeepSeek V4 Flash"
+    "Mistral Medium Latest"
   ],
   "narrator_models": [
     "GLM 4.7 Flash",
@@ -397,20 +457,37 @@
     "Meta Llama 4 Scout 109B/17A",
     "Meta Llama 4 Maverick 400B/17A"
   ],
-  "default_vision_models": ["NVIDIA Nemotron 3 Nano Omni 30B/A3B"],
+  "default_vision_models": [
+    "Gemma 4 31B",
+    "Gemma 4 26B A4B",
+    "Gemini 3.5 Flash-Lite",
+    "NVIDIA Nemotron 3 Nano Omni 30B/A3B"
+  ],
   "site_models": [
     "GLM 4.7",
     "GLM 5.2",
     "GLM 4.7 Flash",
     "Mistral Medium Latest"
   ],
-  "ab_pool": [],
+  "ab_pool": [
+    "GLM 5.2",
+    "NVIDIA Nemotron 3 Ultra",
+    "NVIDIA Nemotron 3 Super",
+    "GLM 4.7",
+    "Mistral Medium Latest",
+    "Mistral Small Latest",
+    "NVIDIA Nemotron 3 Nano Omni 30B/A3B",
+    "Gemini 3.6 Flash",
+    "Mistral Large Latest"
+  ],
   "providers_order": [
     "nim",
+    "zen",
     "openrouter",
     "deepseek",
     "mimo",
     "ollama",
+    "google",
     "cerebras",
     "minimax",
     "routeway",
@@ -418,7 +495,6 @@
     "zhipu",
     "together",
     "nineteen",
-    "google",
     "llm7",
     "cloudflare",
     "mnn",
@@ -457,7 +533,10 @@
     },
     "ollama": {
       "native_tool_calling": true
+    },
+    "zen": {
+      "native_tool_calling": true
     }
   },
-  "current_version": 59
+  "current_version": 60
 }
