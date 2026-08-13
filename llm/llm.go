@@ -9,7 +9,6 @@ import (
 	"hash"
 	"hash/fnv"
 	"html"
-	"io"
 	"log/slog"
 	"net"
 	"net/http"
@@ -190,14 +189,20 @@ func firstNonEmpty(values ...string) string {
 }
 
 func applyReasoningSettings(req *openai.ChatCompletionRequest, provider string, reasoning bool) {
-	if provider == model.ProviderMistral || provider == model.ProviderCerebras || provider == model.ProviderNim || provider == model.ProviderGoogle {
-		return //oh cool yeah.
-	}
-	thinkingType := "disabled"
 	reasoningEffort := "none"
 	if reasoning {
+		reasoningEffort = "low"
+	}
+
+	if provider == model.ProviderMistral || provider == model.ProviderCerebras || provider == model.ProviderNim || provider == model.ProviderGoogle {
+		// These providers do not support the other provider-specific reasoning
+		// fields, but Google maps reasoning_effort to its thinking_level.
+		req.ReasoningEffort = reasoningEffort
+		return
+	}
+	thinkingType := "disabled"
+	if reasoning {
 		thinkingType = "enabled"
-		reasoningEffort = "medium"
 	}
 
 	req.ReasoningEffort = reasoningEffort
@@ -1123,100 +1128,12 @@ func (l *Llmer) executeSearchTool(ctx context.Context, name, query string, searc
 	return results, mergeCitemaps(searchCitemap, citemap)
 }
 
-// createChatCompletionWithTTFT consumes the provider's stream internally so
-// callers retain the existing non-streaming interface while the router can use
-// time-to-first-token rather than the length-dependent total response time.
+// createChatCompletionWithTTFT intentionally uses the non-streaming endpoint.
+// The completion router retains the TTFT return value for compatibility, but
+// non-streaming providers are measured using the total request duration.
 func createChatCompletionWithTTFT(ctx context.Context, client *openai.Client, req openai.ChatCompletionRequest) (openai.ChatCompletionResponse, time.Duration, error) {
-	start := time.Now()
-	stream, err := client.CreateChatCompletionStream(ctx, req)
-	if err != nil {
-		if streamingUnsupported(err) {
-			response, fallbackErr := client.CreateChatCompletion(ctx, req)
-			return response, 0, fallbackErr
-		}
-		return openai.ChatCompletionResponse{}, 0, err
-	}
-	defer stream.Close()
-
-	var response openai.ChatCompletionResponse
-	var firstToken time.Duration
-	for {
-		chunk, err := stream.Recv()
-		if errors.Is(err, io.EOF) {
-			break
-		}
-		if err != nil {
-			return openai.ChatCompletionResponse{}, firstToken, err
-		}
-		if response.ID == "" {
-			response.ID = chunk.ID
-			response.Object = chunk.Object
-			response.Created = chunk.Created
-			response.Model = chunk.Model
-			response.SystemFingerprint = chunk.SystemFingerprint
-		}
-		if chunk.Usage != nil {
-			response.Usage = *chunk.Usage
-		}
-		for _, streamedChoice := range chunk.Choices {
-			for len(response.Choices) <= streamedChoice.Index {
-				response.Choices = append(response.Choices, openai.ChatCompletionChoice{Index: len(response.Choices)})
-			}
-			choice := &response.Choices[streamedChoice.Index]
-			delta := streamedChoice.Delta
-			if delta.Role != "" {
-				choice.Message.Role = delta.Role
-			}
-			choice.Message.Content += delta.Content
-			choice.Message.Refusal += delta.Refusal
-			choice.Message.ReasoningContent += delta.ReasoningContent
-			choice.Message.Reasoning += delta.Reasoning
-			if delta.FunctionCall != nil {
-				if choice.Message.FunctionCall == nil {
-					choice.Message.FunctionCall = &openai.FunctionCall{}
-				}
-				choice.Message.FunctionCall.Name += delta.FunctionCall.Name
-				choice.Message.FunctionCall.Arguments += delta.FunctionCall.Arguments
-			}
-			for _, streamedCall := range delta.ToolCalls {
-				index := len(choice.Message.ToolCalls)
-				if streamedCall.Index != nil {
-					index = *streamedCall.Index
-				}
-				for len(choice.Message.ToolCalls) <= index {
-					choice.Message.ToolCalls = append(choice.Message.ToolCalls, openai.ToolCall{})
-				}
-				call := &choice.Message.ToolCalls[index]
-				if streamedCall.ID != "" {
-					call.ID = streamedCall.ID
-				}
-				if streamedCall.Type != "" {
-					call.Type = streamedCall.Type
-				}
-				call.Function.Name += streamedCall.Function.Name
-				call.Function.Arguments += streamedCall.Function.Arguments
-			}
-			if streamedChoice.FinishReason != "" {
-				choice.FinishReason = streamedChoice.FinishReason
-			}
-			if firstToken == 0 && (delta.Content != "" || delta.ReasoningContent != "" || delta.Reasoning != "" || delta.Refusal != "" || delta.FunctionCall != nil || len(delta.ToolCalls) > 0) {
-				firstToken = time.Since(start)
-			}
-		}
-	}
-	if len(response.Choices) == 0 {
-		return openai.ChatCompletionResponse{}, firstToken, errors.New("completion response had no choices")
-	}
-	return response, firstToken, nil
-}
-
-func streamingUnsupported(err error) bool {
-	var apiErr *openai.APIError
-	if !errors.As(err, &apiErr) || (apiErr.HTTPStatusCode != http.StatusBadRequest && apiErr.HTTPStatusCode != http.StatusNotImplemented) {
-		return false
-	}
-	message := strings.ToLower(apiErr.Message)
-	return strings.Contains(message, "stream") && (strings.Contains(message, "unsupported") || strings.Contains(message, "not support") || strings.Contains(message, "disabled"))
+	response, err := client.CreateChatCompletion(ctx, req)
+	return response, 0, err
 }
 
 func (l *Llmer) requestCompletionInternal2(
