@@ -133,7 +133,7 @@ func comparisonContent(responseLabel, response string) string {
 	if utf8.RuneCountInString(response) > maxContentRunes {
 		response = string([]rune(response)[:maxContentRunes]) + "…"
 	}
-	return abComparisonIntro + "\n\nResponse " + responseLabel + ":\n```\n" + response + "\n```"
+	return abComparisonIntro + "\n\nResponse " + responseLabel + ":\n```\n" + response + "\n```\n-# Only numbers will get logged to determine the best model, conversations are never stored"
 }
 
 func cleanABResponse(response string) string {
@@ -281,8 +281,12 @@ func HandleABTestButton(data discord.ButtonInteractionData, event *handler.Compo
 		if selected == 'B' {
 			modelName = comparison.ABModel
 		}
+		otherOne := comparison.DefaultModel
+		if selected == 'A' {
+			otherOne = comparison.ABModel
+		}
 		_, err := event.CreateFollowupMessage(discord.NewMessageCreate().
-			WithContent(fmt.Sprintf("The model was: %s", modelName)).
+			WithContent(fmt.Sprintf("The model was: %s (the other one was: %s)", modelName, otherOne)).
 			WithEphemeral(true))
 		return err
 	case "close":
