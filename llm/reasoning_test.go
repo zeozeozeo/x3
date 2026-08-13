@@ -49,8 +49,8 @@ func TestApplyReasoningSettingsEnabled(t *testing.T) {
 
 	applyReasoningSettings(&req, model.ProviderVercel, true)
 
-	if req.ReasoningEffort != "medium" {
-		t.Fatalf("expected reasoning_effort medium, got %q", req.ReasoningEffort)
+	if req.ReasoningEffort != "low" {
+		t.Fatalf("expected reasoning_effort low, got %q", req.ReasoningEffort)
 	}
 	if req.Reasoning == nil || req.Reasoning.Enabled == nil || !*req.Reasoning.Enabled {
 		t.Fatalf("expected reasoning.enabled true, got %#v", req.Reasoning)

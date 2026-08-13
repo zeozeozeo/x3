@@ -84,7 +84,7 @@ var PersonaCommand = discord.SlashCommandCreate{
 		},
 		discord.ApplicationCommandOptionString{
 			Name:         "model",
-			Description:  "Set a model to use for this chat",
+			Description:  "Set one or more models to try for this chat",
 			Autocomplete: true, // since discord limits us to 25 choices, we will hack it
 			Required:     false,
 		},
@@ -329,14 +329,35 @@ func HandlePersona(event *handler.CommandEvent) error {
 	}
 
 	cache := db.GetChannelCache(event.Channel().ID())
-	m := model.GetModelByName(dataModel)
+	var selectedModelNames []string
+	if dataModel != "" {
+		selectedModelNames = splitPersonaModelList(dataModel)
+		if len(selectedModelNames) == 0 {
+			return event.CreateMessage(
+				discord.NewMessageCreate().
+					WithContent("Please choose at least one model").
+					WithEphemeral(true),
+			)
+		}
 
-	if m.Whitelisted && !db.IsInWhitelist(event.User().ID) {
-		return event.CreateMessage(
-			discord.NewMessageCreate().
-				WithContentf("You need to be whitelisted to set the model `%s`. Try `%s`", dataModel, model.DefaultModel).
-				WithEphemeral(true),
-		)
+		inWhitelist := db.IsInWhitelist(event.User().ID)
+		for _, modelName := range selectedModelNames {
+			m := model.GetModelByName(modelName)
+			if m.Name != modelName {
+				return event.CreateMessage(
+					discord.NewMessageCreate().
+						WithContentf("Unknown model `%s`", modelName).
+						WithEphemeral(true),
+				)
+			}
+			if m.Whitelisted && !inWhitelist {
+				return event.CreateMessage(
+					discord.NewMessageCreate().
+						WithContentf("You need to be whitelisted to set the model `%s`. Try `%s`", modelName, model.DefaultModel).
+						WithEphemeral(true),
+				)
+			}
+		}
 	}
 
 	personaMeta, err := persona.GetMetaByName(dataPersona)
@@ -392,7 +413,7 @@ func HandlePersona(event *handler.CommandEvent) error {
 		cache.PersonaMeta.ChatPreset = nil
 	}
 	if dataModel != "" {
-		cache.PersonaMeta.Models = []string{dataModel}
+		cache.PersonaMeta.Models = selectedModelNames
 	}
 	prevContextLen := cache.ContextLength
 	if hasContext {
@@ -773,12 +794,90 @@ func HandlePersonaModelAutocomplete(event *handler.AutocompleteEvent) error {
 		availableModels = append(availableModels, m)
 	}
 
+	query := event.Data.String("model")
+	prefix, term, selected := personaModelAutocompleteParts(query)
+	if prefix != "" {
+		return handlePersonaMultipleModelAutocomplete(event, availableModels, prefix, term, selected)
+	}
+
 	return HandleGenericAutocomplete(event, "model", availableModels, func(item any, index int) (string, string) {
 		m := item.(model.Model)
 		name := formatModel(m)
 		value := m.Name
 		return name, value
 	})
+}
+
+// splitPersonaModelList parses the model option's comma/semicolon-separated
+// value while keeping model names in their canonical, trimmed form.
+func splitPersonaModelList(value string) []string {
+	parts := strings.FieldsFunc(value, func(r rune) bool {
+		return r == ',' || r == ';'
+	})
+	models := make([]string, 0, len(parts))
+	for _, part := range parts {
+		if name := strings.TrimSpace(part); name != "" {
+			models = append(models, name)
+		}
+	}
+	return models
+}
+
+// personaModelAutocompleteParts returns the already-entered prefix, the
+// current model fragment, and the model names before the current fragment.
+func personaModelAutocompleteParts(value string) (prefix, term string, selected map[string]struct{}) {
+	selected = make(map[string]struct{})
+	separator := strings.LastIndexAny(value, ",;")
+	if separator < 0 {
+		return "", strings.TrimSpace(value), selected
+	}
+
+	prefix = value[:separator+1]
+	term = strings.TrimSpace(value[separator+1:])
+	for _, name := range splitPersonaModelList(value[:separator]) {
+		selected[strings.ToLower(name)] = struct{}{}
+	}
+	return prefix, term, selected
+}
+
+func handlePersonaMultipleModelAutocomplete(
+	event *handler.AutocompleteEvent,
+	availableModels []model.Model,
+	prefix, term string,
+	selected map[string]struct{},
+) error {
+	candidates := make([]model.Model, 0, len(availableModels))
+	searchStrings := make([]string, 0, len(availableModels))
+	for _, m := range availableModels {
+		if _, alreadySelected := selected[strings.ToLower(m.Name)]; alreadySelected {
+			continue
+		}
+		candidates = append(candidates, m)
+		searchStrings = append(searchStrings, m.Name)
+	}
+
+	var indices []int
+	if strings.TrimSpace(term) == "" {
+		indices = make([]int, len(candidates))
+		for i := range indices {
+			indices[i] = i
+		}
+	} else {
+		indices = rankItems(term, searchStrings)
+	}
+
+	choices := make([]discord.AutocompleteChoice, 0, min(len(indices), 25))
+	for _, index := range indices {
+		if len(choices) >= 25 {
+			break
+		}
+		m := candidates[index]
+		choices = append(choices, discord.AutocompleteChoiceString{
+			Name:  ellipsisTrim("Add "+formatModel(m), 100),
+			Value: prefix + m.Name,
+		})
+	}
+	return event.AutocompleteResult(choices)
 }
 
 type personaEntry struct {

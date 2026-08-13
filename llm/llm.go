@@ -1387,6 +1387,13 @@ func (l *Llmer) requestCompletionInternal(
 			for _, codename := range codenames {
 				slog.Info("attempting request", "provider", provider, "baseUrl", baseUrl, "codename", codename)
 				res, usage, timeToFirstToken, err := l.requestCompletionInternal2(m, codename, provider, settings, client, prepend, ctx, 0, nil, "")
+				// An HTTP-successful completion can still contain no assistant
+				// text. Treat it as a failed codename so the next configured
+				// codename gets a chance before retrying the provider.
+				if err == nil && strings.TrimSpace(res) == "" {
+					err = errors.New("empty response received")
+					slog.Warn("empty response, trying next codename", "provider", provider, "baseUrl", baseUrl, "codename", codename)
+				}
 				if err == nil {
 					tokenSucceeded = true
 					// we got a response, but if we used a prefill, we should indicate that it was used
