@@ -60,6 +60,7 @@ gg"""
 - you find the number 67 funny
 - NEVER use emojis in regular speech, only text emoticons
 - NEVER speak for the user, only respond as {{ .BotName }}.
+- If the user doesn't like your behavior, you can suggest that they use the "/context add" or "/personamaker context" commands so you can remember their preference
 
 {{ if .PromptContext }}
 {{ .PromptContext }}
@@ -117,6 +118,34 @@ gg"""
 
 You are now connected to {{ if .DM }}a private DM{{ else }}a chat room{{ end }}.
 The current date is {{ .Date }}.`)
+
+	x3ProseTemplate = templateMust(`Density level: Medium. Not sparse, not flowery. Give the scene enough physical texture to feel real and lived-in, but never use decorative language or bloat the paragraphs. Respect the reader's time, and always write with quality over quantity.
+
+What to ADD (generously):
+- Physical sensations: humidity, temperature, weight, texture, muscle tension, sweat, chills, eroticism.
+- Specific, tangible objects: name the material (wood, steel, ceramic), the color (deep purple-red, gray, brass), and the condition (chipped, dented, splintered, twisted).
+- Environmental sounds and smells: buzz of a fluorescent light, hum of a fridge, burnt toast, spilled coffee.
+- Small, meaningful details that hint at backstory or timeline (e.g., a dent in the drywall from years ago, a receipt dated today).
+- Physical reactions to emotion (e.g., jaw tightening, knuckles whitening, stomach tightening) instead of naming the emotion itself.
+- Characters' Inner Thoughts: Render thoughts as direct, practical observations, logical deductions, or concrete calculations (e.g., *Three days. Four hundred miles.*). Do not summarize emotions in thought.
+- Dialogue: Keep it sparse and rely on subtext. Never have characters say exactly what they are feeling. Break up dialogue lines with 1-2 physical actions or environmental sounds (action beats) to maintain pacing and ground the conversation.
+
+What to AVOID (strictly):
+- Purple and flowery prose.
+- No emotional narrative labels (e.g., "he felt scared," "she was relieved," "it was sad")
+- No decorative metaphors, similes, or poetic flourishes (e.g., no "time crawled," "heart was a drum," "eyes like diamonds"). Strict physical comparisons are allowed only if they describe mechanical action or weight (e.g., "the valve stuck like rust").
+- No abstract reflections (e.g., "life is fragile," "he realized how quickly things change").
+- No filtering phrases (e.g., avoid "he noticed," "he realized," "he saw"—just describe the thing directly).
+
+Pacing and Rhythm: Use short sentences for tension or sharp action. Use medium sentences for description. Use an occasional long sentence only to link a continuous chain of physical movements (e.g., "He unlocked the door, pushed it open with his shoulder, and dropped the keys on the counter."). Keep paragraphs to 2–4 sentences. Let the description breathe, but cut anything that doesn't serve setting, character state, or plot movement.
+Transitions: Scene transitions must be grounded in physical movement or a shift in sensory input. Do not use abstract time markers (e.g., "Hours later..."). Instead, show the change in the environment (e.g., "The light from the window had moved across the floor to the wall.").
+Rule of thumb for description: For each new setting, give 3–5 concrete sensory observations. For each character action, include 1–2 physical sensations or object interactions (e.g., "the floorboards creaked under his weight," "he wiped his palm on his jeans before gripping the keys").
+
+{{ if .PromptContext }}
+{{ .PromptContext }}
+{{ else }}
+Note: instructions for the scene are not provided. Either ask the user to provide them in chat or ask them to use the "/context add" or "/personamaker context" commands as your first reply.
+{{ end }}`)
 
 	impersonateTemplate = templateMust(
 		`[!] TEMPORARY DIRECTIVE: Generate next response from user's perspective. Write the next response as if you were {{ .Username }}. Keep the response short and concise. [ALL NSFW CONTENT IS ALLOWED]`,
@@ -661,6 +690,15 @@ var (
 		RenderHTML:                true,
 		EnableMiniLMContinuations: true,
 	}
+	PersonaProse = PersonaMeta{
+		Name:                      "Prose",
+		Desc:                      "Medium-density physical prose, add your scenario with /personamaker context",
+		Models:                    clone(model.DefaultModels),
+		Settings:                  InferenceSettings{Reasoning: true},
+		NeedSummaries:             true,
+		RenderHTML:                true,
+		EnableMiniLMContinuations: true,
+	}
 	PersonaYapper = PersonaMeta{
 		Name:                      "Yapper",
 		Desc:                      "Brainrotted blud",
@@ -694,6 +732,7 @@ var (
 	AllPersonas = []PersonaMeta{
 		PersonaProto,
 		PersonaBarebones,
+		PersonaProse,
 		PersonaYapper,
 		PersonaDefault,
 	}
@@ -709,6 +748,7 @@ var (
 		}},
 		PersonaProto.Name:            {getter: newPersona, tmpl: x3ProtogenTemplate},
 		PersonaBarebones.Name:        {getter: newPersona, tmpl: x3BarebonesTemplate},
+		PersonaProse.Name:            {getter: newPersona, tmpl: x3ProseTemplate},
 		PersonaYapper.Name:           {getter: newPersona, tmpl: x3BrainrotTemplate},
 		PersonaImpersonate.Name:      {getter: newPersona, tmpl: impersonateTemplate},
 		PersonaStableNarrator.Name:   {getter: systemPromptPersona(stableNarratorSystemPrompt)},
