@@ -259,6 +259,16 @@ func handlePersonaInfo(event *handler.CommandEvent, ephemeral bool) error {
 
 // HandlePersona handles the /persona command logic.
 func HandlePersona(event *handler.CommandEvent) error {
+	if event.GuildID() != nil {
+		settings, err := db.GetGlobalSettings(*event.GuildID())
+		if err != nil {
+			return sendInteractionError(event, "Failed to read global settings.", true)
+		}
+		if settings.BlockPersonaEdit && !isModeratorOrGuildOwner(event) {
+			return sendInteractionError(event, "Persona editing is restricted to moderators, administrators, and the server owner.", true)
+		}
+	}
+
 	data := event.SlashCommandInteractionData()
 	dataPersona := data.String("persona")
 	dataUsername := data.String("username")

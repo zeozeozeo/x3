@@ -48,6 +48,7 @@ func InitDB(dataSourceName string) error {
 		`CREATE TABLE IF NOT EXISTS ab_test_stats ( default_model TEXT NOT NULL, ab_model TEXT NOT NULL, comparisons INTEGER NOT NULL DEFAULT 0, a_votes INTEGER NOT NULL DEFAULT 0, b_votes INTEGER NOT NULL DEFAULT 0, closed INTEGER NOT NULL DEFAULT 0, PRIMARY KEY (default_model, ab_model) )`,
 		`CREATE TABLE IF NOT EXISTS server_stats ( server_id TEXT PRIMARY KEY, stats BLOB )`,
 		`CREATE TABLE IF NOT EXISTS blacklist ( channel_id TEXT PRIMARY KEY )`,
+		`CREATE TABLE IF NOT EXISTS global_settings ( guild_id TEXT PRIMARY KEY, main_channel_id TEXT, block_persona_edit INTEGER NOT NULL DEFAULT 0 )`,
 		`CREATE TABLE IF NOT EXISTS image_blacklist ( channel_id TEXT PRIMARY KEY )`,
 		`CREATE TABLE IF NOT EXISTS users ( user_id TEXT PRIMARY KEY, last_interaction_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP )`,
 		`CREATE TABLE IF NOT EXISTS antiscam_servers ( server_id TEXT PRIMARY KEY )`,

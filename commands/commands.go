@@ -20,6 +20,7 @@ var AllCommands []discord.ApplicationCommandCreate = []discord.ApplicationComman
 	//RandomDMsCommand,
 	RegenerateCommand,
 	BlacklistCommand,
+	GlobalCommand,
 	ChatCommand, // generic /chat command
 	GenerateCommand,
 	ImpersonateCommand,
@@ -74,6 +75,7 @@ func RegisterHandlers(r handler.Router) error {
 	mux.Command("/random_dms", HandleRandomDMs)
 	mux.Command("/regenerate", HandleRegenerate)
 	mux.Command("/blacklist", HandleBlacklist)
+	mux.Command("/global", HandleGlobal)
 	mux.Command("/personamaker", HandlePersonaMaker)
 	mux.Autocomplete("/personamaker", HandlePersonaMakerDeleteAutocomplete)
 	r.ButtonComponent(personaMakerBarebonesAcceptID, HandlePersonaMakerBarebonesSuggestion)

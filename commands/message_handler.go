@@ -163,6 +163,9 @@ func OnMessageCreate(event *events.MessageCreate) {
 	if event.Message.Content == "" && len(event.Message.Attachments) == 0 {
 		return // might be a poll/pin message etc
 	}
+	if event.GuildID != nil && !db.IsGlobalChannel(event.ChannelID, *event.GuildID) {
+		return // global mode only accepts messages in the configured main channel
+	}
 
 	// anti-scam
 	if event.GuildID != nil && db.IsAntiscamEnabled(*event.GuildID) {
