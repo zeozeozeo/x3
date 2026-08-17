@@ -445,7 +445,7 @@ func replayMessagesForArchive(messages []discord.Message, botID snowflake.ID) []
 				}
 				continue
 			}
-			if isChatlogMessage(msg) || isCardMessage(msg) || isNarrationMessage(msg) {
+			if isChatlogMessage(msg) || isCardMessage(msg) || isNarrationMessage(msg) || isCodeRunResultMessage(msg) {
 				continue
 			}
 

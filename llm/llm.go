@@ -22,6 +22,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/disgoorg/snowflake/v2"
+	"github.com/zeozeozeo/x3/codeinterp"
 	"github.com/zeozeozeo/x3/eliza"
 	"github.com/zeozeozeo/x3/markov"
 	"github.com/zeozeozeo/x3/model"
@@ -289,6 +290,7 @@ type Llmer struct {
 	GuildID               *snowflake.ID                                                                          `json:"guild_id,omitempty"`
 	ToolsEnabled          *bool                                                                                  `json:"tools_enabled,omitempty"`
 	DiscordSearchCallback func(ctx context.Context, guildID snowflake.ID, query string) (string, map[int]string) `json:"-"`
+	GeneratedArtifacts    []codeinterp.Artifact                                                                  `json:"-"`
 }
 
 func NewLlmer(channelID snowflake.ID) *Llmer {
@@ -1007,6 +1009,7 @@ var weirdEndRegexp = regexp.MustCompile(`(>[\./w]+)$`)
 const (
 	toolNameWebSearch     = "web_search"
 	toolNameDiscordSearch = "discord_search"
+	toolNamePython        = "python"
 )
 
 var webSearchTool = openai.Tool{
@@ -1047,8 +1050,31 @@ var discordSearchTool = openai.Tool{
 	},
 }
 
+var pythonTool = openai.Tool{
+	Type: openai.ToolTypeFunction,
+	Function: &openai.FunctionDefinition{
+		Name:        toolNamePython,
+		Description: "Run Python in an isolated, offline sandbox. Save generated files in the current directory. To attach one in your final answer, include <file>filename</file> exactly.",
+		Parameters: map[string]any{
+			"type":     "object",
+			"required": []string{"code"},
+			"properties": map[string]any{
+				"code": map[string]any{
+					"type":        "string",
+					"description": "Python source code to execute. Matplotlib uses a non-interactive backend; call savefig with a relative filename.",
+				},
+			},
+			"additionalProperties": false,
+		},
+	},
+}
+
 type toolArguments struct {
 	Query string `json:"query"`
+}
+
+type pythonToolArguments struct {
+	Code string `json:"code"`
 }
 
 func modelUsesNativeToolCalling(m model.Model, provider string) bool {
@@ -1060,7 +1086,7 @@ func (l Llmer) searchToolsEnabled() bool {
 	return l.ToolsEnabled == nil || *l.ToolsEnabled
 }
 
-func (l Llmer) availableSearchTools() []openai.Tool {
+func (l Llmer) availableTools() []openai.Tool {
 	if !l.searchToolsEnabled() {
 		return nil
 	}
@@ -1068,6 +1094,9 @@ func (l Llmer) availableSearchTools() []openai.Tool {
 	tools := []openai.Tool{webSearchTool}
 	if l.GuildID != nil && l.DiscordSearchCallback != nil {
 		tools = append(tools, discordSearchTool)
+	}
+	if codeinterp.Enabled() {
+		tools = append(tools, pythonTool)
 	}
 	return tools
 }
@@ -1109,6 +1138,40 @@ func parseToolQuery(arguments string) string {
 		return strings.TrimSpace(raw)
 	}
 	return arguments
+}
+
+func parsePythonCode(arguments string) string {
+	var args pythonToolArguments
+	if err := json.Unmarshal([]byte(arguments), &args); err == nil {
+		return args.Code
+	}
+	return ""
+}
+
+func (l *Llmer) executeCodeTool(ctx context.Context, language, code string) string {
+	if strings.TrimSpace(code) == "" {
+		return language + " was not run: the code argument was empty."
+	}
+	result, err := codeinterp.Run(ctx, language, code)
+	if err != nil {
+		return language + " sandbox error: " + err.Error()
+	}
+	l.GeneratedArtifacts = append(l.GeneratedArtifacts, result.Artifacts...)
+	var out strings.Builder
+	fmt.Fprintf(&out, "Exit code: %d\n", result.ExitCode)
+	if result.Stdout != "" {
+		fmt.Fprintf(&out, "stdout:\n%s\n", result.Stdout)
+	}
+	if result.Stderr != "" {
+		fmt.Fprintf(&out, "stderr:\n%s\n", result.Stderr)
+	}
+	if len(result.Artifacts) > 0 {
+		out.WriteString("Generated files (attach by writing <file>filename</file> in the final answer):\n")
+		for _, artifact := range result.Artifacts {
+			fmt.Fprintf(&out, "- %s\n", artifact.Name)
+		}
+	}
+	return strings.TrimSpace(out.String())
 }
 
 func (l *Llmer) executeSearchTool(ctx context.Context, name, query string, searchCitemap map[int]string) (string, map[int]string) {
@@ -1164,7 +1227,7 @@ func (l *Llmer) requestCompletionInternal2(
 	if m.Reasoning {
 		applyReasoningSettings(&req, provider, settings.Reasoning)
 	}
-	nativeSearchTools := l.availableSearchTools()
+	nativeSearchTools := l.availableTools()
 	nativeToolCalling := modelUsesNativeToolCalling(m, provider) && len(nativeSearchTools) > 0
 	if nativeToolCalling {
 		req.Tools = nativeSearchTools
@@ -1265,10 +1328,18 @@ func (l *Llmer) requestCompletionInternal2(
 		req.ToolChoice = nil
 		nativeToolCalling = false
 		for i, call := range toolCalls {
-			query := parseToolQuery(call.Function.Arguments)
-			slog.Info("executing native tool call", "tool", call.Function.Name, "query", query, "arguments", call.Function.Arguments)
-			results, updatedCitemap := l.executeSearchTool(ctx, call.Function.Name, query, searchCitemap)
-			searchCitemap = updatedCitemap
+			var results string
+			if call.Function.Name == toolNamePython {
+				code := parsePythonCode(call.Function.Arguments)
+				slog.Info("executing native tool call", "tool", call.Function.Name, "code_len", len(code))
+				results = l.executeCodeTool(ctx, "python", code)
+			} else {
+				query := parseToolQuery(call.Function.Arguments)
+				slog.Info("executing native tool call", "tool", call.Function.Name, "query", query)
+				var updatedCitemap map[int]string
+				results, updatedCitemap = l.executeSearchTool(ctx, call.Function.Name, query, searchCitemap)
+				searchCitemap = updatedCitemap
+			}
 			req.Messages = append(req.Messages, openai.ChatCompletionMessage{
 				Role:       openai.ChatMessageRoleTool,
 				Content:    results,
@@ -1610,6 +1681,7 @@ func (l Llmer) applyFallbackVisionModels(models []model.Model) []model.Model {
 }
 
 func (l *Llmer) RequestCompletion(models []model.Model, settings persona.InferenceSettings, prepend string, ctx context.Context) (res string, usage Usage, err error) {
+	l.GeneratedArtifacts = nil
 	if len(models) == 0 {
 		err = errNoModelsForCompletion
 		return

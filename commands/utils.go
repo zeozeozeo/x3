@@ -128,9 +128,9 @@ type cachedEmbedding struct {
 }
 
 var (
-	itemEmbeddingsMu      sync.Mutex
-	itemEmbeddings        = map[string]*cachedEmbedding{}
-	lastEmbeddingCleanup  time.Time
+	itemEmbeddingsMu     sync.Mutex
+	itemEmbeddings       = map[string]*cachedEmbedding{}
+	lastEmbeddingCleanup time.Time
 )
 
 const (
@@ -807,16 +807,18 @@ func sendTextPart(
 		var err error
 
 		if i == 0 && *isFirst && event != nil && *event != nil {
-			message, err = (*event).UpdateInteractionResponse(discord.MessageUpdate{
+			update := discord.MessageUpdate{
 				Content: &segment,
 				Flags:   &flags,
 				Files:   currentFiles,
-			})
+			}.WithComponents(runnableCodeComponents(segment)...)
+			message, err = (*event).UpdateInteractionResponse(update)
 		} else {
 			builder := discord.NewMessageCreate().
 				WithContent(segment).
 				WithFlags(flags).
 				WithAllowedMentions(&discord.AllowedMentions{RepliedUser: false}).
+				WithComponents(runnableCodeComponents(segment)...).
 				AddFiles(currentFiles...)
 			if i == 0 && *isFirst && *messageID != 0 {
 				builder = builder.WithMessageReferenceByID(*messageID)

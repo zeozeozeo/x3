@@ -74,6 +74,10 @@ func isChatlogMessage(msg discord.Message) bool {
 	return msg.Interaction != nil && msg.Interaction.Name == "chatlog"
 }
 
+func isCodeRunResultMessage(msg discord.Message) bool {
+	return strings.HasPrefix(msg.Content, codeRunResultMarker)
+}
+
 func formatMsg(msg, username string, reference *discord.Message) string {
 	trimmedRefContent := ""
 	if reference != nil {
@@ -592,9 +596,9 @@ func addContextMessages(
 
 	latestImageIdx := -1
 	for i, msg := range messages { // newest to oldest
-		if slices.ContainsFunc(msg.Attachments, isImageAttachment) ||
+		if !isCodeRunResultMessage(msg) && (slices.ContainsFunc(msg.Attachments, isImageAttachment) ||
 			len(imageURLsFromContent(msg.Content)) > 0 ||
-			len(imageURLsFromEmbeds(msg.Embeds)) > 0 {
+			len(imageURLsFromEmbeds(msg.Embeds)) > 0) {
 			latestImageIdx = i
 			break // found the newest image
 		}
@@ -631,6 +635,8 @@ func addContextMessages(
 				llmer.Lobotomize(getLobotomyAmountFromMessage(msg))
 				continue
 			} else if isChatlogMessage(msg) {
+				continue
+			} else if isCodeRunResultMessage(msg) {
 				continue
 			} else if isCardMessage(msg) {
 				// for card messages, extract the actual content after the header

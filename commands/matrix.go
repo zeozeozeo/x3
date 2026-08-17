@@ -1514,6 +1514,8 @@ func (b *MatrixBot) handleLlm(ctx context.Context, msg *matrixMessage, isRegener
 	if thinking != "" && cache.PersonaMeta.ThinkingTraces {
 		files = append(files, &discord.File{Name: "reasoning.txt", Reader: strings.NewReader(thinking)})
 	}
+	response, generatedFiles := consumeGeneratedArtifacts(response, llmer.GeneratedArtifacts)
+	files = append(files, generatedFiles...)
 	rawResponse := response
 	response, files, htmlRendered := prepareHTMLRenderedResponse(ctx, cache.PersonaMeta, response, files)
 	response = strings.TrimSpace(response)

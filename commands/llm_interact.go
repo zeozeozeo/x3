@@ -21,6 +21,7 @@ import (
 	"github.com/disgoorg/disgo/handler"
 	"github.com/disgoorg/snowflake/v2"
 	"github.com/zeozeozeo/aihorde-go"
+	"github.com/zeozeozeo/x3/codeinterp"
 	"github.com/zeozeozeo/x3/db"
 	"github.com/zeozeozeo/x3/horder"
 	"github.com/zeozeozeo/x3/llm"
@@ -546,6 +547,8 @@ func handleLlmInteraction2(
 			Reader: strings.NewReader(thinking),
 		})
 	}
+	response, generatedFiles := consumeGeneratedArtifacts(response, llmer.GeneratedArtifacts)
+	files = append(files, generatedFiles...)
 	rawResponse := response
 	htmlRendered := false
 	response, files, htmlRendered = prepareHTMLRenderedResponse(ctx, cache.PersonaMeta, response, files)
@@ -562,6 +565,7 @@ func handleLlmInteraction2(
 		response = replaceLlmTagsWithNewlines(response, &cache.PersonaMeta)
 
 		builder := discord.NewMessageUpdate().WithAllowedMentions(&discord.AllowedMentions{RepliedUser: false})
+		builder = builder.WithComponents(runnableCodeComponents(response)...)
 		if utf8.RuneCountInString(response) > 2000 {
 			// if too long, send as file attachment
 			builder = builder.WithContent("")
@@ -758,6 +762,7 @@ func requestCompletionCacheFriendly(
 	if err == nil || !llm.IsContextLengthError(err) || softMessageLimit <= 0 {
 		if err == nil {
 			appendGeneratedAssistantMessage(llmer, requestLlmer.Messages[beforeRequest:])
+			llmer.GeneratedArtifacts = append([]codeinterp.Artifact(nil), requestLlmer.GeneratedArtifacts...)
 		}
 		return response, usage, err
 	}
@@ -773,6 +778,7 @@ func requestCompletionCacheFriendly(
 		if err == nil || !llm.IsContextLengthError(err) {
 			if err == nil {
 				appendGeneratedAssistantMessage(llmer, requestLlmer.Messages[beforeRequest:])
+				llmer.GeneratedArtifacts = append([]codeinterp.Artifact(nil), requestLlmer.GeneratedArtifacts...)
 			}
 			return response, usage, err
 		}
@@ -783,6 +789,7 @@ func requestCompletionCacheFriendly(
 func cloneLlmerForCompletion(source *llm.Llmer) *llm.Llmer {
 	clone := *source
 	clone.Messages = cloneLLMMessages(source.Messages)
+	clone.GeneratedArtifacts = nil
 	return &clone
 }
 

@@ -89,3 +89,29 @@ To build a Discord-only container image without Matrix support:
 ```console
 podman build --build-arg GO_BUILD_TAGS= -t x3 -f Dockerfile .
 ```
+
+## Sandboxed code interpreter
+
+Install [gVisor](https://gvisor.dev/docs/user_guide/install/) and verify that
+Docker can use the `runsc` runtime:
+
+```console
+docker run --rm --runtime=runsc hello-world
+```
+
+Build the interpreter image:
+
+```console
+docker build -t x3-code-sandbox:latest codeinterp/sandbox
+```
+
+Enable it in `.env`:
+
+```dotenv
+X3_CODE_INTERPRETER_ENABLED=true
+X3_CODE_INTERPRETER_EXECUTABLE=docker
+X3_CODE_INTERPRETER_IMAGE=x3-code-sandbox:latest
+X3_CODE_INTERPRETER_RUNTIME=runsc
+```
+
+Resource-limit settings are listed in `.env.example`.
