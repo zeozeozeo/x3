@@ -11,5 +11,7 @@ COPY runner.py /opt/x3/runner.py
 
 RUN chmod 0555 /opt/x3/runner.py
 
-USER 65534:65534
+# runner.py is a small trusted supervisor. It starts as root inside the gVisor
+# sandbox, then irreversibly drops only the submitted program to 65534:65534.
+USER 0:0
 WORKDIR /work

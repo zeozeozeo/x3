@@ -3,7 +3,8 @@ import base64
 import json
 import mimetypes
 import os
-import pathlib
+import signal
+import stat
 import subprocess
 import sys
 import tempfile
@@ -11,6 +12,9 @@ import tempfile
 MAX_CAPTURE = 64 * 1024
 MAX_FILE = 8 * 1024 * 1024
 MAX_TOTAL = 8 * 1024 * 1024
+MAX_FILES = 32
+UNTRUSTED_UID = 65534
+UNTRUSTED_GID = 65534
 
 
 def clipped(value: bytes) -> str:
@@ -22,19 +26,35 @@ def clipped(value: bytes) -> str:
 def artifacts() -> list[dict]:
     result = []
     total = 0
-    for path in sorted(pathlib.Path("/work").iterdir()):
-        if not path.is_file() or path.is_symlink():
-            continue
-        size = path.stat().st_size
-        if size > MAX_FILE or total + size > MAX_TOTAL:
-            continue
-        data = path.read_bytes()
-        total += len(data)
-        result.append({
-            "name": path.name,
-            "content_type": mimetypes.guess_type(path.name)[0] or "application/octet-stream",
-            "data": base64.b64encode(data).decode("ascii"),
-        })
+    work_fd = os.open("/work", os.O_RDONLY | os.O_DIRECTORY)
+    try:
+        names = sorted(os.listdir(work_fd))
+        for name in names:
+            if len(result) >= MAX_FILES:
+                break
+            if not name or name in (".", "..") or len(os.fsencode(name)) > 255:
+                continue
+            try:
+                fd = os.open(name, os.O_RDONLY | os.O_NONBLOCK | os.O_NOFOLLOW, dir_fd=work_fd)
+            except OSError:
+                continue
+            try:
+                info = os.fstat(fd)
+                if not stat.S_ISREG(info.st_mode) or info.st_size > MAX_FILE or total + info.st_size > MAX_TOTAL:
+                    continue
+                data = os.read(fd, MAX_FILE + 1)
+            finally:
+                os.close(fd)
+            if len(data) > MAX_FILE or total + len(data) > MAX_TOTAL:
+                continue
+            total += len(data)
+            result.append({
+                "name": name,
+                "content_type": mimetypes.guess_type(name)[0] or "application/octet-stream",
+                "data": base64.b64encode(data).decode("ascii"),
+            })
+    finally:
+        os.close(work_fd)
     return result
 
 
@@ -49,7 +69,22 @@ def main() -> None:
         raise SystemExit("unsupported language")
     code = sys.stdin.buffer.read()
     with tempfile.TemporaryFile(dir="/tmp") as stdout, tempfile.TemporaryFile(dir="/tmp") as stderr:
-        proc = subprocess.run(command, input=code, cwd="/work", stdout=stdout, stderr=stderr, check=False)
+        proc = subprocess.Popen(
+            command,
+            cwd="/work",
+            stdin=subprocess.PIPE,
+            stdout=stdout,
+            stderr=stderr,
+            start_new_session=True,
+            user=UNTRUSTED_UID,
+            group=UNTRUSTED_GID,
+            extra_groups=[],
+        )
+        proc.communicate(code)
+        try:
+            os.killpg(proc.pid, signal.SIGKILL)
+        except ProcessLookupError:
+            pass
         stdout.seek(0)
         stderr.seek(0)
         captured_stdout = stdout.read(MAX_CAPTURE + 1)
