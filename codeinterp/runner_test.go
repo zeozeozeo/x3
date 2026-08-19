@@ -8,10 +8,22 @@ import (
 )
 
 func TestNormalizeLanguage(t *testing.T) {
-	tests := map[string]string{"py": "python", "Python3": "python", "lua": "lua", "js": "javascript", "node": "javascript", "ruby": ""}
+	tests := map[string]string{
+		"py": "python", "Python3": "python", "lua": "lua", "js": "javascript",
+		"node": "javascript", "bun": "javascript", "ts": "typescript", "rb": "ruby",
+		"php8": "php", "pl": "perl", "bash": "shell", "brainfuck": "",
+	}
 	for input, want := range tests {
 		if got := NormalizeLanguage(input); got != want {
 			t.Errorf("NormalizeLanguage(%q) = %q, want %q", input, got, want)
+		}
+	}
+}
+
+func TestSupportedLanguagesNormalizeToThemselves(t *testing.T) {
+	for _, language := range SupportedLanguages() {
+		if got := NormalizeLanguage(language); got != language {
+			t.Errorf("NormalizeLanguage(%q) = %q", language, got)
 		}
 	}
 }

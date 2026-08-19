@@ -63,7 +63,12 @@ def main() -> None:
     command = {
         "python": ["python3", "-I", "-"],
         "lua": ["lua5.4", "-"],
-        "javascript": ["node", "--input-type=commonjs", "-"],
+        "javascript": ["bun", "run", "-"],
+        "typescript": ["bun", "run", "-"],
+        "ruby": ["ruby", "-"],
+        "php": ["php"],
+        "perl": ["perl", "-"],
+        "shell": ["bash", "--noprofile", "--norc", "-s"],
     }.get(language)
     if command is None:
         raise SystemExit("unsupported language")

@@ -1,8 +1,16 @@
+FROM oven/bun:debian AS bun
+
 FROM python:3.13-slim-bookworm
 
 RUN apt-get update \
-    && apt-get install --no-install-recommends -y lua5.4 nodejs \
+    && apt-get install --no-install-recommends -y bash lua5.4 perl php-cli ruby \
     && rm -rf /var/lib/apt/lists/*
+
+COPY --from=bun /usr/local/bin/bun /usr/local/bin/bun
+
+# The runtime cache has no value in these one-shot containers and would consume
+# the small writable tmpfs.
+ENV BUN_RUNTIME_TRANSPILER_CACHE_PATH=0
 
 COPY requirements.txt /opt/x3/requirements.txt
 RUN pip install --no-cache-dir --requirement /opt/x3/requirements.txt

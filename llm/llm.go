@@ -1009,7 +1009,7 @@ var weirdEndRegexp = regexp.MustCompile(`(>[\./w]+)$`)
 const (
 	toolNameWebSearch     = "web_search"
 	toolNameDiscordSearch = "discord_search"
-	toolNamePython        = "python"
+	toolNameCodeInterp    = "code_interpreter"
 )
 
 var webSearchTool = openai.Tool{
@@ -1050,18 +1050,23 @@ var discordSearchTool = openai.Tool{
 	},
 }
 
-var pythonTool = openai.Tool{
+var codeInterpreterTool = openai.Tool{
 	Type: openai.ToolTypeFunction,
 	Function: &openai.FunctionDefinition{
-		Name:        toolNamePython,
-		Description: "Run Python in an isolated, offline sandbox. Save generated files in the current directory. To attach one in your final answer, include <file>filename</file> exactly.",
+		Name:        toolNameCodeInterp,
+		Description: "Run code in an isolated, offline sandbox. Supported languages are Python, JavaScript, TypeScript, Lua, Ruby, PHP, Perl, and Bash. Save generated files in the current directory. To attach one in your final answer, include <file>filename</file> exactly.",
 		Parameters: map[string]any{
 			"type":     "object",
-			"required": []string{"code"},
+			"required": []string{"language", "code"},
 			"properties": map[string]any{
+				"language": map[string]any{
+					"type":        "string",
+					"enum":        codeinterp.SupportedLanguages(),
+					"description": "The language used by the source code.",
+				},
 				"code": map[string]any{
 					"type":        "string",
-					"description": "Python source code to execute. Matplotlib uses a non-interactive backend; call savefig with a relative filename.",
+					"description": "Source code to execute. Python's Matplotlib uses a non-interactive backend; call savefig with a relative filename.",
 				},
 			},
 			"additionalProperties": false,
@@ -1073,8 +1078,9 @@ type toolArguments struct {
 	Query string `json:"query"`
 }
 
-type pythonToolArguments struct {
-	Code string `json:"code"`
+type codeToolArguments struct {
+	Language string `json:"language"`
+	Code     string `json:"code"`
 }
 
 func modelUsesNativeToolCalling(m model.Model, provider string) bool {
@@ -1096,7 +1102,7 @@ func (l Llmer) availableTools() []openai.Tool {
 		tools = append(tools, discordSearchTool)
 	}
 	if codeinterp.Enabled() {
-		tools = append(tools, pythonTool)
+		tools = append(tools, codeInterpreterTool)
 	}
 	return tools
 }
@@ -1140,15 +1146,20 @@ func parseToolQuery(arguments string) string {
 	return arguments
 }
 
-func parsePythonCode(arguments string) string {
-	var args pythonToolArguments
+func parseCodeToolArguments(arguments string) codeToolArguments {
+	var args codeToolArguments
 	if err := json.Unmarshal([]byte(arguments), &args); err == nil {
-		return args.Code
+		args.Language = codeinterp.NormalizeLanguage(args.Language)
+		return args
 	}
-	return ""
+	return codeToolArguments{}
 }
 
 func (l *Llmer) executeCodeTool(ctx context.Context, language, code string) string {
+	language = codeinterp.NormalizeLanguage(language)
+	if language == "" {
+		return "Code was not run: the language is unsupported."
+	}
 	if strings.TrimSpace(code) == "" {
 		return language + " was not run: the code argument was empty."
 	}
@@ -1329,10 +1340,10 @@ func (l *Llmer) requestCompletionInternal2(
 		nativeToolCalling = false
 		for i, call := range toolCalls {
 			var results string
-			if call.Function.Name == toolNamePython {
-				code := parsePythonCode(call.Function.Arguments)
-				slog.Info("executing native tool call", "tool", call.Function.Name, "code_len", len(code))
-				results = l.executeCodeTool(ctx, "python", code)
+			if call.Function.Name == toolNameCodeInterp {
+				args := parseCodeToolArguments(call.Function.Arguments)
+				slog.Info("executing native tool call", "tool", call.Function.Name, "language", args.Language, "code_len", len(args.Code))
+				results = l.executeCodeTool(ctx, args.Language, args.Code)
 			} else {
 				query := parseToolQuery(call.Function.Arguments)
 				slog.Info("executing native tool call", "tool", call.Function.Name, "query", query)

@@ -52,13 +52,7 @@ func runnableCodeComponents(content string) []discord.LayoutComponent {
 	}
 	buttons := make([]discord.InteractiveComponent, 0, len(blocks))
 	for i, block := range blocks {
-		label := "Run Python"
-		switch block.Language {
-		case "lua":
-			label = "Run Lua"
-		case "javascript":
-			label = "Run JavaScript"
-		}
+		label := "Run " + languageDisplayName(block.Language)
 		buttons = append(buttons, discord.ButtonComponent{
 			Style:    discord.ButtonStyleSecondary,
 			Label:    label,
@@ -67,6 +61,24 @@ func runnableCodeComponents(content string) []discord.LayoutComponent {
 		})
 	}
 	return []discord.LayoutComponent{discord.NewActionRow(buttons...)}
+}
+
+func languageDisplayName(language string) string {
+	switch language {
+	case "javascript":
+		return "JavaScript"
+	case "typescript":
+		return "TypeScript"
+	case "php":
+		return "PHP"
+	case "shell":
+		return "Bash"
+	default:
+		if language == "" {
+			return "Code"
+		}
+		return strings.ToUpper(language[:1]) + language[1:]
+	}
 }
 
 func consumeGeneratedArtifacts(response string, artifacts []codeinterp.Artifact) (string, []*discord.File) {

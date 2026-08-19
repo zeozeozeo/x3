@@ -265,11 +265,26 @@ func NormalizeLanguage(language string) string {
 		return "python"
 	case "lua", "lua5.4":
 		return "lua"
-	case "js", "javascript", "node", "nodejs":
+	case "js", "javascript", "node", "nodejs", "bun":
 		return "javascript"
+	case "ts", "typescript":
+		return "typescript"
+	case "rb", "ruby":
+		return "ruby"
+	case "php", "php8", "php8.2":
+		return "php"
+	case "pl", "perl", "perl5":
+		return "perl"
+	case "bash", "sh", "shell":
+		return "shell"
 	default:
 		return ""
 	}
+}
+
+// SupportedLanguages returns the canonical language names accepted by Run.
+func SupportedLanguages() []string {
+	return []string{"python", "javascript", "typescript", "lua", "ruby", "php", "perl", "shell"}
 }
 
 func containerName() (string, error) {
