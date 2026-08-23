@@ -119,7 +119,7 @@ func HandleCodeRunButton(_ discord.ButtonInteractionData, event *handler.Compone
 	if index >= len(blocks) || blocks[index].Language != codeinterp.NormalizeLanguage(event.Vars["language"]) {
 		return sendInteractionErrorComponent(event, "That code block is no longer available.", true)
 	}
-	if err := event.DeferCreateMessage(false); err != nil {
+	if err := event.DeferCreateMessage(true); err != nil {
 		return err
 	}
 	result, runErr := codeinterp.Run(context.Background(), blocks[index].Language, blocks[index].Code)

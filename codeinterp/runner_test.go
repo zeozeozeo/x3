@@ -2,6 +2,8 @@ package codeinterp
 
 import (
 	"errors"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -83,5 +85,50 @@ func TestLimitedBuffer(t *testing.T) {
 	n, err := b.Write([]byte("hello"))
 	if n != 3 || !errors.Is(err, ErrResponseTooBig) || b.String() != "hel" {
 		t.Fatalf("Write = (%d, %v, %q)", n, err, b.String())
+	}
+}
+
+func TestResolveExecutablePassesThroughPaths(t *testing.T) {
+	c := Config{Executable: "/opt/docker/bin/docker"}
+	got, err := c.resolveExecutable()
+	if err != nil || got != c.Executable {
+		t.Fatalf("resolveExecutable = (%q, %v)", got, err)
+	}
+}
+
+func TestResolveExecutableFallsBackToHomeBin(t *testing.T) {
+	home := t.TempDir()
+	binDir := filepath.Join(home, ".local", "bin")
+	if err := os.MkdirAll(binDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	name := "x3-fake-docker.exe"
+	fake := filepath.Join(binDir, name)
+	if err := os.WriteFile(fake, []byte("#!/bin/sh\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+
+	c := Config{Executable: name}
+	got, err := c.resolveExecutable()
+	if err != nil {
+		t.Fatalf("resolveExecutable: %v", err)
+	}
+	if filepath.Clean(got) != filepath.Clean(fake) {
+		t.Fatalf("resolveExecutable = %q, want %q", got, fake)
+	}
+}
+
+func TestResolveExecutableErrorMentionsFixes(t *testing.T) {
+	c := Config{Executable: "x3-definitely-missing-cli"}
+	_, err := c.resolveExecutable()
+	if err == nil {
+		t.Fatal("expected an error for a missing sandbox executable")
+	}
+	for _, want := range []string{"X3_CODE_INTERPRETER_EXECUTABLE", "Docker socket"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("error %q does not mention %q", err, want)
+		}
 	}
 }

@@ -12,6 +12,7 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
@@ -90,6 +91,33 @@ func ConfigFromEnv() Config {
 
 func Enabled() bool { return ConfigFromEnv().Enabled }
 
+func (c Config) resolveExecutable() (string, error) {
+	if strings.ContainsAny(c.Executable, `/\`) {
+		return c.Executable, nil
+	}
+	if path, err := exec.LookPath(c.Executable); err == nil {
+		return path, nil
+	}
+	for _, dir := range fallbackExecutableDirs() {
+		candidate := filepath.Join(dir, c.Executable)
+		if _, err := exec.LookPath(candidate); err == nil {
+			return candidate, nil
+		}
+	}
+	return "", fmt.Errorf(
+		"sandbox executable %q was not found: if x3 itself runs in a container, install the Docker CLI in that image and mount the host Docker socket (/var/run/docker.sock); otherwise set X3_CODE_INTERPRETER_EXECUTABLE to the binary's full path",
+		c.Executable,
+	)
+}
+
+func fallbackExecutableDirs() []string {
+	dirs := []string{"/usr/local/bin", "/usr/bin", "/snap/bin"}
+	if home, err := os.UserHomeDir(); err == nil && home != "" {
+		dirs = append(dirs, filepath.Join(home, ".local", "bin"), filepath.Join(home, "bin"))
+	}
+	return dirs
+}
+
 func Run(ctx context.Context, language, code string) (Result, error) {
 	return ConfigFromEnv().Run(ctx, language, code)
 }
@@ -116,6 +144,10 @@ func (c Config) Run(ctx context.Context, language, code string) (Result, error) 
 		return Result{}, ErrBusy
 	}
 
+	executable, err := c.resolveExecutable()
+	if err != nil {
+		return Result{}, err
+	}
 	name, err := containerName()
 	if err != nil {
 		return Result{}, fmt.Errorf("create sandbox name: %w", err)
@@ -124,7 +156,7 @@ func (c Config) Run(ctx context.Context, language, code string) (Result, error) 
 	defer cancel()
 
 	args := c.dockerArgs(name, language)
-	cmd := exec.CommandContext(runCtx, c.Executable, args...)
+	cmd := exec.CommandContext(runCtx, executable, args...)
 	cmd.Stdin = strings.NewReader(code)
 	var stdout limitedBuffer
 	stdout.limit = c.MaxOutputBytes
@@ -138,7 +170,7 @@ func (c Config) Run(ctx context.Context, language, code string) (Result, error) 
 	// daemon. The random, known name makes this cleanup precise and idempotent.
 	cleanupCtx, cleanupCancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cleanupCancel()
-	_ = exec.CommandContext(cleanupCtx, c.Executable, "rm", "--force", name).Run()
+	_ = exec.CommandContext(cleanupCtx, executable, "rm", "--force", name).Run()
 
 	if errors.Is(stdout.err, ErrResponseTooBig) {
 		return Result{}, ErrResponseTooBig

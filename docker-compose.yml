@@ -6,6 +6,7 @@ services:
     image: x3
     volumes:
       - .:/app
+      - /var/run/docker.sock:/var/run/docker.sock
     working_dir: /app
     environment:
       - X3_GOTENBERG_URL=http://gotenberg:3000

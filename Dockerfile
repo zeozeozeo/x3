@@ -13,6 +13,7 @@ RUN --mount=type=cache,target=/root/.cache/go-build \
 FROM alpine
 
 RUN apk update && apk add --no-cache \
+    docker-cli \
     exiftool \
     libgcc \
     libstdc++ \
