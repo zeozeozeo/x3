@@ -197,6 +197,8 @@ func HandleLlm(event *handler.CommandEvent, models []model.Model) error {
 			Reader: strings.NewReader(thinking),
 		})
 	}
+	response, generatedFiles := consumeGeneratedArtifacts(response, llmer.GeneratedArtifacts)
+	files = append(files, generatedFiles...)
 	rawResponse := response
 	htmlRendered := false
 	response, files, htmlRendered = prepareHTMLRenderedResponse(context.Background(), cache.PersonaMeta, response, files)
@@ -210,6 +212,7 @@ func HandleLlm(event *handler.CommandEvent, models []model.Model) error {
 
 	if ephemeral || useCache { // (single response)
 		update := discord.NewMessageUpdate().WithFlags(flagsFromEphemeral(ephemeral)) // Get flags
+		update = update.WithComponents(runnableCodeComponents(response)...)
 		if utf8.RuneCountInString(response) > 2000 {
 			update = update.WithContent("")
 			update = update.AddFiles(&discord.File{

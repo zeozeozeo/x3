@@ -89,3 +89,44 @@ To build a Discord-only container image without Matrix support:
 ```console
 podman build --build-arg GO_BUILD_TAGS= -t x3 -f Dockerfile .
 ```
+
+## Sandboxed code interpreter
+
+Install [gVisor](https://gvisor.dev/docs/user_guide/install/) and verify that
+Docker can use the `runsc` runtime:
+
+```console
+docker run --rm --runtime=runsc hello-world
+```
+
+Build the interpreter image:
+
+```console
+docker build --pull --no-cache -t x3-code-sandbox:latest codeinterp/sandbox
+```
+
+Enable it in `.env`:
+
+```dotenv
+X3_CODE_INTERPRETER_ENABLED=true
+X3_CODE_INTERPRETER_EXECUTABLE=docker
+X3_CODE_INTERPRETER_IMAGE=x3-code-sandbox:latest
+X3_CODE_INTERPRETER_RUNTIME=runsc
+```
+
+Resource-limit settings are listed in `.env.example`.
+
+Treat the runtime installation as part of the sandbox boundary:
+
+- Keep gVisor on its latest production release and rebuild the sandbox image
+  regularly. The interpreter deliberately uses `--pull=never`; builds and image
+  updates must be performed by an administrator, never during an untrusted run.
+- Configure `runsc` with its default `systrap` platform (or a separately reviewed
+  `runsc-*` Docker runtime profile). Do not map the configured runtime name to
+  `runc`, enable debug/strace logging, use host networking, or expose host mounts.
+- Prefer a dedicated, rootless Docker daemon or a separate worker host. Anyone
+  who compromises a process with access to a rootful Docker socket effectively
+  controls that host, independently of gVisor.
+- Pin `X3_CODE_INTERPRETER_IMAGE` to an image digest in production. Confirm the
+  runtime registration with `docker info`, and smoke-test the rebuilt image before
+  enabling the feature.
