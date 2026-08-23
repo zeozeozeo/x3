@@ -1151,11 +1151,15 @@ func (l *Llmer) requestCompletionInternal2(
 	if m.Limited {
 		settings = persona.InferenceSettings{}
 	}
+	topP := settings.TopP
+	if m.Name == "Kimi K3" && provider == model.ProviderNim {
+		topP = 0.95 // otherwise fails validation
+	}
 	req := openai.ChatCompletionRequest{
 		Model:       codename,
 		Messages:    l.convertMessages(m.Vision, provider != model.ProviderOllama && provider != model.ProviderCloudflare && provider != model.ProviderCerebras, prepend, searchResults, ctx), // ollama cloud doesn't support fetching from image URLs, how nice :)
 		Temperature: settings.Temperature,
-		TopP:        settings.TopP,
+		TopP:        topP,
 		// MinP anyone?
 		FrequencyPenalty: settings.FrequencyPenalty,
 		Seed:             settings.Seed,
