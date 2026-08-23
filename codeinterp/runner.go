@@ -229,16 +229,19 @@ func (c Config) dockerArgs(name, language string) []string {
 		"--pull", "never", "--log-driver", "none", "--restart", "no", "--stop-timeout", "1",
 		"--runtime", c.Runtime,
 		"--network", "none", "--ipc", "none",
-		// Only the trusted supervisor receives these three capabilities so it
-		// can prepare /work ownership and drop the child UID/GID. Linux clears
-		// them when the child changes from UID 0 to UID 65534 before exec, and
-		// non-root processes cannot exercise them.
-		"--read-only", "--cap-drop", "ALL", "--cap-add", "CHOWN", "--cap-add", "SETUID", "--cap-add", "SETGID",
+		// Only the trusted supervisor receives these two capabilities so it can
+		// discard supplementary groups and change the child UID/GID. Linux clears
+		// them when the child changes from UID 0 to UID 65534 before exec.
+		"--read-only", "--cap-drop", "ALL", "--cap-add", "SETUID", "--cap-add", "SETGID",
 		"--security-opt", "no-new-privileges=true",
 		"--pids-limit", "64", "--memory", c.Memory, "--memory-swap", c.Memory,
 		"--cpus", c.CPUs,
 		"--ulimit", "nofile=64:64", "--ulimit", "nproc=64:64", "--ulimit", "fsize=16777216:16777216", "--ulimit", "core=0:0", "--ulimit", "memlock=0:0",
-		"--tmpfs", "/work:rw,noexec,nosuid,nodev,size=" + c.Disk + ",uid=65534,gid=65534,mode=0700",
+		// CPython's subprocess chdirs to cwd *before* dropping privileges, so
+		// /work must be traversable by root as well as writable by the
+		// untrusted user afterwards. Every run gets a fresh single-user
+		// container, so a shared-mode scratch dir leaks nothing.
+		"--tmpfs", "/work:rw,noexec,nosuid,nodev,size=" + c.Disk + ",mode=1777",
 		"--tmpfs", "/tmp:rw,noexec,nosuid,nodev,size=4m,mode=01777",
 		// The trusted supervisor starts as sandbox-root and permanently drops the
 		// child to nobody. This prevents user code from signalling the supervisor

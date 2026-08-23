@@ -33,7 +33,7 @@ func TestSupportedLanguagesNormalizeToThemselves(t *testing.T) {
 func TestDockerArgsAreHardened(t *testing.T) {
 	c := Config{Runtime: "runsc", Image: "sandbox:test", Memory: "128m", CPUs: "0.5", Disk: "8m"}
 	joined := strings.Join(c.dockerArgs("x3-code-test", "python"), " ")
-	for _, required := range []string{"--runtime runsc", "--network none", "--read-only", "--cap-drop ALL", "--cap-add CHOWN", "--cap-add SETUID", "--cap-add SETGID", "no-new-privileges=true", "--pids-limit 64", "--memory 128m", "--memory-swap 128m", "/work:rw,noexec,nosuid,nodev,size=8m", "--user 0:0", "--pull never", "--log-driver none", "core=0:0", "memlock=0:0"} {
+	for _, required := range []string{"--runtime runsc", "--network none", "--read-only", "--cap-drop ALL", "--cap-add SETUID", "--cap-add SETGID", "no-new-privileges=true", "--pids-limit 64", "--memory 128m", "--memory-swap 128m", "/work:rw,noexec,nosuid,nodev,size=8m,mode=1777", "--user 0:0", "--pull never", "--log-driver none", "core=0:0", "memlock=0:0"} {
 		if !strings.Contains(joined, required) {
 			t.Errorf("docker args missing %q: %s", required, joined)
 		}
