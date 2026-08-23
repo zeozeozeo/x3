@@ -49,7 +49,14 @@ func lockChannelInteraction(channelID snowflake.ID) func() {
 
 	lockAny, _ := channelInteractionLocks.LoadOrStore(channelID, &sync.Mutex{})
 	lock := lockAny.(*sync.Mutex)
+	start := time.Now()
 	lock.Lock()
+	if waited := time.Since(start); waited > time.Second {
+		slog.Info("waited for channel interaction lock",
+			"channel_id", channelID.String(),
+			"waited", waited.Round(time.Millisecond),
+		)
+	}
 	return lock.Unlock
 }
 
