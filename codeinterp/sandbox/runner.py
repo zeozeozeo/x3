@@ -76,8 +76,8 @@ def main() -> None:
     # Some runtimes (notably older runsc releases) ignore uid=/gid= on tmpfs
     # mount options, leaving /work unusable for the untrusted user. Enforce it
     # here while still trusted root; harmless if the mount already honors it.
-    os.chown("/work", UNTRUSTED_UID, UNTRUSTED_GID)
     os.chmod("/work", 0o700)
+    os.chown("/work", UNTRUSTED_UID, UNTRUSTED_GID)
     with tempfile.TemporaryFile(dir="/tmp") as stdout, tempfile.TemporaryFile(dir="/tmp") as stderr:
         proc = subprocess.Popen(
             command,
