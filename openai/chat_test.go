@@ -946,3 +946,70 @@ func TestFinishReason(t *testing.T) {
 		}
 	}
 }
+
+// Gemini 3's OpenAI-compatible endpoint attaches extra_content.google
+// .thought_signature to assistant messages and tool calls, and rejects the
+// next request with a 400 unless those signatures are replayed verbatim.
+func TestChatCompletionMessageGeminiThoughtSignatureRoundTrip(t *testing.T) {
+	payload := []byte(`{
+		"role": "assistant",
+		"content": "",
+		"extra_content": {"google": {"thought_signature": "sig-message"}},
+		"tool_calls": [
+			{
+				"id": "function-call-1",
+				"type": "function",
+				"extra_content": {"google": {"thought_signature": "sig-first"}},
+				"function": {"name": "code_interpreter", "arguments": "{\"language\":\"python\",\"code\":\"print(1)\"}"}
+			},
+			{
+				"id": "function-call-2",
+				"type": "function",
+				"function": {"name": "web_search", "arguments": "{\"query\":\"x\"}"}
+			}
+		]
+	}`)
+
+	var msg openai.ChatCompletionMessage
+	if err := json.Unmarshal(payload, &msg); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if sig := googleThoughtSignature(msg.ExtraContent); sig != "sig-message" {
+		t.Fatalf("message-level extra_content lost: %#v", msg.ExtraContent)
+	}
+	if len(msg.ToolCalls) != 2 {
+		t.Fatalf("expected 2 tool calls, got %d", len(msg.ToolCalls))
+	}
+	if sig := googleThoughtSignature(msg.ToolCalls[0].ExtraContent); sig != "sig-first" {
+		t.Fatalf("first tool call signature lost: %#v", msg.ToolCalls[0].ExtraContent)
+	}
+	if msg.ToolCalls[1].ExtraContent != nil {
+		t.Fatalf("unexpected extra_content on unsigned tool call: %#v", msg.ToolCalls[1].ExtraContent)
+	}
+
+	marshaled, err := json.Marshal(&msg)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	var replayed openai.ChatCompletionMessage
+	if err := json.Unmarshal(marshaled, &replayed); err != nil {
+		t.Fatalf("re-unmarshal: %v", err)
+	}
+	if sig := googleThoughtSignature(replayed.ExtraContent); sig != "sig-message" {
+		t.Fatalf("message signature not serialized: %s", marshaled)
+	}
+	if sig := googleThoughtSignature(replayed.ToolCalls[0].ExtraContent); sig != "sig-first" {
+		t.Fatalf("tool call signature not serialized: %s", marshaled)
+	}
+	if !strings.Contains(string(marshaled), `"extra_content"`) {
+		t.Fatalf("marshaled message is missing extra_content: %s", marshaled)
+	}
+}
+
+func googleThoughtSignature(extra map[string]any) any {
+	google, ok := extra["google"].(map[string]any)
+	if !ok {
+		return nil
+	}
+	return google["thought_signature"]
+}

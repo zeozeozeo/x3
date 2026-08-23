@@ -119,6 +119,12 @@ type ChatCompletionMessage struct {
 
 	// For Role=tool prompts this should be set to the ID given in the assistant's prior request to call a tool.
 	ToolCallID string `json:"tool_call_id,omitempty"`
+
+	// Provider-specific extension fields. Google's OpenAI-compatible endpoint
+	// returns extra_content.google.thought_signature on assistant messages and
+	// individual tool calls; Gemini 3 rejects follow-up requests unless these
+	// signatures are sent back verbatim. Other providers ignore the field.
+	ExtraContent map[string]any `json:"extra_content,omitempty"`
 }
 
 func (m ChatCompletionMessage) MarshalJSON() ([]byte, error) {
@@ -137,6 +143,7 @@ func (m ChatCompletionMessage) MarshalJSON() ([]byte, error) {
 			FunctionCall     *FunctionCall     `json:"function_call,omitempty"`
 			ToolCalls        []ToolCall        `json:"tool_calls,omitempty"`
 			ToolCallID       string            `json:"tool_call_id,omitempty"`
+			ExtraContent     map[string]any    `json:"extra_content,omitempty"`
 		}(m)
 		return json.Marshal(msg)
 	}
@@ -152,6 +159,7 @@ func (m ChatCompletionMessage) MarshalJSON() ([]byte, error) {
 		FunctionCall     *FunctionCall     `json:"function_call,omitempty"`
 		ToolCalls        []ToolCall        `json:"tool_calls,omitempty"`
 		ToolCallID       string            `json:"tool_call_id,omitempty"`
+		ExtraContent     map[string]any    `json:"extra_content,omitempty"`
 	}(m)
 	return json.Marshal(msg)
 }
@@ -168,6 +176,7 @@ func (m *ChatCompletionMessage) UnmarshalJSON(bs []byte) error {
 		FunctionCall     *FunctionCall `json:"function_call,omitempty"`
 		ToolCalls        []ToolCall    `json:"tool_calls,omitempty"`
 		ToolCallID       string        `json:"tool_call_id,omitempty"`
+		ExtraContent     map[string]any `json:"extra_content,omitempty"`
 	}{}
 
 	if err := json.Unmarshal(bs, &msg); err == nil {
@@ -185,6 +194,7 @@ func (m *ChatCompletionMessage) UnmarshalJSON(bs []byte) error {
 		FunctionCall     *FunctionCall     `json:"function_call,omitempty"`
 		ToolCalls        []ToolCall        `json:"tool_calls,omitempty"`
 		ToolCallID       string            `json:"tool_call_id,omitempty"`
+		ExtraContent     map[string]any    `json:"extra_content,omitempty"`
 	}{}
 	if err := json.Unmarshal(bs, &multiMsg); err != nil {
 		return err
@@ -199,6 +209,9 @@ type ToolCall struct {
 	ID       string       `json:"id,omitempty"`
 	Type     ToolType     `json:"type"`
 	Function FunctionCall `json:"function"`
+	// ExtraContent carries provider-specific extensions such as Google's
+	// extra_content.google.thought_signature attached to function calls.
+	ExtraContent map[string]any `json:"extra_content,omitempty"`
 }
 
 type FunctionCall struct {

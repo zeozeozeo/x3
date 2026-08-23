@@ -1335,9 +1335,10 @@ func (l *Llmer) requestCompletionInternal2(
 		}
 
 		req.Messages = append(req.Messages, openai.ChatCompletionMessage{
-			Role:      RoleAssistant,
-			Content:   message.Content,
-			ToolCalls: toolCalls,
+			Role:         RoleAssistant,
+			Content:      message.Content,
+			ToolCalls:    toolCalls,
+			ExtraContent: message.ExtraContent, // Google requires that we pass encrypted thought signatures forward
 		})
 		req.Tools = nil
 		req.ToolChoice = nil
