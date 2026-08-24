@@ -25,7 +25,7 @@ A Discord LLM roleplay and utility bot
 - Web-based model.json editor GUI
 - Furry
 - Works in DM, app and server contexts
-- Extensive LLM model selection (GLM-5.2, Mistral, Kimi K2.6, DeepSeek V4, etcetc)
+- Extensive LLM model selection (Kimi K3, GLM-5.2, Gemini 3.7, DeepSeek V4, etcetc)
 - Supports vision models, and automatically generates text descriptions for text-only models
 - It has an extremely overcomplicated internal model router - it constantly juggles between vision and text models in a conversation (balancing between vision quality and response style consistency), in a very configurable manner
 - It is optimized for the lowest running cost possible, aiming for maximum cache hits and routing to the cheapest providers
@@ -40,6 +40,7 @@ A Discord LLM roleplay and utility bot
 - Has a small local embeddings model that determines whether the model should respond after an interaction for some time (10min by default)
 - No need to write complex system prompts, just steer the behavior to your liking with `/context` commands (`add`, `edit`, `remove`)
 - `/site`: a real-time infinite website generator experiment. As you click on links, the LLM continues to generate new pages
+- An integrated code interpeter tool and discord utility
 - Free and Discord based, [add it](https://discord.com/oauth2/authorize?client_id=1307635432632094740)
 - Also is a Matrix bot: [@x3_bot:matrix.org](https://matrix.to/#/@x3_bot:matrix.org)
 
