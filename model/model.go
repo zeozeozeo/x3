@@ -79,6 +79,7 @@ const (
 	cloudflareBaseURLf  = "https://api.cloudflare.com/client/v4/accounts/%s/ai/v1"
 	nimBaseURL          = "https://integrate.api.nvidia.com/v1"
 	modelscopeBaseURL   = "https://api-inference.modelscope.ai/v1" // note: this is different from the chinese site (.cn), apikeys are not shared between them
+	tokenrouterBaseUrl  = "https://api.tokenrouter.com/v1"
 )
 
 const (
@@ -124,6 +125,7 @@ const (
 	ProviderOpenference  = "openference"
 	ProviderNim          = "nim"
 	ProviderModelscope   = "modelscope"
+	ProviderTokenrouter = "tokenrouter"
 )
 
 type ModelProvider struct {
@@ -754,6 +756,8 @@ func (m Model) Client(provider string) (baseUrls []string, tokens []string, code
 		tokenEnvKey, apiVar = "X3_NIM_TOKEN", nimBaseURL
 	case ProviderModelscope:
 		tokenEnvKey, apiVar = "X3_MODELSCOPE_TOKEN", modelscopeBaseURL
+	case ProviderTokenrouter:
+	    tokenEnvKey, apiVar = "X3_TOKENROUTER_TOKEN", tokenrouterBaseUrl
 	default:
 		return nil, nil, nil
 	}
