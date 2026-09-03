@@ -125,7 +125,7 @@ const (
 	ProviderOpenference  = "openference"
 	ProviderNim          = "nim"
 	ProviderModelscope   = "modelscope"
-	ProviderTokenrouter = "tokenrouter"
+	ProviderTokenrouter  = "tokenrouter"
 )
 
 type ModelProvider struct {
@@ -315,6 +315,17 @@ func LoadModelsFromJSONData(data []byte) error {
 	var config ModelsConfig
 	if err := json.Unmarshal(data, &config); err != nil {
 		return err
+	}
+
+	{
+		// ensure that all models have unique short names
+		nameSet := make(map[string]struct{})
+		for _, m := range config.Models {
+			if _, exists := nameSet[m.Command]; exists {
+				return fmt.Errorf("duplicate model name found: %s", m.Name)
+			}
+			nameSet[m.Name] = struct{}{}
+		}
 	}
 
 	CurrentVersion = config.CurrentVersion
@@ -757,7 +768,7 @@ func (m Model) Client(provider string) (baseUrls []string, tokens []string, code
 	case ProviderModelscope:
 		tokenEnvKey, apiVar = "X3_MODELSCOPE_TOKEN", modelscopeBaseURL
 	case ProviderTokenrouter:
-	    tokenEnvKey, apiVar = "X3_TOKENROUTER_TOKEN", tokenrouterBaseUrl
+		tokenEnvKey, apiVar = "X3_TOKENROUTER_TOKEN", tokenrouterBaseUrl
 	default:
 		return nil, nil, nil
 	}
