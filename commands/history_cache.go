@@ -56,6 +56,25 @@ func (h *channelMessageHistory) upsert(message discord.Message) {
 	}
 }
 
+func (h *channelMessageHistory) removeIDs(ids []snowflake.ID) {
+	if len(ids) == 0 {
+		return
+	}
+	remove := make(map[snowflake.ID]struct{}, len(ids))
+	for _, id := range ids {
+		remove[id] = struct{}{}
+	}
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	kept := h.messages[:0]
+	for _, message := range h.messages {
+		if _, ok := remove[message.ID]; !ok {
+			kept = append(kept, message)
+		}
+	}
+	h.messages = kept
+}
+
 func (h *channelMessageHistory) snapshotBefore(beforeID snowflake.ID, wanted int) []discord.Message {
 	h.mu.RLock()
 	defer h.mu.RUnlock()

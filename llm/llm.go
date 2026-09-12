@@ -548,7 +548,7 @@ func (l *Llmer) AddImage(imageURL string) {
 	msg.Images = append(msg.Images, imageURL)
 }
 
-func (l Llmer) convertMessages(hasVision, supportsImageURL bool, prepend, searchResults string, ctx context.Context) []openai.ChatCompletionMessage {
+func (l Llmer) convertMessages(hasVision, supportsImageURL bool, prepend, thinkPrefill, searchResults string, ctx context.Context) []openai.ChatCompletionMessage {
 	// find the index of the last message with images
 	imageIdx := -1
 	for i := len(l.Messages) - 1; i >= 0; i-- {
@@ -651,6 +651,15 @@ func (l Llmer) convertMessages(hasVision, supportsImageURL bool, prepend, search
 		messages[len(messages)-1].Content += searchResults
 	}
 
+	if thinkPrefill != "" {
+		// Prefill the model's <think> block: the model continues its
+		// thinking from this prefix. Left unclosed on purpose.
+		messages = append(messages, openai.ChatCompletionMessage{
+			Role:    RoleAssistant,
+			Content: "<think>" + thinkPrefill,
+		})
+	}
+
 	if prepend != "" {
 		// https://console.groq.com/docs/prefilling
 		messages = append(messages, openai.ChatCompletionMessage{
@@ -660,6 +669,49 @@ func (l Llmer) convertMessages(hasVision, supportsImageURL bool, prepend, search
 	}
 
 	return messages
+}
+
+// applyThinkPrefillToResponse folds an open <think> prefill into a text
+// response. When the model continued the prefilled thinking, its output
+// starts with the continuation followed by a closing tag but no opening
+// tag; this rewraps it so ExtractThinking finds it and the prefill itself
+// is preserved at the start of the thinking block.
+func applyThinkPrefillToResponse(response, thinkPrefill string) string {
+	thinkPrefill = strings.TrimSpace(thinkPrefill)
+	if thinkPrefill == "" {
+		return response
+	}
+
+	if thinking, answer := ExtractThinking(response); thinking != "" {
+		if answer != "" {
+			return "<think>" + strings.TrimSpace(thinkPrefill+" "+thinking) + "</think>\n" + answer
+		}
+		// start tag found but no end tag: the whole response is thinking so far
+		inner := response
+		if idx := strings.Index(inner, ">"); idx != -1 {
+			inner = strings.TrimSpace(inner[idx+1:])
+		}
+		return "<think>" + strings.TrimSpace(thinkPrefill+" "+inner)
+	}
+
+	lower := strings.ToLower(response)
+	for _, tag := range thinkingTags {
+		if idx := strings.Index(lower, tag[1]); idx != -1 {
+			before := strings.TrimSpace(response[:idx])
+			after := strings.TrimSpace(response[idx+len(tag[1]):])
+			thinking := thinkPrefill
+			if before != "" {
+				thinking = strings.TrimSpace(thinkPrefill + " " + before)
+			}
+			if after == "" {
+				return "<think>" + thinking + "</think>"
+			}
+			return "<think>" + thinking + "</think>\n" + after
+		}
+	}
+
+	// model ignored the prefill; leave the response untouched
+	return response
 }
 
 func estimateCacheKey(prefix string, m model.Model, writePayload func(hash.Hash64)) string {
@@ -1217,6 +1269,7 @@ func (l *Llmer) requestCompletionInternal2(
 	settings persona.InferenceSettings,
 	client *openai.Client,
 	prepend string,
+	thinkPrefill string,
 	ctx context.Context,
 	searchDepth int,
 	searchCitemap map[int]string,
@@ -1231,7 +1284,7 @@ func (l *Llmer) requestCompletionInternal2(
 	}
 	req := openai.ChatCompletionRequest{
 		Model:       codename,
-		Messages:    l.convertMessages(m.Vision, provider != model.ProviderOllama && provider != model.ProviderCloudflare && provider != model.ProviderCerebras, prepend, searchResults, ctx), // ollama cloud doesn't support fetching from image URLs, how nice :)
+		Messages:    l.convertMessages(m.Vision, provider != model.ProviderOllama && provider != model.ProviderCloudflare && provider != model.ProviderCerebras, prepend, thinkPrefill, searchResults, ctx), // ollama cloud doesn't support fetching from image URLs, how nice :)
 		Temperature: settings.Temperature,
 		TopP:        topP,
 		// MinP anyone?
@@ -1385,7 +1438,7 @@ func (l *Llmer) requestCompletionInternal2(
 		if search := extractDiscordSearch(unescaped); search != "" {
 			results, citemap := l.getDiscordSearchResults(ctx, search)
 			nextRes, nextUsage, _, nextErr := l.requestCompletionInternal2(
-				m, codename, provider, settings, client, prepend, ctx,
+				m, codename, provider, settings, client, prepend, thinkPrefill, ctx,
 				searchDepth+1, citemap, results,
 			)
 			return nextRes, usage.Add(nextUsage), timeToFirstToken, nextErr
@@ -1393,7 +1446,7 @@ func (l *Llmer) requestCompletionInternal2(
 		if search := extractSearch(unescaped); search != "" {
 			results, citemap := getSearchResults(search)
 			nextRes, nextUsage, _, nextErr := l.requestCompletionInternal2(
-				m, codename, provider, settings, client, prepend, ctx,
+				m, codename, provider, settings, client, prepend, thinkPrefill, ctx,
 				searchDepth+1, citemap, results,
 			)
 			return nextRes, usage.Add(nextUsage), timeToFirstToken, nextErr
@@ -1417,9 +1470,17 @@ func (l *Llmer) requestCompletionInternal2(
 		Content: unescaped,
 	})
 
-	display := unescaped
+	display := applyThinkPrefillToResponse(unescaped, thinkPrefill)
 	if reasoning != "" {
-		display = "<think>" + reasoning + "</think>\n" + display
+		if thinking, answer := ExtractThinking(display); thinking != "" && answer != "" {
+			display = "<think>" + strings.TrimSpace(thinking+" "+reasoning) + "</think>\n" + answer
+		} else if thinking != "" {
+			display = strings.TrimSpace(display) + " " + reasoning
+		} else if tp := strings.TrimSpace(thinkPrefill); tp != "" {
+			display = "<think>" + strings.TrimSpace(tp+" "+reasoning) + "</think>\n" + display
+		} else {
+			display = "<think>" + reasoning + "</think>\n" + display
+		}
 	}
 
 	return display, usage, timeToFirstToken, nil
@@ -1430,6 +1491,7 @@ func (l *Llmer) requestCompletionInternal(
 	provider string,
 	settings persona.InferenceSettings,
 	prepend string,
+	thinkPrefill string,
 	ctx context.Context,
 ) (string, Usage, time.Duration, error) {
 	slog.Debug(
@@ -1473,7 +1535,7 @@ func (l *Llmer) requestCompletionInternal(
 			var tokenSucceeded bool
 			for _, codename := range codenames {
 				slog.Info("attempting request", "provider", provider, "baseUrl", baseUrl, "codename", codename)
-				res, usage, timeToFirstToken, err := l.requestCompletionInternal2(m, codename, provider, settings, client, prepend, ctx, 0, nil, "")
+				res, usage, timeToFirstToken, err := l.requestCompletionInternal2(m, codename, provider, settings, client, prepend, thinkPrefill, ctx, 0, nil, "")
 				// An HTTP-successful completion can still contain no assistant
 				// text. Treat it as a failed codename so the next configured
 				// codename gets a chance before retrying the provider.
@@ -1697,6 +1759,13 @@ func (l Llmer) applyFallbackVisionModels(models []model.Model) []model.Model {
 }
 
 func (l *Llmer) RequestCompletion(models []model.Model, settings persona.InferenceSettings, prepend string, ctx context.Context) (res string, usage Usage, err error) {
+	return l.RequestCompletionWithThinkPrefill(models, settings, prepend, "", ctx)
+}
+
+// RequestCompletionWithThinkPrefill behaves like RequestCompletion but also
+// seeds the model's <think> block with thinkPrefill (used by persona
+// jailbreak mode "prefill"). Empty thinkPrefill disables it.
+func (l *Llmer) RequestCompletionWithThinkPrefill(models []model.Model, settings persona.InferenceSettings, prepend, thinkPrefill string, ctx context.Context) (res string, usage Usage, err error) {
 	l.GeneratedArtifacts = nil
 	if len(models) == 0 {
 		err = errNoModelsForCompletion
@@ -1745,7 +1814,7 @@ func (l *Llmer) RequestCompletion(models []model.Model, settings persona.Inferen
 
 				requestStart := time.Now()
 				var timeToFirstToken time.Duration
-				res, usage, timeToFirstToken, err = l.requestCompletionInternal(m, provider.Name, settings.Fixup(), prepend, ctx)
+				res, usage, timeToFirstToken, err = l.requestCompletionInternal(m, provider.Name, settings.Fixup(), prepend, thinkPrefill, ctx)
 				requestDuration := time.Since(requestStart)
 
 				// check for empty response first

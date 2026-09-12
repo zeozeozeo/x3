@@ -158,7 +158,7 @@ func HandleLlm(event *handler.CommandEvent, models []model.Model) error {
 		slog.Int("num_messages", llmer.NumMessages()),
 		slog.String("prepend", cache.PersonaMeta.Prepend),
 	)
-	response, usage, err := llmer.RequestCompletion(targetModels, cache.PersonaMeta.Settings, cache.PersonaMeta.Prepend, context.Background())
+	response, usage, err := llmer.RequestCompletionWithThinkPrefill(targetModels, cache.PersonaMeta.Settings, cache.PersonaMeta.Prepend, cache.PersonaMeta.JailbreakThinkPrefill(""), context.Background())
 	if err != nil {
 		slog.Error("LLM request failed", "err", err)
 		return updateInteractionError(event, fmt.Sprintf("LLM request failed: %s", err.Error()))

@@ -729,6 +729,7 @@ func (b *MatrixBot) helpText(isDM bool) string {
 		b.commandUsage("persona", isDM) + " card <url> | preset <url>",
 		b.commandUsage("persona", isDM) + " context|temperature|top_p|frequency_penalty|seed <value>",
 		b.commandUsage("persona", isDM) + " images|thinking|reasoning|html|continuations|tools on|off",
+		b.commandUsage("persona", isDM) + " jailbreak off|prefill|prompt",
 		b.commandUsage("models", isDM) + " list available model short names",
 		b.commandUsage("context", isDM) + " add|list|clear|delete|get|edit ...",
 		b.commandUsage("lobotomy", isDM) + " [turns] [reset_persona]",
@@ -763,6 +764,7 @@ func (b *MatrixBot) personaHelpText(isDM bool) string {
 		base + " html on|off             toggle HTML rendering",
 		base + " continuations           on|off toggle smart continuation trigger",
 		base + " tools on|off            toggle web and Discord search tools",
+		base + " jailbreak off|prefill|prompt",
 		"Use spaces, not key=value, for persona settings.",
 	}, "\n")
 }
@@ -1025,6 +1027,15 @@ func (b *MatrixBot) handlePersonaCommand(ctx context.Context, msg *matrixMessage
 			return b.sendText(ctx, msg.RoomID, msg.EventID, matrixInvalidBoolDiagnostic(diagCtx.Raw(rest), diagCtx.Token(valueToken), "persona tools"))
 		}
 		cache.PersonaMeta.Tools = &enabled
+	case "jailbreak":
+		switch strings.ToLower(value) {
+		case persona.JailbreakOff:
+			cache.PersonaMeta.Jailbreak = ""
+		case persona.JailbreakPrefill, persona.JailbreakPrompt:
+			cache.PersonaMeta.Jailbreak = strings.ToLower(value)
+		default:
+			return b.sendText(ctx, msg.RoomID, msg.EventID, matrixCommandDiagnostic(diagCtx.Raw(rest), diagCtx.Token(valueToken), "invalid value for persona action `jailbreak`", "expected: off, prefill or prompt"))
+		}
 	case "card":
 		var body []byte
 		var filename string
@@ -1101,6 +1112,9 @@ func (b *MatrixBot) writePersonaUpdate(ctx context.Context, msg *matrixMessage, 
 	if cache.PersonaMeta.ToolsEnabled() != prev.ToolsEnabled() {
 		changes = append(changes, fmt.Sprintf("tools=%t", cache.PersonaMeta.ToolsEnabled()))
 	}
+	if cache.PersonaMeta.JailbreakMode() != prev.JailbreakMode() {
+		changes = append(changes, fmt.Sprintf("jailbreak=%s", cache.PersonaMeta.JailbreakMode()))
+	}
 	if len(changes) == 0 {
 		changes = append(changes, "settings updated")
 	}
@@ -1130,7 +1144,7 @@ func matrixPersonaInfo(cache *db.ChannelCache, username, botName string, isDM bo
 	fmt.Fprintf(&b, "Top P: %s (remapped to %s)\n", ftoa(settings.TopP), ftoa(remapped.TopP))
 	fmt.Fprintf(&b, "Frequency penalty: %s\n", ftoa(settings.FrequencyPenalty))
 	fmt.Fprintf(&b, "Context length: %d\n", cache.ContextLength)
-	fmt.Fprintf(&b, "Images: %t\nReasoning: %t\nThinking traces: %t\nHTML rendering: %t\nMiniLM continuations: %t\nTools: %t\n", cache.PersonaMeta.EnableImages, settings.Reasoning, cache.PersonaMeta.ThinkingTraces, cache.PersonaMeta.RenderHTML, cache.PersonaMeta.EnableMiniLMContinuations, cache.PersonaMeta.ToolsEnabled())
+	fmt.Fprintf(&b, "Images: %t\nReasoning: %t\nThinking traces: %t\nHTML rendering: %t\nMiniLM continuations: %t\nTools: %t\nJailbreak: %s\n", cache.PersonaMeta.EnableImages, settings.Reasoning, cache.PersonaMeta.ThinkingTraces, cache.PersonaMeta.RenderHTML, cache.PersonaMeta.EnableMiniLMContinuations, cache.PersonaMeta.ToolsEnabled(), cache.PersonaMeta.JailbreakMode())
 	if cache.PersonaMeta.ChatPreset != nil {
 		fmt.Fprintf(&b, "SillyTavern preset: %s\n", cache.PersonaMeta.ChatPreset.DisplayName())
 	}
@@ -1461,6 +1475,11 @@ func (b *MatrixBot) handleLlm(ctx context.Context, msg *matrixMessage, isRegener
 			return errRegenerateNoMessage
 		}
 		llmer.LobotomizeUntilMessageID(lastID)
+		// refresh the system prompt so persona (e.g. jailbreak) changes
+		// apply to regenerations too, mirroring the Discord path
+		promptContext := matrixPromptContext(cache)
+		p := persona.GetPersonaByMetaWithBotName(cache.PersonaMeta, b.userName(msg), b.matrixBotName(ctx, msg.RoomID), b.isDMRoom(ctx, msg.RoomID), promptContext)
+		llmer.SetPersona(p, &cache.PersonaMeta.ExcessiveSplit)
 	} else {
 		promptContext := matrixPromptContext(cache)
 		p := persona.GetPersonaByMetaWithBotName(cache.PersonaMeta, b.userName(msg), b.matrixBotName(ctx, msg.RoomID), b.isDMRoom(ctx, msg.RoomID), promptContext)
@@ -1480,8 +1499,12 @@ func (b *MatrixBot) handleLlm(ctx context.Context, msg *matrixMessage, isRegener
 		llmer.SetPersona(p, &cache.PersonaMeta.ExcessiveSplit)
 	}
 
+	thinkPrefill := cache.PersonaMeta.JailbreakThinkPrefill(regeneratePrepend)
 	prepend := cache.PersonaMeta.Prepend
-	if regeneratePrepend != "" {
+	if regeneratePrepend != "" && thinkPrefill == "" {
+		// without think-prefill the regenerate text replaces the
+		// response prefill; with think-prefill it went into the
+		// <think> block and the response keeps the persona prefill
 		prepend = regeneratePrepend
 		if !endsWithWhitespace(prepend) {
 			prepend += " "
@@ -1493,8 +1516,9 @@ func (b *MatrixBot) handleLlm(ctx context.Context, msg *matrixMessage, isRegener
 		"num_models", len(models),
 		"num_messages", llmer.NumMessages(),
 		"is_regenerate", isRegenerate,
+		"think_prefill", thinkPrefill != "",
 	)
-	response, usage, err := requestCompletionCacheFriendly(llmer, models, cache.PersonaMeta.Settings, prepend, cache.ContextLength, ctx)
+	response, usage, err := requestCompletionCacheFriendly(llmer, models, cache.PersonaMeta.Settings, prepend, thinkPrefill, cache.ContextLength, ctx)
 	if err != nil {
 		return err
 	}
@@ -1526,6 +1550,9 @@ func (b *MatrixBot) handleLlm(ctx context.Context, msg *matrixMessage, isRegener
 	}
 	var sentID id.EventID
 	if isRegenerate {
+		// delete trailing splits of the previous response, keeping the
+		// first which gets edited below
+		b.redactTrailingMatrixSplits(ctx, msg.RoomID)
 		lastID := id.EventID(lastAssistantMatrixMessageID(llmer))
 		sentID, err = b.editText(ctx, msg.RoomID, lastID, replaceLlmTagsWithNewlines(response, &cache.PersonaMeta), outFiles)
 	} else {
@@ -1604,23 +1631,65 @@ func (b *MatrixBot) sendLLMResponse(ctx context.Context, roomID id.RoomID, reply
 	if len(messages) == 0 && len(files) > 0 {
 		messages = []string{""}
 	}
-	var firstID id.EventID
+	var allIDs []id.EventID
 	for i, content := range messages {
 		content = strings.TrimSpace(content)
 		currentFiles := []matrixOutFile(nil)
 		if i == len(messages)-1 {
 			currentFiles = files
 		}
-		sentID, err := b.sendFiles(ctx, roomID, replyTo, content, currentFiles)
+		sentIDs, err := b.sendFilesAll(ctx, roomID, replyTo, content, currentFiles)
+		allIDs = append(allIDs, sentIDs...)
 		if err != nil {
-			return firstID, err
-		}
-		if firstID == "" {
-			firstID = sentID
+			b.rememberMatrixTrailingSplits(roomID, allIDs)
+			if len(allIDs) > 0 {
+				return allIDs[0], err
+			}
+			return "", err
 		}
 		replyTo = ""
 	}
-	return firstID, nil
+	b.rememberMatrixTrailingSplits(roomID, allIDs)
+	if len(allIDs) > 0 {
+		return allIDs[0], nil
+	}
+	return "", nil
+}
+
+// matrixTrailingSplits remembers the trailing split event IDs of the last
+// LLM response per room, so regenerate can redact them. id.RoomID -> []id.EventID
+var matrixTrailingSplits sync.Map
+
+// rememberMatrixTrailingSplits stores every sent event after the first.
+func (b *MatrixBot) rememberMatrixTrailingSplits(roomID id.RoomID, allIDs []id.EventID) {
+	if len(allIDs) > 1 {
+		trailing := append([]id.EventID(nil), allIDs[1:]...)
+		matrixTrailingSplits.Store(roomID, trailing)
+	} else {
+		matrixTrailingSplits.Delete(roomID)
+	}
+}
+
+// redactTrailingMatrixSplits redacts the trailing splits of the previous
+// response, keeping the first which gets edited by regenerate.
+func (b *MatrixBot) redactTrailingMatrixSplits(ctx context.Context, roomID id.RoomID) {
+	raw, ok := matrixTrailingSplits.Load(roomID)
+	if !ok {
+		return
+	}
+	matrixTrailingSplits.Delete(roomID)
+	trailing, ok := raw.([]id.EventID)
+	if !ok {
+		return
+	}
+	for _, evtID := range trailing {
+		if evtID == "" {
+			continue
+		}
+		if _, err := b.client.RedactEvent(ctx, roomID, evtID, mautrix.ReqRedact{Reason: "regenerated"}); err != nil {
+			slog.Warn("matrix: failed to redact trailing split", "room_id", roomID.String(), "event_id", evtID.String(), "err", err)
+		}
+	}
 }
 
 func (b *MatrixBot) sendText(ctx context.Context, roomID id.RoomID, replyTo id.EventID, text string) error {
@@ -1629,7 +1698,15 @@ func (b *MatrixBot) sendText(ctx context.Context, roomID id.RoomID, replyTo id.E
 }
 
 func (b *MatrixBot) sendFiles(ctx context.Context, roomID id.RoomID, replyTo id.EventID, text string, files []matrixOutFile) (id.EventID, error) {
-	var firstID id.EventID
+	ids, err := b.sendFilesAll(ctx, roomID, replyTo, text, files)
+	if len(ids) > 0 {
+		return ids[0], err
+	}
+	return "", err
+}
+
+func (b *MatrixBot) sendFilesAll(ctx context.Context, roomID id.RoomID, replyTo id.EventID, text string, files []matrixOutFile) ([]id.EventID, error) {
+	var ids []id.EventID
 	if strings.TrimSpace(text) != "" || len(files) == 0 {
 		for _, chunk := range splitMatrixText(text) {
 			content := matrixTextContent(chunk)
@@ -1638,25 +1715,21 @@ func (b *MatrixBot) sendFiles(ctx context.Context, roomID id.RoomID, replyTo id.
 			}
 			resp, err := b.sendMessageEventWithRetry(ctx, roomID, event.EventMessage, content)
 			if err != nil {
-				return firstID, err
+				return ids, err
 			}
-			if firstID == "" {
-				firstID = resp.EventID
-			}
+			ids = append(ids, resp.EventID)
 			replyTo = ""
 		}
 	}
 	for _, file := range files {
 		eventID, err := b.sendFile(ctx, roomID, replyTo, file)
 		if err != nil {
-			return firstID, err
+			return ids, err
 		}
-		if firstID == "" {
-			firstID = eventID
-		}
+		ids = append(ids, eventID)
 		replyTo = ""
 	}
-	return firstID, nil
+	return ids, nil
 }
 
 func (b *MatrixBot) editText(ctx context.Context, roomID id.RoomID, target id.EventID, text string, files []matrixOutFile) (id.EventID, error) {

@@ -423,7 +423,7 @@ func handleLlmInteraction2(
 		slog.Warn("time interaction triggered in empty channel", "channel_id", channelID)
 		return "", 0, errTimeInteractionNoMessages
 	}
-	if isRegenerate && lastResponseMessage == nil {
+	if isRegenerate && lastResponseMessage == nil && lastAssistantMessageID == 0 {
 		slog.Warn("regenerate called but no previous assistant message found", "channel_id", channelID)
 		return "", 0, errRegenerateNoMessage
 	}
@@ -445,7 +445,7 @@ func handleLlmInteraction2(
 	p := persona.GetPersonaByMetaWithBotName(cache.PersonaMeta, username, discordBotName(client), isDM, promptContext)
 
 	// avoid formatting reply if the reference is the message we're about to regenerate
-	if reference != nil && isRegenerate && reference.ID == lastResponseMessage.ID {
+	if reference != nil && isRegenerate && lastResponseMessage != nil && reference.ID == lastResponseMessage.ID {
 		reference = nil
 	}
 	// avoid formatting reply if the reference is the last assistant message
@@ -465,10 +465,19 @@ func handleLlmInteraction2(
 	}
 	addImageSources(llmer, content, attachments, embeds)
 
+	var regenerateFirstID snowflake.ID
+	var regenerateDeleteIDs []snowflake.ID
 	if isRegenerate {
+		// a response may span multiple discord messages (splits); resolve
+		// the first one plus the trailing splits to clean up
+		regenerateFirstID, regenerateDeleteIDs = resolveRegenerateTarget(client, channelID, lastResponseMessage, lastAssistantMessageID)
+		if regenerateFirstID == 0 {
+			slog.Warn("regenerate called but no previous assistant message found", "channel_id", channelID)
+			return "", 0, errRegenerateNoMessage
+		}
 		// remove messages up to (but not including) the message being regenerated
-		llmer.LobotomizeUntilID(lastResponseMessage.ID)
-		slog.Debug("regenerating: lobotomized history", "until_id", lastResponseMessage.ID, "remaining_messages", llmer.NumMessages())
+		llmer.LobotomizeUntilID(regenerateFirstID)
+		slog.Debug("regenerating: lobotomized history", "until_id", regenerateFirstID, "remaining_messages", llmer.NumMessages())
 	}
 
 	if systemPromptOverride != nil {
@@ -476,9 +485,14 @@ func handleLlmInteraction2(
 	}
 	llmer.SetPersona(p, &cache.PersonaMeta.ExcessiveSplit)
 
+	thinkPrefill := cache.PersonaMeta.JailbreakThinkPrefill(regeneratePrepend)
 	var prepend string
 	if regeneratePrepend != "" {
-		prepend = regeneratePrepend
+		if thinkPrefill != "" {
+			prepend = cache.PersonaMeta.Prepend
+		} else {
+			prepend = regeneratePrepend
+		}
 	} else {
 		prepend = cache.PersonaMeta.Prepend
 	}
@@ -497,6 +511,7 @@ func handleLlmInteraction2(
 					[]model.Model{abModel},
 					cache.PersonaMeta.Settings,
 					prepend,
+					thinkPrefill,
 					ctxLen,
 					ctx,
 				)
@@ -510,9 +525,10 @@ func handleLlmInteraction2(
 		"num_messages", llmer.NumMessages(),
 		"is_regenerate", isRegenerate,
 		"prepend", prepend,
+		"think_prefill", thinkPrefill != "",
 		"isDM", isDM,
 	)
-	response, usage, err := requestCompletionCacheFriendly(llmer, models, cache.PersonaMeta.Settings, prepend, ctxLen, ctx)
+	response, usage, err := requestCompletionCacheFriendly(llmer, models, cache.PersonaMeta.Settings, prepend, thinkPrefill, ctxLen, ctx)
 	if err != nil {
 		slog.Error("LLM request failed", "err", err)
 		return "", 0, fmt.Errorf("LLM request failed: %w", err)
@@ -568,6 +584,10 @@ func handleLlmInteraction2(
 	var botMessage *discord.Message
 	var messages []string
 	if isRegenerate {
+		// delete trailing split messages of the previous response, keeping
+		// only the first which gets edited below
+		deleteDiscordMessages(client, channelID, regenerateDeleteIDs, isDM)
+
 		// edit the previous message for regeneration
 		response = replaceLlmTagsWithNewlines(response, &cache.PersonaMeta)
 
@@ -578,7 +598,7 @@ func handleLlmInteraction2(
 			builder = builder.WithContent("")
 			builder = builder.AddFiles(&discord.File{
 				Reader: strings.NewReader(response),
-				Name:   fmt.Sprintf("response-%v.txt", lastResponseMessage.ID),
+				Name:   fmt.Sprintf("response-%v.txt", regenerateFirstID),
 			})
 			// add reasoning file if it exists
 			if len(files) > 0 {
@@ -591,17 +611,21 @@ func handleLlmInteraction2(
 			}
 		}
 
-		_, err = client.Rest.UpdateMessage(channelID, lastResponseMessage.ID, builder)
+		updated, err := client.Rest.UpdateMessage(channelID, regenerateFirstID, builder)
 		if err != nil {
 			slog.Error("failed to update message for regeneration", "err", err)
 			return response, 0, fmt.Errorf("failed to update message: %w", err)
 		}
 		if htmlRendered {
-			if err := db.WriteMessageRenderedContent(lastResponseMessage.ID, rawResponse); err != nil {
+			if err := db.WriteMessageRenderedContent(regenerateFirstID, rawResponse); err != nil {
 				slog.Error("failed to cache raw rendered response", "err", err)
 			}
 		}
-		jumpURL = lastResponseMessage.JumpURL()
+		if updated != nil {
+			jumpURL = updated.JumpURL()
+		} else if lastResponseMessage != nil {
+			jumpURL = lastResponseMessage.JumpURL()
+		}
 	} else {
 		messages = splitLlmTags(response, &cache.PersonaMeta)
 		if len(messages) == 0 && len(files) > 0 {
@@ -759,13 +783,14 @@ func requestCompletionCacheFriendly(
 	models []model.Model,
 	settings persona.InferenceSettings,
 	prepend string,
+	thinkPrefill string,
 	softMessageLimit int,
 	ctx context.Context,
 ) (string, llm.Usage, error) {
 	requestLlmer := cloneLlmerForCompletion(llmer)
 	requestLlmer.TrimCacheFriendlyContext(softMessageLimit)
 	beforeRequest := len(requestLlmer.Messages)
-	response, usage, err := requestLlmer.RequestCompletion(models, settings, prepend, ctx)
+	response, usage, err := requestLlmer.RequestCompletionWithThinkPrefill(models, settings, prepend, thinkPrefill, ctx)
 	if err == nil || !llm.IsContextLengthError(err) || softMessageLimit <= 0 {
 		if err == nil {
 			appendGeneratedAssistantMessage(llmer, requestLlmer.Messages[beforeRequest:])
@@ -781,7 +806,7 @@ func requestCompletionCacheFriendly(
 			break
 		}
 		beforeRequest = len(requestLlmer.Messages)
-		response, usage, err = requestLlmer.RequestCompletion(models, settings, prepend, ctx)
+		response, usage, err = requestLlmer.RequestCompletionWithThinkPrefill(models, settings, prepend, thinkPrefill, ctx)
 		if err == nil || !llm.IsContextLengthError(err) {
 			if err == nil {
 				appendGeneratedAssistantMessage(llmer, requestLlmer.Messages[beforeRequest:])

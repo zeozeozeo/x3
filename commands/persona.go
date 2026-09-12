@@ -179,6 +179,16 @@ var PersonaCommand = discord.SlashCommandCreate{
 			Description: "If the response should only be visible to you",
 			Required:    false,
 		},
+		discord.ApplicationCommandOptionString{
+			Name:        "jailbreak",
+			Description: "Jailbreak mode: off, prefill (<think>) or prompt (system)",
+			Required:    false,
+			Choices: []discord.ApplicationCommandOptionChoiceString{
+				{Name: "off", Value: persona.JailbreakOff},
+				{Name: "prefill", Value: persona.JailbreakPrefill},
+				{Name: "prompt", Value: persona.JailbreakPrompt},
+			},
+		},
 	},
 }
 
@@ -219,7 +229,8 @@ func handlePersonaInfo(event *handler.CommandEvent, ephemeral bool) error {
 	if cache.PersonaMeta.ChatPreset != nil {
 		builder.AddField("SillyTavern preset", cache.PersonaMeta.ChatPreset.DisplayName(), true)
 	}
-	builder.AddField("HTML rendering", enabledDisabled(cache.PersonaMeta.RenderHTML), true)
+	builder.AddField("HTML rendering", enabledDisabled(cache.PersonaMeta.RenderHTML), true).
+		AddField("Jailbreak", cache.PersonaMeta.JailbreakMode(), true)
 
 	models := cache.PersonaMeta.Models
 	if len(models) > 0 {
@@ -292,9 +303,17 @@ func HandlePersona(event *handler.CommandEvent) error {
 	respondalways, hasRespondalways := data.OptBool("respondalways")
 	toolsEnabled, hasToolsEnabled := data.OptBool("tools")
 	ephemeral := data.Bool("ephemeral")
+	dataJailbreak := data.String("jailbreak")
 
-	if dataPersona == "" && dataUsername == "" && dataBotName == "" && dataModel == "" && dataSystem == "" && dataCard == "" && !hasDataCardFile && dataPreset == "" && !hasDataPresetFile && !hasContext && !hasTemperature && !hasTopP && !hasFreqPenalty && !hasDataSeed && !hasEnableImages && !hasThinking && !hasReasoning && !hasRenderHTML && !hasMiniLMContinuations && !hasToolsEnabled && !hasRespondalways {
+	if dataPersona == "" && dataUsername == "" && dataBotName == "" && dataModel == "" && dataSystem == "" && dataCard == "" && !hasDataCardFile && dataPreset == "" && !hasDataPresetFile && !hasContext && !hasTemperature && !hasTopP && !hasFreqPenalty && !hasDataSeed && !hasEnableImages && !hasThinking && !hasReasoning && !hasRenderHTML && !hasMiniLMContinuations && !hasToolsEnabled && !hasRespondalways && dataJailbreak == "" {
 		return handlePersonaInfo(event, ephemeral)
+	}
+	if dataJailbreak != "" {
+		switch strings.ToLower(strings.TrimSpace(dataJailbreak)) {
+		case persona.JailbreakOff, persona.JailbreakPrefill, persona.JailbreakPrompt:
+		default:
+			return sendInteractionError(event, "Invalid jailbreak mode. Use off, prefill or prompt.", true)
+		}
 	}
 	if dataUsername != "" || dataBotName != "" {
 		userCache := db.GetUserCache(event.User().ID)
@@ -326,7 +345,7 @@ func HandlePersona(event *handler.CommandEvent) error {
 		if err := userCache.Write(event.User().ID); err != nil {
 			return err
 		}
-		if dataPersona == "" && dataModel == "" && dataSystem == "" && dataCard == "" && !hasDataCardFile && dataPreset == "" && !hasDataPresetFile && !hasContext && !hasTemperature && !hasTopP && !hasFreqPenalty && !hasDataSeed && !hasEnableImages && !hasThinking && !hasReasoning && !hasRenderHTML && !hasMiniLMContinuations && !hasToolsEnabled && !hasRespondalways {
+		if dataPersona == "" && dataModel == "" && dataSystem == "" && dataCard == "" && !hasDataCardFile && dataPreset == "" && !hasDataPresetFile && !hasContext && !hasTemperature && !hasTopP && !hasFreqPenalty && !hasDataSeed && !hasEnableImages && !hasThinking && !hasReasoning && !hasRenderHTML && !hasMiniLMContinuations && !hasToolsEnabled && !hasRespondalways && dataJailbreak == "" {
 			return sendInteractionOk(event, "Names updated", "Updated "+strings.Join(changes, " and ")+".", ephemeral)
 		}
 	}
@@ -496,6 +515,13 @@ func HandlePersona(event *handler.CommandEvent) error {
 	if hasRespondalways {
 		cache.PersonaMeta.RespondAlways = respondalways
 	}
+	if dataJailbreak != "" {
+		if strings.EqualFold(strings.TrimSpace(dataJailbreak), persona.JailbreakOff) {
+			cache.PersonaMeta.Jailbreak = ""
+		} else {
+			cache.PersonaMeta.Jailbreak = strings.ToLower(strings.TrimSpace(dataJailbreak))
+		}
+	}
 
 	if dataPreset != "" || hasDataPresetFile {
 		if dataPreset != "" && hasDataPresetFile {
@@ -641,6 +667,13 @@ func HandlePersona(event *handler.CommandEvent) error {
 			s = "now sometimes responding to messages in this channel"
 		}
 		didWhat = append(didWhat, s)
+	}
+	if cache.PersonaMeta.JailbreakMode() != prevMeta.JailbreakMode() {
+		if cache.PersonaMeta.JailbreakMode() == persona.JailbreakOff {
+			didWhat = append(didWhat, "disabled jailbreak")
+		} else {
+			didWhat = append(didWhat, fmt.Sprintf("set jailbreak to `%s`", cache.PersonaMeta.JailbreakMode()))
+		}
 	}
 
 	if len(didWhat) > 0 {
