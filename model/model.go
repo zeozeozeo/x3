@@ -80,6 +80,7 @@ const (
 	nimBaseURL          = "https://integrate.api.nvidia.com/v1"
 	modelscopeBaseURL   = "https://api-inference.modelscope.ai/v1" // note: this is different from the chinese site (.cn), apikeys are not shared between them
 	tokenrouterBaseUrl  = "https://api.tokenrouter.com/v1"
+	inferxBaseUrl       = "https://model.inferx.net/endpoints/v1"
 )
 
 const (
@@ -126,6 +127,7 @@ const (
 	ProviderNim          = "nim"
 	ProviderModelscope   = "modelscope"
 	ProviderTokenrouter  = "tokenrouter"
+	ProviderInferx       = "inferx"
 )
 
 type ModelProvider struct {
@@ -769,6 +771,8 @@ func (m Model) Client(provider string) (baseUrls []string, tokens []string, code
 		tokenEnvKey, apiVar = "X3_MODELSCOPE_TOKEN", modelscopeBaseURL
 	case ProviderTokenrouter:
 		tokenEnvKey, apiVar = "X3_TOKENROUTER_TOKEN", tokenrouterBaseUrl
+	case ProviderInferx:
+		tokenEnvKey, apiVar = "X3_INFERX_TOKEN", inferxBaseUrl
 	default:
 		return nil, nil, nil
 	}
