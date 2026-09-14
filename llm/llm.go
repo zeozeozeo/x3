@@ -189,10 +189,22 @@ func firstNonEmpty(values ...string) string {
 	return ""
 }
 
-func applyReasoningSettings(req *openai.ChatCompletionRequest, provider string, reasoning bool) {
+func applyReasoningSettings(req *openai.ChatCompletionRequest, provider, codename string, reasoning bool) {
 	reasoningEffort := "none"
 	if reasoning {
 		reasoningEffort = "low"
+	}
+
+	if provider == model.ProviderGroq {
+		effort := "none"
+		if reasoning {
+			effort = "default"
+			if strings.Contains(strings.ToLower(codename), "gpt-oss") {
+				effort = "low"
+			}
+		}
+		req.ReasoningEffort = effort
+		return
 	}
 
 	if provider == model.ProviderMistral || provider == model.ProviderCerebras || provider == model.ProviderNim || provider == model.ProviderGoogle {
@@ -1293,7 +1305,7 @@ func (l *Llmer) requestCompletionInternal2(
 		Private:          provider == model.ProviderPollinations,
 	}
 	if m.Reasoning {
-		applyReasoningSettings(&req, provider, settings.Reasoning)
+		applyReasoningSettings(&req, provider, codename, settings.Reasoning)
 	}
 	nativeSearchTools := l.availableTools()
 	nativeToolCalling := modelUsesNativeToolCalling(m, provider) && len(nativeSearchTools) > 0
