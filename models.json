@@ -23,17 +23,6 @@
       }
     },
     {
-      "name": "GLM 5.3 Flash",
-      "command": "glmflash",
-      "vision": true,
-      "reasoning": true,
-      "providers": {
-        "openrouter": {
-          "codenames": ["z-ai/glm-5.3-flash"]
-        }
-      }
-    },
-    {
       "name": "GLM 5.3",
       "command": "glm",
       "reasoning": true,
@@ -145,23 +134,6 @@
       }
     },
     {
-      "name": "Kimi K2.6",
-      "command": "kimik26",
-      "vision": true,
-      "reasoning": true,
-      "providers": {
-        "cloudflare": {
-          "codenames": ["@cf/moonshotai/kimi-k2.6"]
-        },
-        "openference": {
-          "codenames": ["Kimi K2.6"]
-        },
-        "vercel": {
-          "codenames": ["moonshotai/kimi-k2.6"]
-        }
-      }
-    },
-    {
       "name": "Mistral Large Latest",
       "command": "mistrallarge",
       "vision": true,
@@ -190,15 +162,6 @@
       "providers": {
         "nim": {
           "codenames": ["nvidia/nemotron-3-super-120b-a12b"]
-        }
-      }
-    },
-    {
-      "name": "Meituan LongCat Flash Chat 560B",
-      "command": "longcat",
-      "providers": {
-        "longcat": {
-          "codenames": ["LongCat-Flash-Chat"]
         }
       }
     },
@@ -250,16 +213,6 @@
         },
         "google": {
           "codenames": ["gemma-4-31b-it"]
-        }
-      }
-    },
-    {
-      "name": "Minimax M3",
-      "command": "minimax",
-      "reasoning": true,
-      "providers": {
-        "nim": {
-          "codenames": ["minimaxai/minimax-m3"]
         }
       }
     },
@@ -427,19 +380,6 @@
       }
     },
     {
-      "name": "Poolside Laguna S 2.1",
-      "command": "laguna",
-      "reasoning": true,
-      "providers": {
-        "openrouter": {
-          "codenames": ["poolside/laguna-s-2.1:free"]
-        },
-        "zen": {
-          "codenames": ["laguna-s-2.1-free"]
-        }
-      }
-    },
-    {
       "name": "Gemma 4 26B A4B",
       "command": "gemma26b",
       "vision": true,
@@ -491,7 +431,6 @@
   "default_models": [
     "Kimi K3",
     "DeepSeek V4.1 Flash",
-    "GLM 5.3 Flash",
     "Gemini 3.6 Flash",
     "Gemini 3.7 Flash",
     "Gemini 3.8 Flash",
@@ -500,7 +439,6 @@
     "NVIDIA Nemotron 3 Ultra",
     "Gemma 4 31B",
     "NVIDIA Nemotron 3 Super",
-    "Kimi K2.6",
     "GLM 4.7 Flash",
     "Mistral Medium Latest"
   ],
@@ -520,8 +458,8 @@
     "Gemini 3.8 Flash",
     "Gemini 3.7 Flash",
     "Gemini 3.6 Flash",
-    "GLM 5.3 Flash",
-    "Kimi K3"
+    "Gemini 3.5 Flash-Lite",
+    "Gemma 4 31B"
   ],
   "ab_pool": [
     "NVIDIA Nemotron 3 Ultra",
@@ -540,12 +478,10 @@
   "providers_order": [
     "nim",
     "google",
-    "zen",
     "openrouter",
     "deepseek",
     "mimo",
     "ollama",
-    "cerebras",
     "minimax",
     "routeway",
     "groq",
@@ -576,9 +512,6 @@
     "inferx"
   ],
   "provider_settings": {
-    "cerebras": {
-      "native_tool_calling": true
-    },
     "cloudflare": {
       "native_tool_calling": true
     },
@@ -610,9 +543,6 @@
       "native_tool_calling": true
     },
     "tokenrouter": {
-      "native_tool_calling": true
-    },
-    "zen": {
       "native_tool_calling": true
     }
   },
