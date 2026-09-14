@@ -66,7 +66,7 @@ func HandleSite(event *handler.CommandEvent) error {
 		).System
 		additionalContext = nil
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+	ctx, cancel := context.WithTimeout(context.Background(), 11*time.Minute)
 	defer cancel()
 
 	result, err := siteManager.CreateSite(ctx, site.CreateOptions{
