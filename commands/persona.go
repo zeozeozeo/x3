@@ -174,11 +174,6 @@ var PersonaCommand = discord.SlashCommandCreate{
 			Description: "Should x3 always respond to messages in this channel?",
 			Required:    false,
 		},
-		discord.ApplicationCommandOptionBool{
-			Name:        "ephemeral",
-			Description: "If the response should only be visible to you",
-			Required:    false,
-		},
 		discord.ApplicationCommandOptionString{
 			Name:        "jailbreak",
 			Description: "Jailbreak mode: off, prefill (<think>) or prompt (system)",
@@ -188,6 +183,11 @@ var PersonaCommand = discord.SlashCommandCreate{
 				{Name: "prefill", Value: persona.JailbreakPrefill},
 				{Name: "prompt", Value: persona.JailbreakPrompt},
 			},
+		},
+		discord.ApplicationCommandOptionBool{
+			Name:        "ephemeral",
+			Description: "If the response should only be visible to you",
+			Required:    false,
 		},
 	},
 }
