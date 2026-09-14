@@ -111,9 +111,17 @@ func retryable(err error) bool {
 	return true
 }
 
-func checkWithRetries(ctx context.Context, timeout, retryDelay time.Duration, tries int, modelName, provider, displayProvider, baseURL, token, codename string) checkResult {
+func checkWithRetries(ctx context.Context, timeout, retryDelay time.Duration, tries int, modelName, provider, displayProvider, baseURL string, tokens []string, codename string) checkResult {
 	res := checkResult{ModelName: modelName, Provider: displayProvider, Codename: codename}
-	if token == "" {
+	// Drop empty tokens; a job with no usable token fails immediately.
+	usable := tokens[:0:0]
+	for _, t := range tokens {
+		if t != "" {
+			usable = append(usable, t)
+		}
+	}
+	tokens = usable
+	if len(tokens) == 0 {
 		res.Detail = "no API token configured"
 		return res
 	}
@@ -124,32 +132,43 @@ func checkWithRetries(ctx context.Context, timeout, retryDelay time.Duration, tr
 	var lastErr error
 	var total time.Duration
 	attempts := 0
-	for attempt := 1; attempt <= tries; attempt++ {
-		if attempt > 1 {
-			fmt.Fprintf(os.Stderr, "... retrying %s/%s/%s (attempt %d/%d) after %s: %v\n",
-				modelName, displayProvider, codename, attempt, tries, retryDelay, lastErr)
-			select {
-			case <-ctx.Done():
-				break
-			case <-time.After(retryDelay):
+rounds:
+	for round := 1; round <= tries; round++ {
+		roundRetryable := false
+		for ti, token := range tokens {
+			if attempts > 0 {
+				fmt.Fprintf(os.Stderr, "... retrying %s/%s/%s (try %d, key %d/%d) after %s: %v\n",
+					modelName, displayProvider, codename, attempts+1, ti+1, len(tokens), retryDelay, lastErr)
+				select {
+				case <-ctx.Done():
+					break rounds
+				case <-time.After(retryDelay):
+				}
+			}
+			attempts++
+			text, latency, err := doRequest(ctx, timeout, provider, baseURL, token, codename)
+			total += latency
+			if err == nil {
+				res.OK = true
+				res.Latency = total
+				res.Detail = truncate(text, 80)
+				return res
+			}
+			lastErr = err
+			if retryable(err) {
+				roundRetryable = true
 			}
 		}
-		attempts = attempt
-		text, latency, err := doRequest(ctx, timeout, provider, baseURL, token, codename)
-		total += latency
-		if err == nil {
-			res.OK = true
-			res.Latency = total
-			res.Detail = truncate(text, 80)
-			return res
-		}
-		lastErr = err
-		if !retryable(err) {
+		if !roundRetryable {
 			break
 		}
 	}
+	tokenNote := ""
+	if len(tokens) > 1 {
+		tokenNote = fmt.Sprintf(" across %d keys", len(tokens))
+	}
 	res.Latency = total
-	res.Detail = truncate(fmt.Sprintf("after %d %s: %v", attempts, pluralize(attempts, "try", "tries"), lastErr), 160)
+	res.Detail = truncate(fmt.Sprintf("after %d %s%s: %v", attempts, pluralize(attempts, "try", "tries"), tokenNote, lastErr), 160)
 	return res
 }
 
@@ -211,10 +230,11 @@ func main() {
 		provider        string
 		displayProvider string
 		baseURL         string
-		token           string
+		tokens          []string
 		codename        string
 	}
 	var jobs []job
+	seen := map[string]bool{}
 	for _, m := range model.AllModels {
 		if m.IsVeryDumb() {
 			continue
@@ -246,10 +266,15 @@ func main() {
 				if len(baseURLs) > 1 {
 					displayProvider = fmt.Sprintf("%s#%d", p, bi+1)
 				}
-				for _, token := range tokensToTry {
-					for _, codename := range codenames {
-						jobs = append(jobs, job{m.Name, p, displayProvider, baseURL, token, codename})
+				// One job per codename: all tokens are tried within the job,
+				// so multi-key setups don't produce duplicate rows.
+				for _, codename := range codenames {
+					key := m.Name + "\x00" + displayProvider + "\x00" + codename
+					if seen[key] {
+						continue
 					}
+					seen[key] = true
+					jobs = append(jobs, job{m.Name, p, displayProvider, baseURL, append([]string(nil), tokensToTry...), codename})
 				}
 			}
 		}
@@ -273,7 +298,7 @@ func main() {
 			for j := range jobCh {
 				l := lockFor(j.provider)
 				l.Lock()
-				resCh <- checkWithRetries(ctx, *timeout, *retryDelay, *tries, j.modelName, j.provider, j.displayProvider, j.baseURL, j.token, j.codename)
+				resCh <- checkWithRetries(ctx, *timeout, *retryDelay, *tries, j.modelName, j.provider, j.displayProvider, j.baseURL, j.tokens, j.codename)
 				l.Unlock()
 			}
 		}()
