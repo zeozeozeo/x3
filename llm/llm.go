@@ -207,6 +207,10 @@ func applyReasoningSettings(req *openai.ChatCompletionRequest, provider, codenam
 		return
 	}
 
+	if provider == model.ProviderGoogle && codename == "gemma-4-26b-a4b-it" {
+		return // thinking level argument is invalid for this specific model...
+	}
+
 	if provider == model.ProviderMistral || provider == model.ProviderCerebras || provider == model.ProviderNim || provider == model.ProviderGoogle {
 		// These providers do not support the other provider-specific reasoning
 		// fields, but Google maps reasoning_effort to its thinking_level.
