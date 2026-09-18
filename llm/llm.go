@@ -1291,8 +1291,10 @@ func (l *Llmer) requestCompletionInternal2(
 		settings = persona.InferenceSettings{}
 	}
 	topP := settings.TopP
+	freqPen := settings.FrequencyPenalty
 	if m.Name == "Kimi K3" && provider == model.ProviderNim {
 		topP = 0.95 // otherwise fails validation
+		freqPen = 0
 	}
 	req := openai.ChatCompletionRequest{
 		Model:       codename,
@@ -1300,7 +1302,7 @@ func (l *Llmer) requestCompletionInternal2(
 		Temperature: settings.Temperature,
 		TopP:        topP,
 		// MinP anyone?
-		FrequencyPenalty: settings.FrequencyPenalty,
+		FrequencyPenalty: freqPen,
 		Seed:             settings.Seed,
 		Private:          provider == model.ProviderPollinations,
 	}
