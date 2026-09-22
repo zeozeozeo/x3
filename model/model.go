@@ -81,6 +81,8 @@ const (
 	modelscopeBaseURL   = "https://api-inference.modelscope.ai/v1" // note: this is different from the chinese site (.cn), apikeys are not shared between them
 	tokenrouterBaseUrl  = "https://api.tokenrouter.com/v1"
 	inferxBaseUrl       = "https://model.inferx.net/endpoints/v1"
+	tokenharborBaseUrl  = "https://tokenharbor.ai/v1"
+	orcarouterBaseUrl   = "https://api.orcarouter.ai/v1"
 )
 
 const (
@@ -128,6 +130,8 @@ const (
 	ProviderModelscope   = "modelscope"
 	ProviderTokenrouter  = "tokenrouter"
 	ProviderInferx       = "inferx"
+	ProviderTokenharbor  = "tokenharbor"
+	ProviderOrcarouter   = "orcarouter"
 )
 
 type ModelProvider struct {
@@ -773,6 +777,10 @@ func (m Model) Client(provider string) (baseUrls []string, tokens []string, code
 		tokenEnvKey, apiVar = "X3_TOKENROUTER_TOKEN", tokenrouterBaseUrl
 	case ProviderInferx:
 		tokenEnvKey, apiVar = "X3_INFERX_TOKEN", inferxBaseUrl
+	case ProviderTokenharbor:
+		tokenEnvKey, apiVar = "X3_TOKENHARBOR_TOKEN", tokenharborBaseUrl
+	case ProviderOrcarouter:
+		tokenEnvKey, apiVar = "X3_ORCAROUTER_TOKEN", orcarouterBaseUrl
 	default:
 		return nil, nil, nil
 	}
