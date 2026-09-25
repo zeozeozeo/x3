@@ -7,6 +7,7 @@ require (
 	github.com/disgoorg/disgo v0.19.6
 	github.com/forPelevin/gomoji v1.4.1
 	github.com/fsnotify/fsnotify v1.10.1
+	github.com/ledongthuc/pdf v0.0.0-20260907135840-6c8c28e0e8a0
 	github.com/microcosm-cc/bluemonday v1.0.27
 	github.com/rs/zerolog v1.35.1
 	github.com/tdewolff/minify/v2 v2.24.13

@@ -1,6 +1,7 @@
 package commands
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"log/slog"
@@ -11,6 +12,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"time"
 	"unicode/utf8"
 
 	"slices"
@@ -19,6 +21,7 @@ import (
 	"github.com/disgoorg/disgo/discord"
 	"github.com/disgoorg/snowflake/v2"
 	"github.com/zeozeozeo/x3/db"
+	"github.com/zeozeozeo/x3/docs"
 	"github.com/zeozeozeo/x3/llm"
 )
 
@@ -338,6 +341,80 @@ func readTxtCache(attachmentID snowflake.ID) ([]byte, bool) {
 	return content, err == nil
 }
 
+func isPlainTextAttachment(attachment discord.Attachment) bool {
+	return attachment.ContentType != nil && strings.Contains(*attachment.ContentType, "text/plain")
+}
+
+func isNarrationAttachment(attachment discord.Attachment) bool {
+	return strings.HasPrefix(attachment.Filename, "narration-") ||
+		strings.HasPrefix(attachment.Filename, "SPOILER_narration-")
+}
+
+var docDownloadClient = &http.Client{Timeout: 30 * time.Second}
+
+// getDocumentAttachmentBlock downloads (or reuses the cached) document and
+// returns it formatted for LLM context. Returns "" when the file should be
+// skipped
+func getDocumentAttachmentBlock(attachment discord.Attachment) string {
+	contentType := ""
+	if attachment.ContentType != nil {
+		contentType = *attachment.ContentType
+	}
+
+	// reuse extracted text from cache (also written for plain text, but IDs
+	// are unique per upload so a doc ID never collides with a txt ID)
+	if cached, ok := readTxtCache(attachment.ID); ok && utf8.Valid(cached) && len(cached) > 0 {
+		return docs.FormatBlock(attachment.Filename, string(cached))
+	}
+
+	if attachment.URL == "" {
+		return fmt.Sprintf("[attachment %s: could not fetch file]", attachment.Filename)
+	}
+	if attachment.Size > docs.MaxDownloadBytes {
+		slog.Warn("document attachment exceeds size limit", "id", attachment.ID.String(), "size", attachment.Size)
+		return fmt.Sprintf("[attachment %s: file too large, limit is 10MB]", attachment.Filename)
+	}
+
+	slog.Info("downloading document attachment", "url", attachment.URL, "filename", attachment.Filename)
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, attachment.URL, nil)
+	if err != nil {
+		slog.Error("failed to build document request", "err", err, "url", attachment.URL)
+		return ""
+	}
+	resp, err := docDownloadClient.Do(req)
+	if err != nil {
+		slog.Error("failed to fetch document attachment", "err", err, "url", attachment.URL)
+		return fmt.Sprintf("[attachment %s: could not download file]", attachment.Filename)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		slog.Error("document attachment fetch bad status", "status", resp.StatusCode, "url", attachment.URL)
+		return fmt.Sprintf("[attachment %s: could not download file]", attachment.Filename)
+	}
+	data, err := io.ReadAll(io.LimitReader(resp.Body, int64(docs.MaxDownloadBytes)+1))
+	if err != nil {
+		slog.Error("failed to read document body", "err", err, "url", attachment.URL)
+		return ""
+	}
+	if len(data) > docs.MaxDownloadBytes {
+		slog.Warn("document body exceeded size limit after download", "id", attachment.ID.String(), "size", len(data))
+		return fmt.Sprintf("[attachment %s: file too large, limit is 10MB]", attachment.Filename)
+	}
+	if strings.TrimSpace(contentType) == "" {
+		contentType = http.DetectContentType(data)
+	}
+
+	text, err := docs.ExtractText(context.Background(), attachment.Filename, contentType, data)
+	if err != nil {
+		slog.Warn("document extraction failed", "err", err, "filename", attachment.Filename)
+		return fmt.Sprintf("[attachment %s: %s]", attachment.Filename, err.Error())
+	}
+	if err := writeTxtCache(attachment.ID, []byte(text)); err != nil {
+		slog.Error("failed to write txt cache", "err", err, "id", attachment.ID.String())
+	}
+	return docs.FormatBlock(attachment.Filename, text)
+}
+
 var citeCleanupRegexp = regexp.MustCompile(`\[+(\d+)\]+\(<[^>]+>\)`)
 
 // [[1]](<https://example.com>) -> [1]
@@ -375,18 +452,47 @@ func getMessageContent(message discord.Message) string {
 
 	content = appendContextLine(content, messageReactionsContext(message.Reactions))
 
-	// process text attachments
+	// process text and document attachments (covers both the triggering
+	// message and history, since both go through getMessageContent)
 	if !message.Author.Bot {
+		docCount := 0
 		for i, attachment := range message.Attachments {
 			if attachment.Filename == "reasoning.txt" {
 				continue
 			}
+			if isImageAttachment(attachment) || isNarrationAttachment(attachment) {
+				continue
+			}
+
+			contentType := ""
+			if attachment.ContentType != nil {
+				contentType = *attachment.ContentType
+			}
+
+			// document attachments (pdf, docx, xlsx, pptx, odt, ...) via Gotenberg
+			if docs.Supported(attachment.Filename, contentType) &&
+				!isPlainTextAttachment(attachment) {
+				if docCount >= docs.MaxDocsPerMessage {
+					continue
+				}
+				docCount++
+				block := getDocumentAttachmentBlock(attachment)
+				if block == "" {
+					continue
+				}
+				if i == 0 && content != "" {
+					content += "\n"
+				}
+				content = appendContextLine(content, block)
+				continue
+			}
+
 			maxSize := 16 * 1024
 			if attachment.Size > maxSize {
 				continue
 			}
 
-			if attachment.ContentType == nil || !strings.Contains(*attachment.ContentType, "text/plain") {
+			if !isPlainTextAttachment(attachment) {
 				continue
 			}
 

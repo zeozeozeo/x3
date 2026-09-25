@@ -22,6 +22,7 @@ import (
 	"github.com/disgoorg/disgo/discord"
 	"github.com/zeozeozeo/x3/cryptohelper"
 	"github.com/zeozeozeo/x3/db"
+	"github.com/zeozeozeo/x3/docs"
 	"github.com/zeozeozeo/x3/llm"
 	"github.com/zeozeozeo/x3/model"
 	"github.com/zeozeozeo/x3/persona"
@@ -657,6 +658,39 @@ func (b *MatrixBot) attachmentFromContent(ctx context.Context, content *event.Me
 		att.DataURI = fmt.Sprintf("data:%s;base64,%s", contentType, base64.StdEncoding.EncodeToString(data))
 	}
 	return att, nil
+}
+
+// matrixDocumentBlocks extracts text from non-image document attachments
+// (pdf, docx, xlsx, pptx, odt, ...) via Gotenberg for LLM context.
+func matrixDocumentBlocks(ctx context.Context, attachments []matrixAttachment) string {
+	var sb strings.Builder
+	count := 0
+	for _, attachment := range attachments {
+		if attachment.IsImage || len(attachment.Data) == 0 {
+			continue
+		}
+		if !docs.Supported(attachment.Filename, attachment.ContentType) {
+			continue
+		}
+		if count >= docs.MaxDocsPerMessage {
+			break
+		}
+		count++
+		if len(attachment.Data) > docs.MaxDownloadBytes {
+			slog.Warn("matrix document exceeds size limit", "filename", attachment.Filename, "size", len(attachment.Data))
+			fmt.Fprintf(&sb, "[attachment %s: file too large, limit is 10MB]\n", attachment.Filename)
+			continue
+		}
+		text, err := docs.ExtractText(ctx, attachment.Filename, attachment.ContentType, attachment.Data)
+		if err != nil {
+			slog.Warn("matrix document extraction failed", "err", err, "filename", attachment.Filename)
+			fmt.Fprintf(&sb, "[attachment %s: %s]\n", attachment.Filename, err.Error())
+			continue
+		}
+		sb.WriteString(docs.FormatBlock(attachment.Filename, text))
+		sb.WriteByte('\n')
+	}
+	return strings.TrimSpace(sb.String())
 }
 
 func (b *MatrixBot) handleCommand(ctx context.Context, msg *matrixMessage, raw string, isDM bool) error {
@@ -1484,6 +1518,9 @@ func (b *MatrixBot) handleLlm(ctx context.Context, msg *matrixMessage, isRegener
 		promptContext := matrixPromptContext(cache)
 		p := persona.GetPersonaByMetaWithBotName(cache.PersonaMeta, b.userName(msg), b.matrixBotName(ctx, msg.RoomID), b.isDMRoom(ctx, msg.RoomID), promptContext)
 		content := matrixFormatMsg(augmentContentWithLinkMetadata(msg.Content), b.userName(msg), msg.ReplyTo)
+		if docBlocks := matrixDocumentBlocks(ctx, msg.Attachments); docBlocks != "" {
+			content = appendContextLine(content, docBlocks)
+		}
 		llmer.AddMessageWithID(llm.RoleUser, content, 0, msg.EventID.String())
 		if len(llmer.Messages) > 0 {
 			added := &llmer.Messages[len(llmer.Messages)-1]
