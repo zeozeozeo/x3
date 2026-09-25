@@ -11,8 +11,10 @@ import (
 	"net/textproto"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
+	"unicode"
 
 	"github.com/ledongthuc/pdf"
 )
@@ -176,10 +178,16 @@ func ConvertToPDF(ctx context.Context, baseURL, filename string, data []byte) ([
 }
 
 // ExtractPDFText reads plain text from PDF bytes (up to maxPDFPages pages).
-func ExtractPDFText(pdfData []byte) (string, error) {
+func ExtractPDFText(pdfData []byte) (text string, err error) {
 	if len(pdfData) == 0 {
 		return "", fmt.Errorf("empty PDF")
 	}
+	defer func() {
+		if r := recover(); r != nil {
+			slog.Warn("pdf parser panicked, recovered", "panic", r)
+			text, err = "", fmt.Errorf("failed to parse PDF (malformed file)")
+		}
+	}()
 	reader, err := pdf.NewReader(bytes.NewReader(pdfData), int64(len(pdfData)))
 	if err != nil {
 		return "", fmt.Errorf("failed to parse PDF: %w", err)
@@ -194,21 +202,177 @@ func ExtractPDFText(pdfData []byte) (string, error) {
 		if page.V.IsNull() {
 			continue
 		}
-		rows, err := page.GetTextByRow()
-		if err != nil {
-			slog.Debug("pdf page text extraction failed", "page", i, "err", err)
+		pageText, perr := extractPageLayout(page)
+		if perr != nil {
+			slog.Debug("pdf page text extraction failed", "page", i, "err", perr)
 			continue
 		}
-		for _, row := range rows {
-			var line strings.Builder
-			for _, word := range row.Content {
-				line.WriteString(word.S)
+		if sb.Len() > 0 {
+			sb.WriteString("\n\n")
+		}
+		sb.WriteString(pageText)
+	}
+	return cleanMathPhantoms(sb.String()), nil
+}
+
+func cleanMathPhantoms(s string) string {
+	s = strings.ReplaceAll(s, "−⊗", "− ")
+	return strings.ReplaceAll(s, "·⊗", "· ")
+}
+
+const lineBaselineTol = 3.5
+
+type textRun struct {
+	frags []pdf.Text
+	minX  float64
+	endX  float64
+	// spaced requests a space after this run
+	spaced bool
+}
+
+type textLine struct {
+	baseY float64
+	runs  []textRun
+}
+
+// classifyFrag sorts fragments into content, spacing, or noise.
+func classifyFrag(w pdf.Text) (keep, asSpace bool) {
+	if w.S == "" {
+		return false, false
+	}
+	if w.S == "Ω" && w.W <= 0 {
+		return false, false
+	}
+	if r, ok := asSingleRune(w.S); ok {
+		switch {
+		case r == '\n' || r == '\t' || r == ' ':
+			return true, true
+		case unicode.IsControl(r):
+			return false, false
+		}
+	}
+	if strings.TrimSpace(w.S) == "" {
+		return true, true
+	}
+	if w.S == "Ω" && isCMRFont(w.Font) {
+		return true, true
+	}
+	return true, false
+}
+
+func asSingleRune(s string) (rune, bool) {
+	r := []rune(s)
+	if len(r) == 1 {
+		return r[0], true
+	}
+	return 0, false
+}
+
+func isCMRFont(name string) bool {
+	if i := strings.Index(name, "+"); i >= 0 {
+		name = name[i+1:]
+	}
+	return strings.HasPrefix(name, "CMR")
+}
+
+func fragSize(a, b pdf.Text) float64 {
+	if a.FontSize > 0 {
+		return a.FontSize
+	}
+	if b.FontSize > 0 {
+		return b.FontSize
+	}
+	return 12
+}
+
+func absf(v float64) float64 {
+	if v < 0 {
+		return -v
+	}
+	return v
+}
+
+func buildLines(frags []pdf.Text) []textLine {
+	var lines []textLine
+	for _, w := range frags {
+		keep, asSpace := classifyFrag(w)
+		if !keep {
+			continue
+		}
+		if asSpace {
+			if n := len(lines); n > 0 && len(lines[n-1].runs) > 0 {
+				lines[n-1].runs[len(lines[n-1].runs)-1].spaced = true
 			}
-			sb.WriteString(strings.TrimRight(line.String(), " \t"))
+			continue
+		}
+		if len(lines) == 0 || absf(w.Y-lines[len(lines)-1].baseY) > lineBaselineTol {
+			lines = append(lines, textLine{baseY: w.Y})
+		}
+		L := &lines[len(lines)-1]
+		if len(L.runs) == 0 {
+			L.runs = append(L.runs, textRun{minX: w.X})
+		}
+		R := &L.runs[len(L.runs)-1]
+		if len(R.frags) > 0 {
+			prev := R.frags[len(R.frags)-1]
+			if R.spaced || w.X-(prev.X+prev.W) >= 0.2*fragSize(prev, w) {
+				L.runs = append(L.runs, textRun{minX: w.X})
+				R = &L.runs[len(L.runs)-1]
+			}
+		}
+		R.frags = append(R.frags, w)
+		if w.X < R.minX {
+			R.minX = w.X
+		}
+		if end := w.X + w.W; end > R.endX {
+			R.endX = end
+		}
+	}
+	return lines
+}
+
+// renderLines orders lines top-to-bottom and joins runs with spacing.
+func renderLines(lines []textLine) string {
+	sort.SliceStable(lines, func(i, j int) bool { return lines[i].baseY > lines[j].baseY })
+	var sb strings.Builder
+	for _, L := range lines {
+		runs := append([]textRun(nil), L.runs...)
+		sort.SliceStable(runs, func(i, j int) bool { return runs[i].minX < runs[j].minX })
+		var lb strings.Builder
+		for i, R := range runs {
+			if i > 0 {
+				sep := " "
+				prev := runs[i-1]
+				size := 12.0
+				if len(prev.frags) > 0 && len(R.frags) > 0 {
+					size = fragSize(prev.frags[len(prev.frags)-1], R.frags[0])
+				}
+				if !prev.spaced && R.minX-prev.endX >= 4*size {
+					sep = "  " // column break
+				}
+				lb.WriteString(sep)
+			}
+			for _, w := range R.frags {
+				lb.WriteString(w.S)
+			}
+		}
+		if line := strings.TrimRight(lb.String(), " \t"); line != "" {
+			sb.WriteString(line)
 			sb.WriteByte('\n')
 		}
 	}
-	return sb.String(), nil
+	return sb.String()
+}
+
+// extractPageLayout rebuilds a page's text from positioned glyph fragments,
+// recovering word spaces from horizontal gaps.
+func extractPageLayout(page pdf.Page) (out string, err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			out, err = "", fmt.Errorf("failed to parse PDF page: %v", r)
+		}
+	}()
+	return renderLines(buildLines(page.Content().Text)), nil
 }
 
 // FormatBlock renders extracted text as a context block for the LLM.
