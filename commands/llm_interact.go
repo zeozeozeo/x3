@@ -277,6 +277,16 @@ func splitLlmTags(response string, personaMeta *persona.PersonaMeta) (messages [
 }
 
 func collapseRepeatedSplitMessages(messages []string) []string {
+	// strip stray thinking tags
+	cleaned := make([]string, 0, len(messages))
+	for _, msg := range messages {
+		msg = llm.StripThinkingEdgeTags(msg)
+		if msg == "" {
+			continue
+		}
+		cleaned = append(cleaned, msg)
+	}
+	messages = cleaned
 	if len(messages) < 2 {
 		return messages
 	}
@@ -308,7 +318,7 @@ func collapseRepeatedSplitMessages(messages []string) []string {
 	for i := 1; i < len(result); i++ {
 		for j := 0; j < i; j++ {
 			if cut, ok := strings.CutSuffix(result[i], result[j]); ok {
-				result[i] = strings.TrimSpace(cut)
+				result[i] = llm.StripThinkingEdgeTags(strings.TrimSpace(cut))
 				break
 			}
 		}

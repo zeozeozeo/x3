@@ -128,6 +128,32 @@ func stripLeadingThinkingArtifacts(s string) string {
 	}
 }
 
+func StripThinkingEdgeTags(s string) string {
+	s = strings.TrimSpace(s)
+	for {
+		trimmed := false
+		lower := strings.ToLower(s)
+		for _, tag := range thinkingTags {
+			tagName := strings.TrimSuffix(strings.TrimPrefix(tag[0], "<"), ">")
+			for _, token := range []string{tag[0], tag[1], "<" + tagName + "/>", "<" + tagName + " />"} {
+				if strings.HasPrefix(lower, token) {
+					s = strings.TrimSpace(s[len(token):])
+					lower = strings.ToLower(s)
+					trimmed = true
+				}
+				if strings.HasSuffix(lower, token) {
+					s = strings.TrimSpace(s[:len(s)-len(token)])
+					lower = strings.ToLower(s)
+					trimmed = true
+				}
+			}
+		}
+		if !trimmed {
+			return s
+		}
+	}
+}
+
 // extract stuff in <search></search>
 func extractSearch(s string) string {
 	return extractTaggedContent(s, "<search>", "</search>")
