@@ -449,7 +449,7 @@ func HandlePersona(event *handler.CommandEvent) error {
 		if dataContext < 0 {
 			dataContext = db.DefaultContextMessages
 		}
-		dataContext = min(500, dataContext)
+		dataContext = db.ClampContextLength(dataContext, db.IsInWhitelist(event.User().ID))
 		cache.ContextLength = dataContext
 	}
 	if dataSeed != 0 {

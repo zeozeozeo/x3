@@ -996,7 +996,7 @@ func (b *MatrixBot) handlePersonaCommand(ctx context.Context, msg *matrixMessage
 		if n < 0 {
 			n = db.DefaultContextMessages
 		}
-		cache.ContextLength = min(n, 500)
+		cache.ContextLength = db.ClampContextLength(n, false)
 	case "temperature":
 		v, err := strconv.ParseFloat(value, 32)
 		if err != nil {
@@ -1555,7 +1555,7 @@ func (b *MatrixBot) handleLlm(ctx context.Context, msg *matrixMessage, isRegener
 		"is_regenerate", isRegenerate,
 		"think_prefill", thinkPrefill != "",
 	)
-	response, usage, err := requestCompletionCacheFriendly(llmer, models, cache.PersonaMeta.Settings, prepend, thinkPrefill, cache.ContextLength, ctx)
+	response, usage, err := requestCompletionCacheFriendly(llmer, models, cache.PersonaMeta.Settings, prepend, thinkPrefill, cache.EffectiveContextLength(false), ctx)
 	if err != nil {
 		return err
 	}

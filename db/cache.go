@@ -17,9 +17,42 @@ import (
 const (
 	// DefaultContextMessages is the default number of surrounding messages used for LLM context.
 	DefaultContextMessages = 60
-	maxChatMemories        = 67
-	maxChatMemoryRunes     = 500
+	// MaxContextMessages is the maximum number of surrounding messages
+	// a whitelisted user may retain as LLM context.
+	MaxContextMessages = 75
+	// MaxContextMessagesUnwhitelisted caps message history for users
+	// that are not in the whitelist.
+	MaxContextMessagesUnwhitelisted = 100
+	maxChatMemories                 = 67
+	maxChatMemoryRunes              = 500
 )
+
+// ClampContextLength limits n to the maximum allowed history length.
+// Whitelisted users may keep up to MaxContextMessages, everyone else is
+// capped at MaxContextMessagesUnwhitelisted.
+func ClampContextLength(n int, whitelisted bool) int {
+	max := MaxContextMessages
+	if !whitelisted {
+		max = MaxContextMessagesUnwhitelisted
+	}
+	if n > max {
+		n = max
+	}
+	return n
+}
+
+// EffectiveContextLength returns the usable history length for this cache,
+// automatically limiting old configs (e.g. ones with 500 set) to the cap
+// that applies to the caller.
+func (cache *ChannelCache) EffectiveContextLength(whitelisted bool) int {
+	if cache == nil {
+		return DefaultContextMessages
+	}
+	if cache.ContextLength == 0 {
+		return DefaultContextMessages
+	}
+	return ClampContextLength(cache.ContextLength, whitelisted)
+}
 
 type PersonaNewFlow struct {
 	Card          persona.TavernCardV1 `json:"card"`
@@ -147,6 +180,9 @@ func unmarshalChannelCache(data []byte) (*ChannelCache, error) {
 	err := json.Unmarshal(data, &cache)
 	if cache.ContextLength == 0 {
 		cache.ContextLength = DefaultContextMessages
+	} else if cache.ContextLength > MaxContextMessages {
+		// automatically limit old configs that stored values above the absolute max
+		cache.ContextLength = MaxContextMessages
 	}
 	if cache.PersonaMeta.Name == "" {
 		cache.PersonaMeta = persona.PersonaProto.DeepCopy()

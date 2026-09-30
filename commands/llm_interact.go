@@ -378,13 +378,16 @@ func handleLlmInteraction2(
 	configureDiscordSearchTool(llmer, client, guildID, userID, username, includeNSFW)
 	models := cache.PersonaMeta.GetModels()
 
-	// fetch surrounding messages for context
-	ctxLen := cache.ContextLength
+	// fetch surrounding messages for context, automatically limiting old
+	// configs (e.g. ones with 500 set) to the cap for unwhitelisted users
+	whitelisted := db.IsInWhitelist(userID)
+	ctxLen := cache.EffectiveContextLength(whitelisted)
 	if models[0].IsMarkov {
 		ctxLen = 200
 	} else if models[0].IsEliza || models[0].IsAlice {
 		ctxLen = 0
 	}
+	ctxLen = db.ClampContextLength(ctxLen, whitelisted)
 	var numCtxMessages int
 	var usernames map[string]struct{}
 	var lastResponseMessage *discord.Message

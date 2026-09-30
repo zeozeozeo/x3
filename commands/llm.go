@@ -113,7 +113,7 @@ func HandleLlm(event *handler.CommandEvent, models []model.Model) error {
 		llmer = llm.NewLlmer(event.Channel().ID())
 		lastMessage := event.Channel().MessageChannel.LastMessageID()
 		if lastMessage != nil {
-			_, usernames, _, _, _ = addContextMessages(event.Client(), llmer, event.Channel().ID(), *lastMessage, cache.ContextLength)
+			_, usernames, _, _, _ = addContextMessages(event.Client(), llmer, event.Channel().ID(), *lastMessage, cache.EffectiveContextLength(db.IsInWhitelist(event.User().ID)))
 
 			msg, err := event.Client().Rest.GetMessage(event.Channel().ID(), *lastMessage)
 			if err == nil && msg != nil && msg.Interaction == nil {
