@@ -127,7 +127,7 @@ func BuildState(history []llm.Message, candidate Turn, botNames []string, channe
 		turns = append(turns, Turn{
 			Role:    messageRole(message.Role),
 			Name:    minilm.Clean(message.Author),
-			Content: cleanContent(message.Content),
+			Content: cleanTurn(messageRole(message.Role), message.Content),
 		})
 	}
 
@@ -165,38 +165,21 @@ func messageRole(role string) string {
 	return RoleUser
 }
 
-// cleanContent strips the decorations the bot adds to cached history so the
-// model reads plain text: split continuations carry a zero-width marker and
-// every turn is prefixed with its author.
-func cleanContent(content string) string {
+func cleanTurn(role string, content string) string {
 	content = strings.ReplaceAll(content, "\u200B", "")
-	lines := strings.Split(content, "\n")
-	for i, line := range lines {
-		lines[i] = stripAuthorPrefix(line)
+	if role == RoleUser {
+		content = stripUserAttribution(content)
 	}
-	return minilm.Clean(strings.Join(lines, "\n"))
+	return minilm.Clean(content)
 }
 
-// authorPrefix matches the "name: " attribution formatMsg puts on cached
-// messages. It is deliberately narrow: anything containing a slash, colon, or
-// other URL punctuation is treated as prose and left alone, so a message like
-// "see https://example.com/x: y" keeps its text.
-var authorPrefix = regexp.MustCompile(`^[\p{L}\p{N} _.'\-]{1,32}: `)
+var authorPrefix = regexp.MustCompile(`^[\p{L}\p{N} _.'\-]{1,32}: `
+var replyWrapper = regexp.MustCompile(`(?s)^<in reply to [^>]*?>\s*`)
 
-// stripAuthorPrefix removes a leading "name: " attribution, and the
-// "<in reply to name: ">" wrapper formatMsg adds to replies.
-func stripAuthorPrefix(line string) string {
-	line = strings.TrimSpace(line)
-	if strings.HasPrefix(line, "<in reply to ") {
-		if end := strings.Index(line, ">\n"); end != -1 {
-			line = strings.TrimSpace(line[end+2:])
-		} else if end := strings.Index(line, ">"); end != -1 {
-			line = strings.TrimSpace(line[end+1:])
-		}
+func stripUserAttribution(content string) string {
+	content = replyWrapper.ReplaceAllString(content, "")
+	if authorPrefix.MatchString(content) {
+		_, content, _ = strings.Cut(content, ": ")
 	}
-	if !authorPrefix.MatchString(line) {
-		return line
-	}
-	_, rest, _ := strings.Cut(line, ": ")
-	return strings.TrimSpace(rest)
+	return content
 }

@@ -128,6 +128,14 @@ func judge(ctx context.Context, cfg Config, input DecisionInput) Decision {
 			elapsedSeconds(input.Now, input.LastInteraction),
 			cfg,
 		)
+		slog.Debug("decision state shape",
+			"turns", len(state.Transcript),
+			"turnChars", turnChars(state.Transcript),
+			"candidateChars", len([]rune(state.Candidate.Content)),
+			"idleSeconds", state.IdleSeconds,
+			"questions", len(Questions(input.BotNames)),
+		)
+
 		result, err := decider.Decide(ctx, state, Questions(input.BotNames))
 		if err != nil {
 			slog.Warn("decision model call failed, using local similarity", "err", err)
@@ -139,6 +147,14 @@ func judge(ctx context.Context, cfg Config, input DecisionInput) Decision {
 	}
 
 	return similarityDecision(cfg, input)
+}
+
+func turnChars(turns []Turn) int {
+	total := 0
+	for _, turn := range turns {
+		total += len([]rune(turn.Content))
+	}
+	return total
 }
 
 // interpret turns the model's answers into a verdict. It reports false when the
