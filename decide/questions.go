@@ -173,7 +173,7 @@ func cleanTurn(role string, content string) string {
 	return minilm.Clean(content)
 }
 
-var authorPrefix = regexp.MustCompile(`^[\p{L}\p{N} _.'\-]{1,32}: `
+var authorPrefix = regexp.MustCompile(`^[\p{L}\p{N} _.'\-]{1,32}: `)
 var replyWrapper = regexp.MustCompile(`(?s)^<in reply to [^>]*?>\s*`)
 
 func stripUserAttribution(content string) string {
