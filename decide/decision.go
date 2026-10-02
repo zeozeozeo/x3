@@ -33,6 +33,11 @@ type DecisionInput struct {
 	CandidateName string
 	// History is the cached conversation, oldest first.
 	History []llm.Message
+	// Unanswered holds messages posted after the bot's last reply that it has
+	// not responded to. They are not in History, which only grows when an
+	// interaction happens, and the model cannot judge a short reply as a
+	// follow-up without knowing what was asked just above it.
+	Unanswered []Turn
 	// BotNames are the names the bot answers to, used to tell the model who it is.
 	BotNames []string
 	// ChannelName and PersonaName give the model setting and identity.
@@ -121,6 +126,7 @@ func judge(ctx context.Context, cfg Config, input DecisionInput) Decision {
 	if decider != nil {
 		state := BuildState(
 			input.History,
+			input.Unanswered,
 			Turn{Content: minilm.Clean(input.Candidate), Name: input.CandidateName},
 			input.BotNames,
 			input.ChannelName,
@@ -131,9 +137,10 @@ func judge(ctx context.Context, cfg Config, input DecisionInput) Decision {
 		slog.Debug("decision state shape",
 			"turns", len(state.Transcript),
 			"turnChars", turnChars(state.Transcript),
+			"unanswered", len(state.SinceLastReply),
+			"unansweredChars", turnChars(state.SinceLastReply),
 			"candidateChars", len([]rune(state.Candidate.Content)),
 			"idleSeconds", state.IdleSeconds,
-			"questions", len(Questions(input.BotNames)),
 		)
 
 		result, err := decider.Decide(ctx, state, Questions(input.BotNames))

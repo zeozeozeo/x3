@@ -222,6 +222,9 @@ func OnMessageCreate(event *events.MessageCreate) {
 	// below all miss.
 	cand := candidate{
 		ID:          event.MessageID.String(),
+		SnowflakeID: event.MessageID,
+		ChannelID:   event.ChannelID,
+		BotID:       event.Client().ID(),
 		Content:     getMessageContent(event.Message),
 		AuthorName:  discordUserName(event.Message.Author),
 		BotNames:    botNamesForDecision(cache),

@@ -46,8 +46,14 @@ type State struct {
 	Channel     string `json:"channel,omitempty"`
 	Persona     string `json:"persona,omitempty"`
 	IdleSeconds int    `json:"seconds_since_last_bot_message"`
-	Transcript  []Turn `json:"transcript"`
-	Candidate   Turn   `json:"candidate"`
+	// Transcript is the conversation the bot is part of.
+	Transcript []Turn `json:"transcript"`
+	// SinceLastReply holds messages posted after the bot's last reply, which
+	// it has not answered yet. They are absent from Transcript because the
+	// cached history only grows when an interaction happens, and without them
+	// the model reads a bare reply as room chatter instead of an answer.
+	SinceLastReply []Turn `json:"since_last_reply,omitempty"`
+	Candidate      Turn   `json:"candidate"`
 }
 
 // addressedCriteria separates a message meant for the bot from room talk.
@@ -114,33 +120,40 @@ func describeBot(botNames []string) string {
 		names[0], strings.Join(names[1:], ", "))
 }
 
-// BuildState renders the decision state from cached history and the candidate
-// message. History is trimmed to the newest turns and then to a character
-// budget, dropping whole turns rather than truncating mid-message so the
-// transcript never ends in half a sentence.
-func BuildState(history []llm.Message, candidate Turn, botNames []string, channelName, personaName string, idleSeconds int, cfg Config) State {
+// BuildState renders the decision state from cached history, the messages the
+// bot has not replied to yet, and the candidate. History is trimmed to the
+// newest turns and then to a character budget, dropping whole turns rather than
+// truncating mid-message so the transcript never ends in half a sentence.
+func BuildState(history []llm.Message, unanswered []Turn, candidate Turn, botNames []string, channelName, personaName string, idleSeconds int, cfg Config) State {
 	turns := make([]Turn, 0, cfg.HistoryTurns+1)
 	for _, message := range history {
 		if len(turns) >= cfg.HistoryTurns {
 			turns = turns[1:]
 		}
+		role := messageRole(message.Role)
 		turns = append(turns, Turn{
-			Role:    messageRole(message.Role),
+			Role:    role,
 			Name:    minilm.Clean(message.Author),
-			Content: cleanTurn(messageRole(message.Role), message.Content),
+			Content: cleanTurn(role, message.Content),
 		})
 	}
 
 	state := State{
-		Note:        "Decide whether the bot should send a message in this channel in response to the candidate message. Earlier transcript turns give context; only the candidate message is up for a decision.",
-		Bot:         describeBot(botNames),
-		Channel:     minilm.Clean(channelName),
-		Persona:     minilm.Clean(personaName),
-		IdleSeconds: idleSeconds,
-		Transcript:  turns,
-		Candidate:   Turn{Role: RoleUser, Name: minilm.Clean(candidate.Name), Content: candidate.Content},
+		Note: "Decide whether the bot should send a message in this channel in response to the candidate message. " +
+			"The transcript is the conversation the bot is taking part in, and since_last_reply lists messages posted after " +
+			"the bot's last reply that the bot has not answered yet. Read the candidate in that light: a short message that " +
+			"answers a question someone asked just above it is a follow-up, not room chatter. Only the candidate message is " +
+			"up for a decision.",
+		Bot:            describeBot(botNames),
+		Channel:        minilm.Clean(channelName),
+		Persona:        minilm.Clean(personaName),
+		IdleSeconds:    idleSeconds,
+		Transcript:     turns,
+		SinceLastReply: unanswered,
+		Candidate:      Turn{Role: RoleUser, Name: minilm.Clean(candidate.Name), Content: candidate.Content},
 	}
 	state.Transcript = trimTranscript(state.Transcript, cfg.MaxStateChars)
+	state.SinceLastReply = trimTranscript(state.SinceLastReply, cfg.MaxStateChars/2)
 	return state
 }
 
@@ -163,6 +176,10 @@ func messageRole(role string) string {
 		return RoleBot
 	}
 	return RoleUser
+}
+
+func CleanTurn(role string, content string) string {
+	return cleanTurn(role, content)
 }
 
 func cleanTurn(role string, content string) string {

@@ -34,7 +34,7 @@ var defaultContinuationPrompts = []string{
 
 func ContinuationScores(embedder Embedder, candidate string, refs []string) (historyScore, defaultScore float32, err error) {
 	candidate = Clean(candidate)
-	if len([]rune(candidate)) < 3 || onlyURLRegexp.MatchString(candidate) {
+	if IsLowSignal(candidate) {
 		return 0, 0, nil
 	}
 	if embedder == nil {
