@@ -59,7 +59,10 @@ func ContinuationScores(embedder Embedder, candidate string, refs []string) (his
 // because it is nearly empty or because it is only link dumps.
 func IsLowSignal(candidate string) bool {
 	candidate = Clean(candidate)
-	return len([]rune(candidate)) < 3 || onlyURLRegexp.MatchString(candidate)
+	if candidate == "" {
+		return true
+	}
+	return onlyURLRegexp.MatchString(candidate)
 }
 
 func bestSimilarity(embedder Embedder, candidate []float32, refs []string) float32 {
