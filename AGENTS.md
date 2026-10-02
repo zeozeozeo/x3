@@ -30,6 +30,18 @@ The normal chat path is `handleLlmInteraction2` in `commands/llm_interact.go`. I
 
 Before changing prompt or message handling, inspect both prefix and suffix conventions: persona `Prepend` is an assistant prefill, split markers and zero-width continuation markers affect history reconstruction, and `getMessageContent`/`formatMsg` normalize incoming text. Do not feed button prompts, status messages, errors, generated-image narration, comparison UI, or command-only messages into the LLM. Add a classifier or explicit skip condition for any new non-LLM message type, and verify both live Discord history and cached/imported history paths.
 
+## Respond Decision
+
+Whether to reply to a public channel message that did not summon the bot is decided in `commands/continuation_trigger.go` via the `decide` package. Three layers, and the order matters:
+
+1. Cheap triggers in `commands/message_handler.go` (DM, mention, reply to the bot, `containsX3Regex`) and `RespondAlways` never call a model.
+2. `decide.ShouldTrigger` applies time and signal gates, then asks a System One decision model (`decide.Questions`, e.g. Cloudflare `clef-flash` through `systemone/`). The model returns a probability, so `shut up` after the bot spoke is declined.
+3. If that call cannot be made, `minilm.ContinuationScores` scores the message by cosine similarity as a fallback.
+
+The decision model needs `LastInteraction` to be set, so the bot still never speaks first in a channel it has never used. Verdict `Reason` values are a logged enum; keep them stable if you build tooling on them.
+
+`systemone/` is protocol only and reads no environment variables. Credentials and per-account failover come from `model.SystemOneClients`, which shares its Cloudflare env handling with `Model.Client`. Add provider-specific plumbing in `model/`, never in `systemone/`.
+
 ## Testing Guidelines
 
 Use Go’s built-in `testing` package. Name tests `TestThing` and table-driven cases where multiple inputs exercise one behavior. Add regression tests beside the package being changed, especially for persistence, message formatting, model selection, and Discord interaction state. Run focused tests first, then `go test ./...` before submitting.

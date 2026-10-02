@@ -5,20 +5,18 @@ import (
 	"os"
 	"strconv"
 	"strings"
-	"time"
 )
 
 const (
-	defaultGraceWindow        = 20 * time.Second
-	defaultContinuationWindow = 10 * time.Minute
-	defaultSimilarity         = 0.3
-	defaultDefaultSimilarity  = 0.55
-	defaultModelPath          = "models/minilm/all-MiniLM-L6-v2.onnx"
+	defaultSimilarity        = 0.3
+	defaultDefaultSimilarity = 0.55
+	defaultModelPath         = "models/minilm/all-MiniLM-L6-v2.onnx"
 )
 
+// Config configures the local embedding model and the thresholds used when the
+// decision model is unavailable and continuation scoring takes over. The
+// response windows live in the decide package, which owns the policy.
 type Config struct {
-	GraceWindow        time.Duration
-	ContinuationWindow time.Duration
 	Similarity         float32
 	DefaultSimilarity  float32
 	ModelPath          string
@@ -27,8 +25,6 @@ type Config struct {
 
 func LoadConfig() Config {
 	return Config{
-		GraceWindow:        envDuration("X3_CONTINUATION_GRACE", defaultGraceWindow),
-		ContinuationWindow: envDuration("X3_CONTINUATION_WINDOW", defaultContinuationWindow),
 		Similarity:         envFloat32("X3_MINILM_SIMILARITY", defaultSimilarity),
 		DefaultSimilarity:  envFloat32("X3_MINILM_DEFAULT_SIMILARITY", defaultDefaultSimilarity),
 		ModelPath:          envString("X3_MINILM_MODEL_PATH", defaultModelPath),
@@ -41,19 +37,6 @@ func envString(key, fallback string) string {
 		return value
 	}
 	return fallback
-}
-
-func envDuration(key string, fallback time.Duration) time.Duration {
-	value := strings.TrimSpace(os.Getenv(key))
-	if value == "" {
-		return fallback
-	}
-	d, err := time.ParseDuration(value)
-	if err != nil {
-		slog.Warn("invalid duration env, using default", "key", key, "value", value, "err", err)
-		return fallback
-	}
-	return d
 }
 
 func envFloat32(key string, fallback float32) float32 {

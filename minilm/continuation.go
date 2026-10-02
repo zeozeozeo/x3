@@ -5,26 +5,9 @@ import (
 	"regexp"
 	"strings"
 	"sync"
-	"time"
 
 	"github.com/zeozeozeo/x3/llm"
 )
-
-type DecisionInput struct {
-	Enabled         bool
-	Now             time.Time
-	LastInteraction time.Time
-	Candidate       string
-	History         []llm.Message
-	Config          Config
-	Embedder        Embedder
-}
-
-type Decision struct {
-	Trigger bool
-	Reason  string
-	Score   float32
-}
 
 var onlyURLRegexp = regexp.MustCompile(`(?is)^\s*(?:https?://\S+\s*)+$`)
 
@@ -49,92 +32,52 @@ var defaultContinuationPrompts = []string{
 	"hello are you there",
 }
 
-func ShouldTrigger(input DecisionInput) Decision {
-	if !input.Enabled {
-		return Decision{Reason: "disabled"}
-	}
-	cfg := input.Config
-	if cfg.GraceWindow == 0 {
-		cfg = LoadConfig()
-	}
-	if cfg.DefaultSimilarity == 0 {
-		cfg.DefaultSimilarity = defaultDefaultSimilarity
-	}
-	if input.Now.IsZero() {
-		input.Now = time.Now()
-	}
-	if input.LastInteraction.IsZero() {
-		return Decision{Reason: "no_last_interaction"}
-	}
-
-	elapsed := input.Now.Sub(input.LastInteraction)
-	if elapsed < 0 {
-		elapsed = 0
-	}
-	if elapsed <= cfg.GraceWindow {
-		return Decision{Trigger: true, Reason: "grace_window"}
-	}
-	if elapsed > cfg.ContinuationWindow {
-		return Decision{Reason: "outside_window"}
-	}
-
-	candidate := cleanCandidate(input.Candidate)
+func ContinuationScores(embedder Embedder, candidate string, refs []string) (historyScore, defaultScore float32, err error) {
+	candidate = Clean(candidate)
 	if len([]rune(candidate)) < 3 || onlyURLRegexp.MatchString(candidate) {
-		return Decision{Reason: "empty_or_low_signal"}
+		return 0, 0, nil
 	}
-
-	embedder := input.Embedder
 	if embedder == nil {
 		var err error
 		embedder, err = GlobalEmbedder()
 		if err != nil {
-			slog.Warn("MiniLM continuation check skipped", "err", err)
-			return Decision{Reason: "minilm_unavailable"}
+			return 0, 0, err
 		}
 	}
 
 	candidateEmbedding, err := embedCached(embedder, candidate)
 	if err != nil {
-		slog.Warn("MiniLM candidate embedding failed", "err", err)
-		return Decision{Reason: "embedding_failed"}
+		return 0, 0, err
 	}
 
+	return bestSimilarity(embedder, candidateEmbedding, refs),
+		bestSimilarity(embedder, candidateEmbedding, defaultContinuationPrompts),
+		nil
+}
+
+// IsLowSignal reports whether a message carries too little to judge, either
+// because it is nearly empty or because it is only link dumps.
+func IsLowSignal(candidate string) bool {
+	candidate = Clean(candidate)
+	return len([]rune(candidate)) < 3 || onlyURLRegexp.MatchString(candidate)
+}
+
+func bestSimilarity(embedder Embedder, candidate []float32, refs []string) float32 {
 	var best float32
-	refs := continuationReferences(input.History)
 	for _, ref := range refs {
-		refEmbedding, err := embedCached(embedder, ref)
-		if err != nil {
-			slog.Warn("MiniLM reference embedding failed", "err", err)
+		if strings.TrimSpace(ref) == "" {
 			continue
 		}
-		if score := Cosine(candidateEmbedding, refEmbedding); score > best {
+		refEmbedding, err := embedCached(embedder, ref)
+		if err != nil {
+			slog.Warn("minilm reference embedding failed", "err", err)
+			continue
+		}
+		if score := Cosine(candidate, refEmbedding); score > best {
 			best = score
 		}
 	}
-
-	if best >= cfg.Similarity {
-		return Decision{Trigger: true, Reason: "similarity", Score: best}
-	}
-
-	var bestDefault float32
-	for _, ref := range defaultContinuationPrompts {
-		refEmbedding, err := embedCached(embedder, ref)
-		if err != nil {
-			slog.Warn("MiniLM default continuation embedding failed", "err", err)
-			continue
-		}
-		if score := Cosine(candidateEmbedding, refEmbedding); score > bestDefault {
-			bestDefault = score
-		}
-	}
-	if bestDefault >= cfg.DefaultSimilarity {
-		return Decision{Trigger: true, Reason: "default_similarity", Score: bestDefault}
-	}
-
-	if len(refs) == 0 {
-		return Decision{Reason: "no_reference", Score: bestDefault}
-	}
-	return Decision{Reason: "below_threshold", Score: best}
+	return best
 }
 
 func embedCached(embedder Embedder, text string) ([]float32, error) {
@@ -170,13 +113,16 @@ func embedCached(embedder Embedder, text string) ([]float32, error) {
 	return embedding, nil
 }
 
-func cleanCandidate(s string) string {
+// Clean normalizes whitespace in a candidate or history message.
+func Clean(s string) string {
 	s = strings.TrimSpace(s)
 	s = strings.Join(strings.Fields(s), " ")
 	return s
 }
 
-func continuationReferences(history []llm.Message) []string {
+// References picks the messages a continuation should be compared against: the
+// last assistant reply, the user message that led to it, and the pair joined.
+func References(history []llm.Message) []string {
 	if len(history) == 0 {
 		return nil
 	}
@@ -191,7 +137,7 @@ func continuationReferences(history []llm.Message) []string {
 		return nil
 	}
 
-	assistant := cleanCandidate(history[lastAssistant].Content)
+	assistant := Clean(history[lastAssistant].Content)
 	var refs []string
 	if assistant != "" {
 		refs = append(refs, assistant)
@@ -200,7 +146,7 @@ func continuationReferences(history []llm.Message) []string {
 	lastUser := ""
 	for i := lastAssistant - 1; i >= 0; i-- {
 		if history[i].Role == llm.RoleUser && strings.TrimSpace(history[i].Content) != "" {
-			lastUser = cleanCandidate(history[i].Content)
+			lastUser = Clean(history[i].Content)
 			break
 		}
 	}

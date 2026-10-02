@@ -218,6 +218,19 @@ func OnMessageCreate(event *events.MessageCreate) {
 	}
 	cache := db.GetChannelCache(event.ChannelID)
 
+	// context for the respond decision. Only consulted if the cheap triggers
+	// below all miss.
+	cand := candidate{
+		ID:          event.MessageID.String(),
+		Content:     getMessageContent(event.Message),
+		AuthorName:  discordUserName(event.Message.Author),
+		BotNames:    botNamesForDecision(cache),
+		PersonaName: cache.PersonaMeta.Name,
+	}
+	if channel, ok := event.Channel(); ok {
+		cand.ChannelName = channel.Name()
+	}
+
 	// /personamaker context captures each user message as a context item.
 	if event.GuildID == nil && cache.PersonaMakerContextMode {
 		content := strings.TrimSpace(getMessageContent(event.Message))
@@ -300,11 +313,11 @@ func OnMessageCreate(event *events.MessageCreate) {
 
 	// recent interaction?
 	if !shouldTriggerLlm && event.Message.ReferencedMessage == nil {
-		if shouldTriggerContinuation(cache, getMessageContent(event.Message)) {
-			shouldTriggerLlm = true
-		}
-		// do we need to always respond in this channel?
+		// do we need to always respond in this channel? checked before the
+		// model so an explicit override never costs a decision call.
 		if cache.PersonaMeta.RespondAlways {
+			shouldTriggerLlm = true
+		} else if shouldTriggerContinuation(cache, cand) {
 			shouldTriggerLlm = true
 		}
 	}

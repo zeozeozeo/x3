@@ -38,51 +38,52 @@ var (
 )
 
 const (
-	azureBaseURL        = "https://models.inference.ai.azure.com"
-	zjBaseURL           = "https://api.zukijourney.com/v1"
-	groqBaseURL         = "https://api.groq.com/openai/v1"
-	googleBaseURL       = "https://generativelanguage.googleapis.com/v1beta/openai"
-	openRouterBaseURL   = "https://openrouter.ai/api/v1"
-	g4fBaseURL          = "http://192.168.230.44:1337/v1"
-	crofBaseURL         = "https://ai.nahcrof.com/v2"
-	electronBaseURL     = "https://api.electronhub.ai/v1"
-	cohereBaseURL       = "https://api.cohere.ai/compatibility/v1"
-	mnnBaseURL          = "https://api.mnnai.ru/v1"
-	zhipuBaseURL        = "https://open.bigmodel.cn/api/paas/v4"
-	chutesBaseURL       = "https://llm.chutes.ai/v1"
-	cerebrasBaseURL     = "https://api.cerebras.ai/v1"
-	togetherBaseURL     = "https://api.together.xyz/v1"
-	nineteenBaseURL     = "https://api.nineteen.ai/v1"
-	hcapBaseURL         = "https://hcap.ai/v1"
-	pollinationsBaseURL = "https://text.pollinations.ai/openai"
-	targonBaseURL       = "https://api.targon.com/v1"
-	atlasBaseURL        = "https://api.atlascloud.ai/v1"
-	huggingfaceBaseURL  = "https://router.huggingface.co/featherless-ai/v1"
-	akashBaseURL        = "https://chatapi.akash.network/api/v1"
-	llm7BaseURL         = "https://api.llm7.io/v1"
-	longcatBaseURL      = "https://api.longcat.chat/openai"
-	navyBaseURL         = "https://api.navy/v1"
-	perplexityBaseURL   = "https://api.perplexity.ai"
-	routewayBaseURL     = "https://api.routeway.ai/v1"
-	minimaxBaseURL      = "https://api.minimax.io/v1"
-	ollamaBaseURL       = "https://ollama.com/v1"
-	vercelBaseURL       = "https://ai-gateway.vercel.sh/v1"
-	kivestBaseURL       = "https://ai.ezif.in/v1"
-	agentrouterBaseURL  = "https://agentrouter.org/v1"
-	zenmuxBaseURL       = "https://zenmux.ai/api/v1"
-	deepseekBaseURL     = "https://api.deepseek.com"
-	mistralBaseURL      = "https://api.mistral.ai/v1"
-	zenBaseURL          = "https://opencode.ai/zen/v1"
-	mimoBaseURL         = "https://token-plan-sgp.xiaomimimo.com/v1"
-	makoraBaseURL       = "https://inference.makora.com/glm-5-1-fp8/v1"
-	openferenceBaseURL  = "https://api.openference.com/v1"
-	cloudflareBaseURLf  = "https://api.cloudflare.com/client/v4/accounts/%s/ai/v1"
-	nimBaseURL          = "https://integrate.api.nvidia.com/v1"
-	modelscopeBaseURL   = "https://api-inference.modelscope.ai/v1" // note: this is different from the chinese site (.cn), apikeys are not shared between them
-	tokenrouterBaseUrl  = "https://api.tokenrouter.com/v1"
-	inferxBaseUrl       = "https://model.inferx.net/endpoints/v1"
-	tokenharborBaseUrl  = "https://tokenharbor.ai/v1"
-	orcarouterBaseUrl   = "https://api.orcarouter.ai/v1"
+	azureBaseURL                = "https://models.inference.ai.azure.com"
+	zjBaseURL                   = "https://api.zukijourney.com/v1"
+	groqBaseURL                 = "https://api.groq.com/openai/v1"
+	googleBaseURL               = "https://generativelanguage.googleapis.com/v1beta/openai"
+	openRouterBaseURL           = "https://openrouter.ai/api/v1"
+	g4fBaseURL                  = "http://192.168.230.44:1337/v1"
+	crofBaseURL                 = "https://ai.nahcrof.com/v2"
+	electronBaseURL             = "https://api.electronhub.ai/v1"
+	cohereBaseURL               = "https://api.cohere.ai/compatibility/v1"
+	mnnBaseURL                  = "https://api.mnnai.ru/v1"
+	zhipuBaseURL                = "https://open.bigmodel.cn/api/paas/v4"
+	chutesBaseURL               = "https://llm.chutes.ai/v1"
+	cerebrasBaseURL             = "https://api.cerebras.ai/v1"
+	togetherBaseURL             = "https://api.together.xyz/v1"
+	nineteenBaseURL             = "https://api.nineteen.ai/v1"
+	hcapBaseURL                 = "https://hcap.ai/v1"
+	pollinationsBaseURL         = "https://text.pollinations.ai/openai"
+	targonBaseURL               = "https://api.targon.com/v1"
+	atlasBaseURL                = "https://api.atlascloud.ai/v1"
+	huggingfaceBaseURL          = "https://router.huggingface.co/featherless-ai/v1"
+	akashBaseURL                = "https://chatapi.akash.network/api/v1"
+	llm7BaseURL                 = "https://api.llm7.io/v1"
+	longcatBaseURL              = "https://api.longcat.chat/openai"
+	navyBaseURL                 = "https://api.navy/v1"
+	perplexityBaseURL           = "https://api.perplexity.ai"
+	routewayBaseURL             = "https://api.routeway.ai/v1"
+	minimaxBaseURL              = "https://api.minimax.io/v1"
+	ollamaBaseURL               = "https://ollama.com/v1"
+	vercelBaseURL               = "https://ai-gateway.vercel.sh/v1"
+	kivestBaseURL               = "https://ai.ezif.in/v1"
+	agentrouterBaseURL          = "https://agentrouter.org/v1"
+	zenmuxBaseURL               = "https://zenmux.ai/api/v1"
+	deepseekBaseURL             = "https://api.deepseek.com"
+	mistralBaseURL              = "https://api.mistral.ai/v1"
+	zenBaseURL                  = "https://opencode.ai/zen/v1"
+	mimoBaseURL                 = "https://token-plan-sgp.xiaomimimo.com/v1"
+	makoraBaseURL               = "https://inference.makora.com/glm-5-1-fp8/v1"
+	openferenceBaseURL          = "https://api.openference.com/v1"
+	cloudflareBaseURLf          = "https://api.cloudflare.com/client/v4/accounts/%s/ai/v1"
+	cloudflareSystemOneBaseURLf = "https://api.cloudflare.com/client/v4/accounts/%s/ai/run/@cf/cloudflare/%s"
+	nimBaseURL                  = "https://integrate.api.nvidia.com/v1"
+	modelscopeBaseURL           = "https://api-inference.modelscope.ai/v1" // note: this is different from the chinese site (.cn), apikeys are not shared between them
+	tokenrouterBaseUrl          = "https://api.tokenrouter.com/v1"
+	inferxBaseUrl               = "https://model.inferx.net/endpoints/v1"
+	tokenharborBaseUrl          = "https://tokenharbor.ai/v1"
+	orcarouterBaseUrl           = "https://api.orcarouter.ai/v1"
 )
 
 const (
@@ -657,6 +658,39 @@ func GetModelsByNames(names []string) []Model {
 	return models
 }
 
+func cloudflareAccounts(urlf string, apiModel string) (baseUrls []string, tokens []string) {
+	tokens = getEnvList("X3_CLOUDFLARE_WORKERS_AI_TOKEN")
+	accIds := getEnvList("X3_CLOUDFLARE_ACCOUNT_ID")
+	if len(tokens) != len(accIds) {
+		panic("X3_CLOUDFLARE_WORKERS_AI_TOKEN and X3_CLOUDFLARE_ACCOUNT_ID lists must be the same length")
+	}
+	baseUrls = make([]string, len(accIds))
+	for i, accId := range accIds {
+		if apiModel != "" {
+			baseUrls[i] = fmt.Sprintf(urlf, accId, apiModel)
+		} else {
+			baseUrls[i] = fmt.Sprintf(urlf, accId)
+		}
+	}
+	return
+}
+
+func SystemOneClients(apiModel string) (baseUrls []string, tokens []string, models []string) {
+	if strings.TrimSpace(apiModel) == "" {
+		return nil, nil, nil
+	}
+	baseUrls, tokens = cloudflareAccounts(cloudflareSystemOneBaseURLf, apiModel)
+	if len(baseUrls) == 0 || len(tokens) == 0 {
+		return nil, nil, nil
+	}
+	SortPairByTokenError(baseUrls, tokens)
+	models = make([]string, len(baseUrls))
+	for i := range models {
+		models[i] = apiModel
+	}
+	return
+}
+
 // Client returns lists of base URLs, tokens, and codenames for the given provider.
 // For most providers, the base URL and token lists will contain only one element.
 // For Cloudflare, it can return multiple base URLs and corresponding tokens.
@@ -690,15 +724,7 @@ func (m Model) Client(provider string) (baseUrls []string, tokens []string, code
 	case ProviderElectron:
 		tokenEnvKey, apiVar = "X3_ELECTRONHUB_TOKEN", electronBaseURL
 	case ProviderCloudflare:
-		tokens = getEnvList("X3_CLOUDFLARE_WORKERS_AI_TOKEN")
-		accIds := getEnvList("X3_CLOUDFLARE_ACCOUNT_ID")
-		if len(tokens) != len(accIds) {
-			panic("X3_CLOUDFLARE_WORKERS_AI_TOKEN and X3_CLOUDFLARE_ACCOUNT_ID lists must be the same length")
-		}
-		baseUrls = make([]string, len(accIds))
-		for i, accId := range accIds {
-			baseUrls[i] = fmt.Sprintf(cloudflareBaseURLf, accId)
-		}
+		baseUrls, tokens = cloudflareAccounts(cloudflareBaseURLf, "")
 		SortPairByTokenError(baseUrls, tokens)
 		return
 	case ProviderCohere:

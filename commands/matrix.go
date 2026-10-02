@@ -469,7 +469,17 @@ func (b *MatrixBot) onMessage(ctx context.Context, evt *event.Event) {
 	shouldTrigger := isDM || b.mentioned(trimmed) || b.replyToBot(msg) || containsX3Regex.MatchString(trimmed)
 	if !shouldTrigger {
 		cache := db.GetChannelCacheByKey(b.roomKey(msg.RoomID))
-		shouldTrigger = shouldTriggerContinuation(cache, msg.Content)
+		if cache.PersonaMeta.RespondAlways {
+			shouldTrigger = true
+		} else {
+			shouldTrigger = shouldTriggerContinuation(cache, candidate{
+				ID:          msg.EventID.String(),
+				Content:     msg.Content,
+				AuthorName:  b.userName(msg),
+				BotNames:    botNamesForDecision(cache),
+				PersonaName: cache.PersonaMeta.Name,
+			})
+		}
 	}
 	if !shouldTrigger {
 		return

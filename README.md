@@ -38,7 +38,7 @@ A Discord LLM roleplay and utility bot
 - Ability to export and import conversations `/chatlog export`, `/chatlog import`, `/lobotomy`
 - Can render & embed HTML/SVG blocks (like SillyTavern's frontend does, but in Discord) with [Gotenberg](https://gotenberg.dev/)
 - Reads document attachments (PDF, DOCX, XLSX, PPTX, ODT, ...)
-- Has a small local embeddings model that determines whether the model should respond after an interaction for some time (10min by default)
+- Uses a System One decision model (specifically [Cloudflare Clef](https://blog.cloudflare.com/clef-decision-models/)) for more intelligent responses
 - No need to write complex system prompts, just steer the behavior to your liking with `/context` commands (`add`, `edit`, `remove`)
 - `/site`: a real-time infinite website generator experiment. As you click on links, the LLM continues to generate new pages
 - An integrated code interpeter tool and discord utility. LLMs can run Python code, create and attach images and files in their temporary filesystem
