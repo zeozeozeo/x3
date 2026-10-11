@@ -57,7 +57,7 @@ func TestChunkWorldShortPassthrough(t *testing.T) {
 
 func TestChunkWorldLongSplits(t *testing.T) {
 	var sb strings.Builder
-	for i := 0; i < 120; i++ {
+	for range 120 {
 		sb.WriteString("The ancient tower of Veridia stood tall against the storm. ")
 	}
 	chunks := ChunkWorld(sb.String())

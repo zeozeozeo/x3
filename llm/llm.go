@@ -176,8 +176,9 @@ func ErrNoModelsForCompletion() error {
 	return errNoModelsForCompletion
 }
 
+//go:fix inline
 func boolPtr(v bool) *bool {
-	return &v
+	return new(v)
 }
 
 func firstNonEmpty(values ...string) string {
@@ -227,7 +228,7 @@ func applyReasoningSettings(req *openai.ChatCompletionRequest, provider, codenam
 		Enabled: &reasoning,
 		Effort:  reasoningEffort,
 	}
-	req.Reasoning.Exclude = boolPtr(!reasoning)
+	req.Reasoning.Exclude = new(!reasoning)
 	req.Thinking = &openai.ThinkingConfig{Type: thinkingType}
 	req.ChatTemplateKwargs = map[string]any{"enable_thinking": reasoning}
 	req.ProviderOptions = map[string]any{
@@ -268,7 +269,7 @@ type Message struct {
 	Images    []string     `json:"images"` // image URIs or base64
 	ID        snowflake.ID `json:"-"`
 	Author    string       `json:"author,omitempty"`
-	Timestamp time.Time    `json:"timestamp,omitempty"`
+	Timestamp time.Time    `json:"timestamp"`
 	MessageID string       `json:"message_id,omitempty"`
 }
 
@@ -348,17 +349,11 @@ func ContextHardMessageLimit(softLimit int) int {
 	if softLimit <= 0 {
 		return 0
 	}
-	overshoot := softLimit
-	if overshoot < contextOvershootMin {
-		overshoot = contextOvershootMin
-	}
+	overshoot := max(softLimit, contextOvershootMin)
 	if overshoot > contextOvershootMax {
 		overshoot = contextOvershootMax
 	}
-	hardLimit := softLimit + overshoot
-	if hardLimit > contextMessageMax {
-		hardLimit = contextMessageMax
-	}
+	hardLimit := min(softLimit+overshoot, contextMessageMax)
 	return hardLimit
 }
 
@@ -885,7 +880,7 @@ func cloneChatMessages(messages []openai.ChatCompletionMessage) []openai.ChatCom
 
 func oldestDroppableMessageIndex(messages []openai.ChatCompletionMessage) int {
 	lastIdx := len(messages) - 1
-	for i := 0; i < len(messages); i++ {
+	for i := range messages {
 		if i == lastIdx {
 			continue
 		}
@@ -939,10 +934,7 @@ func truncateChatMessageToReduceTokens(m model.Model, msg openai.ChatCompletionM
 	if currentTokens <= 0 {
 		return msg, false
 	}
-	targetTokens := currentTokens - excessTokens - 32
-	if targetTokens < 64 {
-		targetTokens = 64
-	}
+	targetTokens := max(currentTokens-excessTokens-32, 64)
 	if targetTokens >= currentTokens {
 		targetTokens = currentTokens - 1
 	}
@@ -1833,7 +1825,7 @@ func (l *Llmer) RequestCompletionWithThinkPrefill(models []model.Model, settings
 		slog.Info("attempting completion with model", "model", m.Name)
 		for _, provider := range model.ProvidersForModel(m, m.Reasoning && settings.Reasoning) {
 			adaptiveFallbackTriggered := false
-			for retries := 0; retries < 3; retries++ {
+			for retries := range 3 {
 				slog.Info("requesting completion", "model", m.Name, "provider", provider.Name, "providerErrors", provider.Errors, "retries", retries)
 
 				if ctx.Err() != nil {

@@ -227,10 +227,7 @@ func Normalize(v []float32) []float32 {
 // Cosine returns cosine similarity in [-1, 1]. Vectors from Embed are already
 // normalized; this normalizes defensively.
 func Cosine(a, b []float32) float64 {
-	n := len(a)
-	if len(b) < n {
-		n = len(b)
-	}
+	n := min(len(b), len(a))
 	var dot, na, nb float64
 	for i := 0; i < n; i++ {
 		dot += float64(a[i]) * float64(b[i])

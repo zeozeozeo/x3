@@ -3,6 +3,7 @@ package llm
 import (
 	"fmt"
 	"log/slog"
+	"maps"
 	"regexp"
 	"strings"
 
@@ -226,9 +227,7 @@ func mergeCitemaps(dst, src map[int]string) map[int]string {
 	if dst == nil {
 		dst = make(map[int]string, len(src))
 	}
-	for id, url := range src {
-		dst[id] = url
-	}
+	maps.Copy(dst, src)
 	return dst
 }
 

@@ -1340,7 +1340,7 @@ func (m *Manager) generatePage(ctx context.Context, req generationRequest) (stri
 	}
 
 	var lastErr error
-	for attempt := 0; attempt < defaultGenerationAttempts; attempt++ {
+	for attempt := range defaultGenerationAttempts {
 		requestCtx, cancel := context.WithTimeout(ctx, defaultLlmRequestTimeout)
 		llmer := llm.NewLlmerForKey("site:" + uuid.NewString())
 		llmer.SetPersona(persona.Persona{System: siteSystemPrompt}, nil)
@@ -1763,7 +1763,7 @@ func structureNodeDescriptor(node *html.Node) string {
 	}
 	if class := collapseWhitespace(nodeAttr(node, "class")); class != "" {
 		classCount := 0
-		for _, part := range strings.Fields(class) {
+		for part := range strings.FieldsSeq(class) {
 			if part == "" {
 				continue
 			}

@@ -202,8 +202,8 @@ func replaceSTMacros(s string, data stMacroData) string {
 	}
 	s = stRandomMacroRegexp.ReplaceAllStringFunc(s, func(match string) string {
 		inner := strings.TrimSuffix(strings.TrimPrefix(match, "{{random::"), "}}")
-		parts := strings.Split(inner, "::")
-		for _, part := range parts {
+		parts := strings.SplitSeq(inner, "::")
+		for part := range parts {
 			if trimmed := strings.TrimSpace(part); trimmed != "" {
 				return trimmed
 			}

@@ -292,16 +292,14 @@ func main() {
 	resCh := make(chan checkResult, len(jobs))
 	var wg sync.WaitGroup
 	for range *workers {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			for j := range jobCh {
 				l := lockFor(j.provider)
 				l.Lock()
 				resCh <- checkWithRetries(ctx, *timeout, *retryDelay, *tries, j.modelName, j.provider, j.displayProvider, j.baseURL, j.tokens, j.codename)
 				l.Unlock()
 			}
-		}()
+		})
 	}
 	go func() {
 		for _, j := range jobs {

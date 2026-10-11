@@ -18,7 +18,7 @@ type WorldEntry struct {
 	ParentID  *int64     `json:"parent_id,omitempty"`
 	UseCount  int        `json:"use_count,omitempty"`
 	LastUsed  *time.Time `json:"last_used,omitempty"`
-	CreatedAt time.Time  `json:"created_at,omitempty"`
+	CreatedAt time.Time  `json:"created_at"`
 }
 
 // worldVectorText serializes a float vector for sqlite-vec MATCH queries.

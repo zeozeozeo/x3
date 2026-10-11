@@ -199,8 +199,9 @@ func (h *Horder) isAnimeModel(name string) bool {
 	return false
 }
 
+//go:fix inline
 func ptr[T any](value T) *T {
-	return &value
+	return new(value)
 }
 
 func (h *Horder) Generate(model, prompt, negative string, steps, n int, cfgScale float64, clipSkip int, nsfw bool) (string, error) {
@@ -231,22 +232,22 @@ func (h *Horder) Generate(model, prompt, negative string, steps, n int, cfgScale
 				ModelPayloadStyleStable: aihorde.ModelPayloadStyleStable{
 					SamplerName:    aihorde.SamplerKEulerA,
 					PostProcessing: postProcessing,
-					CfgScale:       ptr(cfgScale),
-					Width:          ptr(832),
-					Height:         ptr(1216),
-					ClipSkip:       ptr(clipSkip),
+					CfgScale:       new(cfgScale),
+					Width:          new(832),
+					Height:         new(1216),
+					ClipSkip:       new(clipSkip),
 				},
 			},
-			Steps: ptr(steps),
-			N:     ptr(n),
+			Steps: new(steps),
+			N:     new(n),
 		},
 		Models: []string{
 			model,
 		},
-		NSFW:              ptr(nsfw),
-		CensorNSFW:        ptr(nsfw),
-		ExtraSlowWorkers:  ptr(false),
-		ReplacementFilter: ptr(true),
+		NSFW:              new(nsfw),
+		CensorNSFW:        new(nsfw),
+		ExtraSlowWorkers:  new(false),
+		ReplacementFilter: new(true),
 	}
 
 	req, err := h.horde.PostAsyncImageGenerate(input)

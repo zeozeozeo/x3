@@ -192,10 +192,7 @@ func ExtractPDFText(pdfData []byte) (text string, err error) {
 	if err != nil {
 		return "", fmt.Errorf("failed to parse PDF: %w", err)
 	}
-	numPages := reader.NumPage()
-	if numPages > maxPDFPages {
-		numPages = maxPDFPages
-	}
+	numPages := min(reader.NumPage(), maxPDFPages)
 	var sb strings.Builder
 	for i := 1; i <= numPages; i++ {
 		page := reader.Page(i)

@@ -453,8 +453,8 @@ func TestCropTransparentPNG(t *testing.T) {
 
 func TestCropTransparentPNGKeepsFullyOpaqueImageWhenNoBackgroundCanBeRemoved(t *testing.T) {
 	img := image.NewNRGBA(image.Rect(0, 0, 32, 32))
-	for y := 0; y < 32; y++ {
-		for x := 0; x < 32; x++ {
+	for y := range 32 {
+		for x := range 32 {
 			img.Set(x, y, color.NRGBA{R: 20, G: 20, B: 20, A: 255})
 		}
 	}
@@ -473,8 +473,8 @@ func TestCropTransparentPNGKeepsFullyOpaqueImageWhenNoBackgroundCanBeRemoved(t *
 
 func TestCropTransparentPNGRemovesSolidEdgeBackground(t *testing.T) {
 	img := image.NewNRGBA(image.Rect(0, 0, 32, 32))
-	for y := 0; y < 32; y++ {
-		for x := 0; x < 32; x++ {
+	for y := range 32 {
+		for x := range 32 {
 			img.Set(x, y, color.NRGBA{R: 20, G: 20, B: 20, A: 255})
 		}
 	}
