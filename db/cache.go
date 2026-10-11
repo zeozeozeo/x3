@@ -91,6 +91,9 @@ type ChannelCache struct {
 	Summaries []persona.Summary `json:"summaries,omitempty"`
 	// Memories is a list of LLM-defined memories for this channel.
 	Memories []string `json:"memories,omitempty"`
+	// WorldMemDisabled turns off world-bible retrieval for this channel.
+	// Storage keeps running and entries stay in the DB.
+	WorldMemDisabled bool `json:"world_mem_disabled,omitempty"`
 	// Context is a list of user-defined context strings.
 	Context []string `json:"context,omitempty"`
 	// PersonaMakerContextMode enables automatic context capture for /personamaker context in DMs.
