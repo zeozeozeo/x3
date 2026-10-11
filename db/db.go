@@ -14,10 +14,31 @@ import (
 // DB is the global database connection pool for the commands package.
 var DB *sql.DB
 
+// withConnectionPragmas appends _pragma parameters so every pooled
+// connection gets the same settings (modernc.org/sqlite applies them at
+// connect time). Plain file paths like "x3.db" and ":memory:" both work.
+func withConnectionPragmas(dataSourceName string) string {
+	pragmas := []string{
+		"_pragma=busy_timeout%285000%29",
+		"_pragma=journal_mode%28WAL%29",
+		"_pragma=synchronous%28NORMAL%29",
+	}
+	sep := "?"
+	if strings.Contains(dataSourceName, "?") {
+		sep = "&"
+	}
+	return dataSourceName + sep + strings.Join(pragmas, "&")
+}
+
 // InitDB initializes the database connection and ensures tables are created.
 func InitDB(dataSourceName string) error {
 	var err error
-	DB, err = sql.Open("sqlite", dataSourceName)
+	// NOTE: busy_timeout (and the other pragmas) are per-connection settings.
+	// database/sql opens pooled connections lazily, so they must ride in the
+	// DSN via _pragma to apply to every connection; otherwise a concurrently
+	// opened connection has timeout 0 and fails instantly with SQLITE_BUSY
+	// (this bit us with background worldmem writes racing the hot path).
+	DB, err = sql.Open("sqlite", withConnectionPragmas(dataSourceName))
 	if err != nil {
 		return fmt.Errorf("failed to open database: %w", err)
 	}

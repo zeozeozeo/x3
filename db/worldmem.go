@@ -5,8 +5,37 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"sync"
 	"time"
 )
+
+// worldWriteMu serializes worldmem write transactions. Background stores run
+// outside the channel interaction lock, so without this they race the hot
+// path's cache/stats writes and hit SQLITE_BUSY.
+var worldWriteMu sync.Mutex
+
+// isBusyError reports SQLite lock contention.
+func isBusyError(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := strings.ToLower(err.Error())
+	return strings.Contains(msg, "sqlite_busy") || strings.Contains(msg, "database is locked")
+}
+
+// withWorldWrite runs fn serialized with retries on lock contention.
+func withWorldWrite(fn func() error) error {
+	worldWriteMu.Lock()
+	defer worldWriteMu.Unlock()
+	var err error
+	for attempt := 0; attempt < 6; attempt++ {
+		if err = fn(); err == nil || !isBusyError(err) {
+			return err
+		}
+		time.Sleep(time.Duration(25<<attempt) * time.Millisecond)
+	}
+	return err
+}
 
 // WorldEntry is one stored world fact. Embeddings live in the world_vec
 // virtual table keyed by the same rowid; every access is scoped by
@@ -38,7 +67,16 @@ func worldVectorText(vec []float32) string {
 // InsertWorldEntry stores one fact chunk and its embedding. The vec rowid
 // mirrors the world_memories id. Vectors with a wrong dimension are rejected
 // (changing the embedding model requires rebuilding the index).
-func InsertWorldEntry(channelKey, text string, vec []float32, tokens int, parentID *int64, vecDim int) (int64, error) {
+func InsertWorldEntry(channelKey, text string, vec []float32, tokens int, parentID *int64, vecDim int) (id int64, err error) {
+	err = withWorldWrite(func() error {
+		var innerErr error
+		id, innerErr = insertWorldEntry(channelKey, text, vec, tokens, parentID, vecDim)
+		return innerErr
+	})
+	return id, err
+}
+
+func insertWorldEntry(channelKey, text string, vec []float32, tokens int, parentID *int64, vecDim int) (int64, error) {
 	if strings.TrimSpace(channelKey) == "" || strings.TrimSpace(text) == "" {
 		return 0, fmt.Errorf("channel key and text are required")
 	}
@@ -236,7 +274,16 @@ func TouchWorldEntries(ids []int64) error {
 }
 
 // ClearWorldEntries deletes all entries (and vectors) for a channel.
-func ClearWorldEntries(channelKey string) (int, error) {
+func ClearWorldEntries(channelKey string) (n int, err error) {
+	err = withWorldWrite(func() error {
+		var innerErr error
+		n, innerErr = clearWorldEntries(channelKey)
+		return innerErr
+	})
+	return n, err
+}
+
+func clearWorldEntries(channelKey string) (int, error) {
 	var ids []int64
 	rows, err := DB.Query(`SELECT id FROM world_memories WHERE channel_key = ?`, channelKey)
 	if err != nil {
