@@ -27,6 +27,7 @@ import (
 	"github.com/zeozeozeo/x3/llm"
 	"github.com/zeozeozeo/x3/model"
 	"github.com/zeozeozeo/x3/persona"
+	"github.com/zeozeozeo/x3/worldmem"
 )
 
 var (
@@ -454,7 +455,7 @@ func handleLlmInteraction2(
 		}
 	}
 
-	promptContext := buildPromptContext(client, channelID, nil, cache, content)
+	promptContext, worldFacts := buildPromptContext(client, channelID, nil, cache, content)
 	p := persona.GetPersonaByMetaWithBotName(cache.PersonaMeta, username, discordBotName(client), isDM, promptContext)
 
 	// avoid formatting reply if the reference is the message we're about to regenerate
@@ -497,6 +498,9 @@ func handleLlmInteraction2(
 		p.System = *systemPromptOverride
 	}
 	llmer.SetPersona(p, &cache.PersonaMeta.ExcessiveSplit)
+	// Retrieved world facts ride on the last message, not the system prompt,
+	// so the cached prompt prefix stays stable.
+	llmer.WorldBible = worldmem.FormatBible(worldFacts)
 
 	thinkPrefill := cache.PersonaMeta.JailbreakThinkPrefill(regeneratePrepend)
 	var prepend string

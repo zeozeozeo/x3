@@ -353,6 +353,27 @@ func splitSentences(text string) []string {
 	return out
 }
 
+// FormatBible renders retrieved facts as a message-tail suffix. It is
+// appended to the last outgoing message (not the system prompt) so prompt
+// prefix caching stays effective.
+func FormatBible(entries []string) string {
+	var facts []string
+	for _, e := range entries {
+		if t := strings.TrimSpace(e); t != "" {
+			facts = append(facts, t)
+		}
+	}
+	if len(facts) == 0 {
+		return ""
+	}
+	var sb strings.Builder
+	sb.WriteString("\n\n**World bible (established canon, stay consistent with it):**\n")
+	for _, f := range facts {
+		sb.WriteString("- " + f + "\n")
+	}
+	return strings.TrimRight(sb.String(), "\n")
+}
+
 // EstimateTokens is a rough token count for budgeting retrieved context.
 func EstimateTokens(s string) int {
 	n := utf8.RuneCountInString(s)

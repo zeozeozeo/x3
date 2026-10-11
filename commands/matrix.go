@@ -27,6 +27,7 @@ import (
 	"github.com/zeozeozeo/x3/model"
 	"github.com/zeozeozeo/x3/persona"
 	"github.com/zeozeozeo/x3/site"
+	"github.com/zeozeozeo/x3/worldmem"
 	"maunium.net/go/mautrix"
 	"maunium.net/go/mautrix/crypto/attachment"
 	"maunium.net/go/mautrix/event"
@@ -1659,11 +1660,12 @@ func (b *MatrixBot) handleLlm(ctx context.Context, msg *matrixMessage, isRegener
 		llmer.LobotomizeUntilMessageID(lastID)
 		// refresh the system prompt so persona (e.g. jailbreak) changes
 		// apply to regenerations too, mirroring the Discord path
-		promptContext := matrixPromptContext(key, "", cache)
+		promptContext, _ := matrixPromptContext(key, "", cache)
 		p := persona.GetPersonaByMetaWithBotName(cache.PersonaMeta, b.userName(msg), b.matrixBotName(ctx, msg.RoomID), b.isDMRoom(ctx, msg.RoomID), promptContext)
 		llmer.SetPersona(p, &cache.PersonaMeta.ExcessiveSplit)
+		llmer.WorldBible = ""
 	} else {
-		promptContext := matrixPromptContext(key, msg.Content, cache)
+		promptContext, worldFacts := matrixPromptContext(key, msg.Content, cache)
 		p := persona.GetPersonaByMetaWithBotName(cache.PersonaMeta, b.userName(msg), b.matrixBotName(ctx, msg.RoomID), b.isDMRoom(ctx, msg.RoomID), promptContext)
 		content := matrixFormatMsg(augmentContentWithLinkMetadata(msg.Content), b.userName(msg), msg.ReplyTo)
 		if docBlocks := matrixDocumentBlocks(ctx, msg.Attachments); docBlocks != "" {
@@ -1682,6 +1684,7 @@ func (b *MatrixBot) handleLlm(ctx context.Context, msg *matrixMessage, isRegener
 			}
 		}
 		llmer.SetPersona(p, &cache.PersonaMeta.ExcessiveSplit)
+		llmer.WorldBible = worldmem.FormatBible(worldFacts)
 	}
 
 	thinkPrefill := cache.PersonaMeta.JailbreakThinkPrefill(regeneratePrepend)
@@ -1769,18 +1772,19 @@ func (b *MatrixBot) handleLlm(ctx context.Context, msg *matrixMessage, isRegener
 	return cache.WriteKey(key)
 }
 
-func matrixPromptContext(key, worldQuery string, cache *db.ChannelCache) persona.PromptContext {
+func matrixPromptContext(key, worldQuery string, cache *db.ChannelCache) (persona.PromptContext, []string) {
 	ctx := persona.PromptContext{
 		Memories: append([]string(nil), cache.Memories...),
 		Context:  append([]string(nil), cache.Context...),
 	}
+	var world []string
 	if !cache.WorldMemDisabled {
-		ctx.World = worldEntriesForPrompt(key, worldQuery, false)
+		world = worldEntriesForPrompt(key, worldQuery, false)
 	}
 	if summariesEnabled() {
 		ctx.Summaries = append([]persona.Summary(nil), cache.Summaries...)
 	}
-	return ctx
+	return ctx, world
 }
 
 func extractThinkingForDisplay(response string) (thinking, display string) {

@@ -18,13 +18,14 @@ type visibleChannelRef struct {
 	categoryPosition int
 }
 
-func buildPromptContext(client *bot.Client, channelID snowflake.ID, guildID *snowflake.ID, cache *db.ChannelCache, worldQuery string) persona.PromptContext {
+func buildPromptContext(client *bot.Client, channelID snowflake.ID, guildID *snowflake.ID, cache *db.ChannelCache, worldQuery string) (persona.PromptContext, []string) {
 	ctx := persona.PromptContext{
 		Memories: append([]string(nil), cache.Memories...),
 		Context:  append([]string(nil), cache.Context...),
 	}
+	var world []string
 	if !cache.WorldMemDisabled {
-		ctx.World = worldEntriesForPrompt(channelID.String(), worldQuery, false)
+		world = worldEntriesForPrompt(channelID.String(), worldQuery, false)
 	}
 	if summariesEnabled() {
 		ctx.Summaries = append([]persona.Summary(nil), cache.Summaries...)
@@ -41,7 +42,7 @@ func buildPromptContext(client *bot.Client, channelID snowflake.ID, guildID *sno
 	if env != nil && !env.IsEmpty() {
 		ctx.Discord = env
 	}
-	return ctx
+	return ctx, world
 }
 
 func summarizeDiscordChannel(channel discord.Channel) (name, description string) {

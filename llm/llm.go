@@ -307,6 +307,10 @@ type Llmer struct {
 	ToolsEnabled          *bool                                                                                  `json:"tools_enabled,omitempty"`
 	DiscordSearchCallback func(ctx context.Context, guildID snowflake.ID, query string) (string, map[int]string) `json:"-"`
 	GeneratedArtifacts    []codeinterp.Artifact                                                                  `json:"-"`
+	// WorldBible holds retrieved world-memory facts for the next request.
+	// It is appended to the last message at send time (like search results)
+	// so the system prompt prefix stays stable for prompt caching.
+	WorldBible string `json:"-"`
 }
 
 func NewLlmer(channelID snowflake.ID) *Llmer {
@@ -665,6 +669,12 @@ func (l Llmer) convertMessages(hasVision, supportsImageURL bool, prepend, thinkP
 
 	if searchResults != "" && len(messages) > 0 {
 		messages[len(messages)-1].Content += searchResults
+	}
+
+	// Retrieved world facts go on the tail, not in the system prompt, so a
+	// changing bible doesn't invalidate the cached prompt prefix.
+	if l.WorldBible != "" && len(messages) > 0 {
+		messages[len(messages)-1].Content += l.WorldBible
 	}
 
 	if thinkPrefill != "" {

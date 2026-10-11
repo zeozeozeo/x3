@@ -361,11 +361,7 @@ func HandleWorldmemBrowser(data discord.ButtonInteractionData, event *handler.Co
 	case "close":
 		worldmemBrowserSessions.Delete(event.Message.ID.String())
 		event.DeferUpdateMessage()
-		_, err := event.UpdateInteractionResponse(discord.NewMessageUpdate().
-			WithContent("").
-			ClearEmbeds().
-			ClearComponents())
-		return err
+		return event.DeleteInteractionResponse()
 	case "first":
 		session.Page = 0
 	case "prev":

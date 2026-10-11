@@ -5,23 +5,19 @@ import (
 	"testing"
 )
 
-func TestBuildBlockWorldSection(t *testing.T) {
+func TestBuildBlockHasNoWorldSection(t *testing.T) {
+	// Retrieved world facts must not render into the system prompt: they ride
+	// on the last message instead so prompt prefix caching stays effective.
 	ctx := PromptContext{
 		Memories: []string{"user likes rust"},
-		World:    []string{"the tower fell at dawn"},
+		Context:  []string{"speak like a pirate"},
 	}
 	block := ctx.BuildBlock()
-	if !strings.Contains(block, "**World bible") {
-		t.Fatalf("missing world section:\n%s", block)
-	}
-	if !strings.Contains(block, "the tower fell at dawn") {
-		t.Fatalf("missing world fact:\n%s", block)
+	if strings.Contains(block, "World bible") {
+		t.Fatalf("world section must not be in the system prompt:\n%s", block)
 	}
 	if !strings.Contains(block, "**Chat memories:**") {
-		t.Fatalf("memories section should be separate:\n%s", block)
-	}
-	if strings.Count(block, "the tower fell at dawn") != 1 {
-		t.Fatalf("world fact duplicated:\n%s", block)
+		t.Fatalf("memories section missing:\n%s", block)
 	}
 }
 

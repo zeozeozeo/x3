@@ -82,3 +82,16 @@ func TestRank(t *testing.T) {
 		t.Fatalf("best match should be index 1: %v", order)
 	}
 }
+
+func TestFormatBible(t *testing.T) {
+	if got := FormatBible(nil); got != "" {
+		t.Fatalf("empty entries should give empty suffix: %q", got)
+	}
+	got := FormatBible([]string{"the tower fell", " ", "kael fled"})
+	if !strings.HasPrefix(got, "\n\n**World bible") {
+		t.Fatalf("suffix should start with header: %q", got)
+	}
+	if !strings.Contains(got, "- the tower fell") || !strings.Contains(got, "- kael fled") {
+		t.Fatalf("facts missing: %q", got)
+	}
+}

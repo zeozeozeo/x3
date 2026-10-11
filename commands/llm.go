@@ -16,6 +16,7 @@ import (
 	"github.com/zeozeozeo/x3/llm"
 	"github.com/zeozeozeo/x3/model"
 	"github.com/zeozeozeo/x3/persona"
+	"github.com/zeozeozeo/x3/worldmem"
 )
 
 // makeGptCommand creates the base structure for a generic LLM slash command.
@@ -95,7 +96,7 @@ func HandleLlm(event *handler.CommandEvent, models []model.Model) error {
 	// if we can't read message history or an archive was imported, use cached context
 	useCache := cache.ImportedHistory != nil || event.GuildID() == nil || (event.AppPermissions() != nil && !event.AppPermissions().Has(discord.PermissionReadMessageHistory))
 	isDM := event.Channel().Type() == discord.ChannelTypeDM
-	promptContext := buildPromptContext(event.Client(), event.Channel().ID(), event.GuildID(), cache, prompt)
+	promptContext, worldFacts := buildPromptContext(event.Client(), event.Channel().ID(), event.GuildID(), cache, prompt)
 
 	usernames := map[string]struct{}{}
 
@@ -139,6 +140,7 @@ func HandleLlm(event *handler.CommandEvent, models []model.Model) error {
 
 	currentPersona := persona.GetPersonaByMetaWithBotName(cache.PersonaMeta, username, discordBotName(event.Client()), isDM, promptContext)
 	llmer.SetPersona(currentPersona, &cache.PersonaMeta.ExcessiveSplit)
+	llmer.WorldBible = worldmem.FormatBible(worldFacts)
 	llmer.AddMessage(llm.RoleUser, formatMsg(prompt, username, nil), 0)
 	if len(llmer.Messages) > 0 {
 		msg := &llmer.Messages[len(llmer.Messages)-1]
