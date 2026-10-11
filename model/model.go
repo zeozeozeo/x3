@@ -3,6 +3,7 @@ package model
 import (
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"sort"
@@ -166,10 +167,15 @@ type ScoredProvider struct {
 }
 
 const (
-	// AdaptiveProviderSlowThreshold is the request duration that triggers a
-	// one-request probe of another provider for the same model.
+	// AdaptiveProviderSlowThreshold is the request duration that marks a
+	// provider success as slow. Slow samples feed the streak counter that
+	// schedules a one-request probe of another provider.
 	AdaptiveProviderSlowThreshold = 10 * time.Second
-	adaptiveProviderRouteTTL      = 30 * time.Minute
+	// adaptiveSlowStreakNeeded is how many consecutive slow successes it
+	// takes to schedule a probe. A single slow outlier (queue spike, cold
+	// start) must not flip traffic on its own.
+	adaptiveSlowStreakNeeded = 2
+	adaptiveProviderRouteTTL      = 5 * time.Minute
 	providerCircuitFailureLimit   = 3
 )
 
@@ -273,6 +279,7 @@ var (
 	adaptiveProviderRoutesMu sync.Mutex
 	adaptiveProviderRoutes   = map[string]adaptiveProviderRoute{}
 	providerCircuits         = map[string]providerCircuit{}
+	providerSlowStreak       = map[string]int{}
 	adaptiveProviderNow      = time.Now
 )
 
@@ -521,9 +528,12 @@ func ProvidersForModel(m Model, reasoning bool) []*ScoredProvider {
 	return ordered
 }
 
-// RecordProviderSuccess records the duration of a successful request. One slow
-// request triggers a trial of another configured provider; if it is faster, it
-// is preferred temporarily, otherwise the route returns to the slow provider.
+// RecordProviderSuccess records the duration of a successful request. Slow
+// successes feed a streak counter; once it reaches the threshold, one probe
+// of another configured provider is scheduled on a later request. A probe
+// that wins by a clear margin is preferred temporarily, otherwise routing
+// returns to score order. A preferred provider that goes slow itself is
+// demoted instead of sticking for the full TTL.
 func RecordProviderSuccess(m Model, provider string, duration time.Duration) {
 	if provider == "" {
 		return
@@ -532,40 +542,113 @@ func RecordProviderSuccess(m Model, provider string, duration time.Duration) {
 
 	adaptiveProviderRoutesMu.Lock()
 	defer adaptiveProviderRoutesMu.Unlock()
-	delete(providerCircuits, providerRouteKey(m.Name, provider))
+	key := providerRouteKey(m.Name, provider)
+	delete(providerCircuits, key)
 	route, probing := adaptiveProviderRoutes[m.Name]
 	if probing && !route.expiresAt.IsZero() && !now.Before(route.expiresAt) {
 		delete(adaptiveProviderRoutes, m.Name)
 		probing = false
 	}
-	if probing && route.probeInFlight && route.probeProvider == provider {
-		route.probeInFlight = false
-		if duration < route.slowDuration {
-			route.preferred = provider
-			route.fallback = route.slowProvider
-			route.expiresAt = now.Add(adaptiveProviderRouteTTL)
-			adaptiveProviderRoutes[m.Name] = route
-			return
-		}
-		delete(adaptiveProviderRoutes, m.Name)
-		return
-	}
-
-	if probing || duration <= AdaptiveProviderSlowThreshold {
-		return
-	}
-	for _, candidate := range ScoreProviders(false) {
-		if candidate.Name != provider {
-			if _, configured := m.Providers[candidate.Name]; configured {
-				adaptiveProviderRoutes[m.Name] = adaptiveProviderRoute{
-					slowProvider:  provider,
-					probeProvider: candidate.Name,
-					slowDuration:  duration,
-				}
+	if probing && route.probeInFlight && route.preferred == "" {
+		if route.probeProvider == provider {
+			route.probeInFlight = false
+			providerSlowStreak[key] = 0
+			if probeBeatsSlow(duration, route.slowDuration) {
+				route.preferred = provider
+				route.fallback = route.slowProvider
+				route.expiresAt = now.Add(adaptiveProviderRouteTTL)
+				adaptiveProviderRoutes[m.Name] = route
+				slog.Info("adaptive routing: probe won, preferring provider", "model", m.Name, "provider", provider, "duration", duration, "slowDuration", route.slowDuration)
 				return
 			}
+			slog.Info("adaptive routing: probe not faster, keeping order", "model", m.Name, "provider", provider, "duration", duration, "slowDuration", route.slowDuration)
+			delete(adaptiveProviderRoutes, m.Name)
+			return
 		}
+		// Another provider succeeded while a probe is outstanding elsewhere
+		// (or the probe never resolved, e.g. its request was cancelled and
+		// recorded nothing): drop the stale probe route instead of leaking
+		// it and blocking future probes forever.
+		delete(adaptiveProviderRoutes, m.Name)
+		probing = false
 	}
+
+	slow := duration > AdaptiveProviderSlowThreshold
+	if !slow {
+		providerSlowStreak[key] = 0
+	}
+
+	if probing && route.preferred == provider {
+		if !slow {
+			return
+		}
+		// The preferred provider is slow itself: demote it and look for
+		// something faster instead of sticking to it for the full TTL.
+		slog.Info("adaptive routing: preferred provider slow, re-probing", "model", m.Name, "provider", provider, "duration", duration)
+		providerSlowStreak[key] = 0
+		scheduleAdaptiveProbe(m, provider, duration)
+		return
+	}
+	if probing || !slow {
+		return
+	}
+	providerSlowStreak[key]++
+	if providerSlowStreak[key] < adaptiveSlowStreakNeeded {
+		return
+	}
+	providerSlowStreak[key] = 0
+	scheduleAdaptiveProbe(m, provider, duration)
+}
+
+// probeBeatsSlow reports whether a probe duration wins clearly enough over
+// the slow sample to justify preferring it: strictly faster by at least one
+// second or ten percent, so noise doesn't decide minutes of traffic.
+func probeBeatsSlow(probe, slow time.Duration) bool {
+	if probe >= slow {
+		return false
+	}
+	return slow-probe >= max(time.Second, slow/10)
+}
+
+// scheduleAdaptiveProbe records a one-request trial of the next configured
+// provider for a slow provider. Callers must hold adaptiveProviderRoutesMu.
+func scheduleAdaptiveProbe(m Model, slowProvider string, slowDuration time.Duration) {
+	for _, candidate := range ScoreProviders(false) {
+		if candidate.Name == slowProvider {
+			continue
+		}
+		if _, configured := m.Providers[candidate.Name]; !configured {
+			continue
+		}
+		adaptiveProviderRoutes[m.Name] = adaptiveProviderRoute{
+			slowProvider:  slowProvider,
+			probeProvider: candidate.Name,
+			slowDuration:  slowDuration,
+		}
+		slog.Info("adaptive routing: scheduled probe", "model", m.Name, "slowProvider", slowProvider, "slowDuration", slowDuration, "probe", candidate.Name)
+		return
+	}
+}
+
+// AdaptiveRouteDescribe returns a short description of the active adaptive
+// route for a model for logging, or "" when routing is plain score order.
+func AdaptiveRouteDescribe(m Model) string {
+	adaptiveProviderRoutesMu.Lock()
+	defer adaptiveProviderRoutesMu.Unlock()
+	route, ok := adaptiveProviderRoutes[m.Name]
+	if !ok {
+		return ""
+	}
+	if route.preferred != "" {
+		return "preferred=" + route.preferred
+	}
+	if route.probeInFlight {
+		return "probing=" + route.probeProvider
+	}
+	if route.probeProvider != "" {
+		return "probe-scheduled=" + route.probeProvider
+	}
+	return "adaptive?"
 }
 
 // RecordProviderFailure updates the weighted circuit breaker and adaptive
@@ -578,6 +661,7 @@ func RecordProviderFailure(m Model, provider string, failure ProviderFailure) Pr
 	adaptiveProviderRoutesMu.Lock()
 	defer adaptiveProviderRoutesMu.Unlock()
 	key := providerRouteKey(m.Name, provider)
+	providerSlowStreak[key] = 0
 	circuit := providerCircuits[key]
 	if !circuit.openUntil.IsZero() && !now.Before(circuit.openUntil) {
 		circuit = providerCircuit{}
@@ -620,6 +704,7 @@ func resetAdaptiveProviderRoutes() {
 	defer adaptiveProviderRoutesMu.Unlock()
 	adaptiveProviderRoutes = map[string]adaptiveProviderRoute{}
 	providerCircuits = map[string]providerCircuit{}
+	providerSlowStreak = map[string]int{}
 }
 
 func providerRouteKey(modelName, provider string) string {

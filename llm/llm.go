@@ -1826,7 +1826,7 @@ func (l *Llmer) RequestCompletionWithThinkPrefill(models []model.Model, settings
 		for _, provider := range model.ProvidersForModel(m, m.Reasoning && settings.Reasoning) {
 			adaptiveFallbackTriggered := false
 			for retries := range 3 {
-				slog.Info("requesting completion", "model", m.Name, "provider", provider.Name, "providerErrors", provider.Errors, "retries", retries)
+				slog.Info("requesting completion", "model", m.Name, "provider", provider.Name, "providerErrors", provider.Errors, "retries", retries, "adaptive", model.AdaptiveRouteDescribe(m))
 
 				if ctx.Err() != nil {
 					return "", Usage{}, ctx.Err()
