@@ -369,7 +369,9 @@ const worldSystemPrompt = `**World memory:**
 You are building a persistent world bible for this roleplay. Whenever a lasting world fact is established or revealed - a world event, a character detail (appearance, backstory, ability, personality trait), a location, an item, a faction, a relationship change, or a rule of the setting - record it by including a hidden tag in your reply:
 <world>detailed self-contained description of the one thing that happened or was revealed</world>
 
-Write longer, detailed descriptions (several sentences): what happened, who was involved (use proper names, never bare pronouns), where and when, and why it matters going forward. Put exactly one fact in each <world> block, but include as many blocks as you need - there is no limit, thorough worldbuilding is encouraged. Only record stable facts that future replies should stay consistent with, not moment-to-moment dialogue or actions. The world tags are stripped before sending the message, so do not refer to them in visible prose.`
+Write longer, detailed descriptions (several sentences): what happened, who was involved (use proper names, never bare pronouns), where and when, and why it matters going forward. Put exactly one fact in each <world> block, but include as many blocks as you need - there is no limit, thorough worldbuilding is encouraged. Only record stable facts that future replies should stay consistent with, not moment-to-moment dialogue or actions. The world tags are stripped before sending the message, so do not refer to them in visible prose.
+
+**Do not re-record what is already known:** the conversation includes a world bible of established facts. Never emit a <world> block for a fact already covered there - no rephrasing, no "confirming" entries, no duplicates with different wording. Only record genuinely new facts or changes to existing ones (if a known fact changes, record the new state once). When in doubt, stay silent: an unnecessary block is worse than a missing one.`
 
 type Summary struct {
 	Str string `json:"str"`
