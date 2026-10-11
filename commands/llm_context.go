@@ -435,7 +435,8 @@ func getMessageContent(message discord.Message) string {
 			sb.WriteRune('\n')
 		}
 		// handleNarrationGenerate will add progress updates to the end of the messages, strip them
-		if !strings.HasPrefix(line, "-# `[") && !strings.HasPrefix(line, "-# r-esrgan") {
+		if !strings.HasPrefix(line, "-# `[") && !strings.HasPrefix(line, "-# r-esrgan") &&
+			strings.TrimSpace(line) != worldMemUpdatedFooter {
 			sb.WriteString(line)
 		}
 		i++
@@ -735,7 +736,7 @@ func addContextMessages(
 			isSplitAnyway := false
 
 			if cachedContent, cacheErr := db.GetMessageRenderedContent(msg.ID); cacheErr == nil && strings.TrimSpace(cachedContent) != "" {
-				content = cachedContent
+				content = stripWorldMemFooter(cachedContent)
 			} else if isLobotomyMessage(msg) {
 				// for lobotomy messages, delete the context
 				llmer.Lobotomize(getLobotomyAmountFromMessage(msg))

@@ -897,6 +897,7 @@ func (b *MatrixBot) worldmemHelpText(isDM bool) string {
 		base + " off             disable retrieval (facts stay stored)",
 		base + " clear           delete all world facts for this room",
 		base + " export          export world facts as JSON",
+		base + " list            show stored world facts",
 		"Upload an `x3-worldmem-<year>-<month>-<day>.json` file to import it automatically.",
 	}, "\n")
 }
@@ -1511,13 +1512,37 @@ func (b *MatrixBot) handleWorldmemCommand(ctx context.Context, msg *matrixMessag
 			Data:        data,
 		}})
 		return err
+	case "list":
+		if len(parsed.Args) > 1 {
+			return b.sendText(ctx, msg.RoomID, msg.EventID, matrixUnexpectedTokenDiagnostic(rest, parsed.At(1), "worldmem list"))
+		}
+		entries, err := db.GetWorldEntries(key)
+		if err != nil {
+			return err
+		}
+		if len(entries) == 0 {
+			return b.sendText(ctx, msg.RoomID, msg.EventID, "No world facts stored for this room yet.")
+		}
+		var sb strings.Builder
+		sb.WriteString(fmt.Sprintf("World memory (%s):\n", pluralize(len(entries), "fact")))
+		shown := entries
+		if len(shown) > 10 {
+			shown = shown[:10]
+		}
+		for i, entry := range shown {
+			fmt.Fprintf(&sb, "%d. %s\n", i+1, ellipsisTrim(entry.Text, 300))
+		}
+		if len(entries) > len(shown) {
+			fmt.Fprintf(&sb, "…and %d more.", len(entries)-len(shown))
+		}
+		return b.sendText(ctx, msg.RoomID, msg.EventID, strings.TrimSpace(sb.String()))
 	case "import":
 		if len(parsed.Args) > 1 {
 			return b.sendText(ctx, msg.RoomID, msg.EventID, matrixUnexpectedTokenDiagnostic(rest, parsed.At(1), "worldmem import"))
 		}
 		return b.sendText(ctx, msg.RoomID, msg.EventID, "Matrix imports world memory archives automatically. Upload an `x3-worldmem-<year>-<month>-<day>.json` file in the room.")
 	default:
-		return b.sendText(ctx, msg.RoomID, msg.EventID, matrixCommandDiagnostic(rest, actionToken, "Unknown worldmem action `"+actionToken.Text+"`.", "Valid actions: on, off, clear, export, import.")+"\n\n"+b.worldmemHelpText(isDM))
+		return b.sendText(ctx, msg.RoomID, msg.EventID, matrixCommandDiagnostic(rest, actionToken, "Unknown worldmem action `"+actionToken.Text+"`.", "Valid actions: on, off, clear, export, import, list.")+"\n\n"+b.worldmemHelpText(isDM))
 	}
 }
 

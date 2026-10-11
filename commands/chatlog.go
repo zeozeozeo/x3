@@ -457,6 +457,7 @@ func replayMessagesForArchive(messages []discord.Message, botID snowflake.ID) []
 				content = fromLatexAPI(content)
 			}
 			content = strings.TrimSuffix(content, interactionReminder)
+			content = stripWorldMemFooter(content)
 			content = strings.ReplaceAll(content, "\u200B", "")
 			if strings.TrimSpace(content) == "" {
 				continue

@@ -10,18 +10,26 @@ import (
 	"net/http"
 	"regexp"
 	"strings"
+	"sync"
 	"time"
 	"unicode/utf8"
 
 	"github.com/disgoorg/disgo/discord"
 	"github.com/disgoorg/disgo/handler"
+	"github.com/disgoorg/snowflake/v2"
 	"github.com/zeozeozeo/x3/db"
 	"github.com/zeozeozeo/x3/worldmem"
 )
 
 var worldTagRegexp = regexp.MustCompile(`(?is)<world>(.*?)</world>`)
 
+// worldMemUpdatedFooter marks responses that recorded new world facts. It is
+// display-only: every history read-back path strips it.
+const worldMemUpdatedFooter = "-# Updated world memory"
+
 const worldImportMaxSize = 2 * 1024 * 1024
+
+const worldBrowserPageSize = 5
 
 // extractWorldTags strips hidden <world> blocks from a response and returns
 // the display text plus the raw fact contents.
@@ -45,7 +53,9 @@ func extractWorldTags(response string) (string, []string) {
 // handleWorldTags extracts <world> blocks from an LLM response, strips them
 // from the display text, updates the cached assistant message via setContent,
 // and stores the facts in the background. channelKey scopes storage to the
-// channel/room so memories never leak across channels.
+// channel/room so memories never leak across channels. When facts were found,
+// the visible footer "-# Updated world memory" is appended to the display
+// text (history read-back paths strip it again).
 func handleWorldTags(channelKey, response string, setContent func(string)) string {
 	display, worlds := extractWorldTags(response)
 	if display == response && len(worlds) == 0 {
@@ -59,8 +69,27 @@ func handleWorldTags(channelKey, response string, setContent func(string)) strin
 		facts := append([]string(nil), worlds...)
 		go worldmem.StoreFacts(key, facts)
 		slog.Info("worldmem facts queued", "channel", key, "found", len(facts))
+		if strings.TrimSpace(display) != "" {
+			display += "\n" + worldMemUpdatedFooter
+		}
 	}
 	return display
+}
+
+// stripWorldMemFooter removes display-only world-memory footer lines so they
+// never reach LLM context on history read-back.
+func stripWorldMemFooter(s string) string {
+	if !strings.Contains(s, worldMemUpdatedFooter) {
+		return s
+	}
+	var kept []string
+	for line := range strings.SplitSeq(s, "\n") {
+		if strings.TrimSpace(line) == worldMemUpdatedFooter {
+			continue
+		}
+		kept = append(kept, line)
+	}
+	return strings.TrimSpace(strings.Join(kept, "\n"))
 }
 
 // worldEntriesForPrompt retrieves world-bible facts for prompt injection.
@@ -141,6 +170,16 @@ var WorldmemCommand = discord.SlashCommandCreate{
 				},
 			},
 		},
+		discord.ApplicationCommandOptionSubCommand{
+			Name:        "explore",
+			Description: "Browse this channel's stored world facts",
+			Options: []discord.ApplicationCommandOption{
+				discord.ApplicationCommandOptionBool{
+					Name:        "ephemeral",
+					Description: "If the response should only be visible to you",
+				},
+			},
+		},
 	},
 }
 
@@ -181,9 +220,172 @@ func HandleWorldmem(e *handler.CommandEvent) error {
 
 	case "import":
 		return handleWorldmemImport(e, channelKey)
+
+	case "explore":
+		return handleWorldmemExplore(e, channelKey)
 	}
 
 	return sendInteractionError(e, "unknown subcommand", true)
+}
+
+type worldmemBrowserSession struct {
+	UserID    snowflake.ID
+	ChannelID string
+	Entries   []db.WorldEntry
+	Page      int
+	PageSize  int
+}
+
+var worldmemBrowserSessions sync.Map // string(message id) -> *worldmemBrowserSession
+
+func worldmemBrowserMessage(entries []db.WorldEntry, page, pageSize int) discord.MessageUpdate {
+	total := len(entries)
+	maxPage := max((total+pageSize-1)/pageSize-1, 0)
+	if page < 0 {
+		page = 0
+	}
+	if page > maxPage {
+		page = maxPage
+	}
+	start := page * pageSize
+	end := min(start+pageSize, total)
+
+	var b strings.Builder
+	if total == 0 {
+		b.WriteString("No world facts stored for this channel yet.")
+	} else {
+		for i := start; i < end; i++ {
+			fmt.Fprintf(&b, "**%d.** %s", i+1, ellipsisTrim(entries[i].Text, 450))
+			if i < end-1 {
+				b.WriteString("\n\n")
+			}
+		}
+	}
+
+	embed := discord.NewEmbed().
+		WithColor(0x0085ff).
+		WithTitle("World memory").
+		WithDescription(ellipsisTrim(b.String(), 4096)).
+		WithFooter(fmt.Sprintf("Page %d/%d • %s", page+1, maxPage+1, pluralize(total, "fact")), x3Icon)
+
+	return discord.NewMessageUpdate().
+		AddEmbeds(embed).
+		WithComponents(discord.NewActionRow(
+			discord.ButtonComponent{
+				Style:    discord.ButtonStyleSecondary,
+				Emoji:    &discord.ComponentEmoji{Name: "⏮️"},
+				CustomID: "/worldmem/first",
+				Disabled: page <= 0,
+			},
+			discord.ButtonComponent{
+				Style:    discord.ButtonStyleSecondary,
+				Emoji:    &discord.ComponentEmoji{Name: "⬅️"},
+				CustomID: "/worldmem/prev",
+				Disabled: page <= 0,
+			},
+			discord.ButtonComponent{
+				Style:    discord.ButtonStyleSecondary,
+				Emoji:    &discord.ComponentEmoji{Name: "➡️"},
+				CustomID: "/worldmem/next",
+				Disabled: page >= maxPage,
+			},
+			discord.ButtonComponent{
+				Style:    discord.ButtonStyleSecondary,
+				Emoji:    &discord.ComponentEmoji{Name: "⏭️"},
+				CustomID: "/worldmem/last",
+				Disabled: page >= maxPage,
+			},
+			discord.ButtonComponent{
+				Style:    discord.ButtonStyleSecondary,
+				Emoji:    &discord.ComponentEmoji{Name: "❌"},
+				CustomID: "/worldmem/close",
+			},
+		))
+}
+
+// sendWorldmemBrowser answers the deferred interaction with a paged fact
+// browser and registers the button session. content heads the message.
+func sendWorldmemBrowser(e *handler.CommandEvent, channelKey, content string) error {
+	entries, err := db.GetWorldEntries(channelKey)
+	if err != nil {
+		return updateInteractionError(e, err.Error())
+	}
+	builder := worldmemBrowserMessage(entries, 0, worldBrowserPageSize)
+	if content != "" {
+		builder = builder.WithContent(content)
+	}
+	msg, err := e.UpdateInteractionResponse(builder)
+	if err != nil {
+		return err
+	}
+	if msg != nil {
+		worldmemBrowserSessions.Store(msg.ID.String(), &worldmemBrowserSession{
+			UserID:    e.User().ID,
+			ChannelID: channelKey,
+			Entries:   entries,
+			PageSize:  worldBrowserPageSize,
+		})
+	}
+	return nil
+}
+
+func handleWorldmemExplore(e *handler.CommandEvent, channelKey string) error {
+	ephemeral := e.SlashCommandInteractionData().Bool("ephemeral")
+	if err := e.DeferCreateMessage(ephemeral); err != nil {
+		return err
+	}
+	return sendWorldmemBrowser(e, channelKey, "")
+}
+
+func HandleWorldmemBrowser(data discord.ButtonInteractionData, event *handler.ComponentEvent) error {
+	sessionAny, ok := worldmemBrowserSessions.Load(event.Message.ID.String())
+	if !ok {
+		return sendInteractionErrorComponent(event, "world memory browser expired", true)
+	}
+	session, ok := sessionAny.(*worldmemBrowserSession)
+	if !ok {
+		worldmemBrowserSessions.Delete(event.Message.ID.String())
+		return sendInteractionErrorComponent(event, "world memory browser expired", true)
+	}
+	if event.User().ID != session.UserID {
+		return event.CreateMessage(discord.NewMessageCreate().
+			WithContent("Only the exploring user can use this browser.").
+			WithEphemeral(true))
+	}
+
+	_, action, ok := strings.Cut(data.CustomID()[1:], "/")
+	if !ok {
+		return fmt.Errorf("invalid world browser custom id: %s", data.CustomID())
+	}
+	switch action {
+	case "close":
+		worldmemBrowserSessions.Delete(event.Message.ID.String())
+		event.DeferUpdateMessage()
+		_, err := event.UpdateInteractionResponse(discord.NewMessageUpdate().
+			WithContent("").
+			ClearEmbeds().
+			ClearComponents())
+		return err
+	case "first":
+		session.Page = 0
+	case "prev":
+		session.Page--
+	case "next":
+		session.Page++
+	case "last":
+		session.Page = max((len(session.Entries)+session.PageSize-1)/session.PageSize-1, 0)
+	}
+	totalPages := max((len(session.Entries)+session.PageSize-1)/session.PageSize, 1)
+	if session.Page < 0 {
+		session.Page = 0
+	}
+	if session.Page >= totalPages {
+		session.Page = totalPages - 1
+	}
+
+	event.DeferUpdateMessage()
+	_, err := event.UpdateInteractionResponse(worldmemBrowserMessage(session.Entries, session.Page, session.PageSize))
+	return err
 }
 
 func worldmemExportFilename(t time.Time) string {
@@ -292,11 +494,7 @@ func handleWorldmemImport(e *handler.CommandEvent, channelKey string) error {
 		return updateInteractionError(e, err.Error())
 	}
 
-	_, err = e.UpdateInteractionResponse(
-		discord.NewMessageUpdate().
-			WithContentf("Imported %s into this channel's world memory.", pluralize(imported, "fact")),
-	)
-	return err
+	return sendWorldmemBrowser(e, channelKey, fmt.Sprintf("Imported %s into this channel's world memory.", pluralize(imported, "fact")))
 }
 
 func downloadWorldmemAttachment(attachment discord.Attachment) ([]byte, error) {

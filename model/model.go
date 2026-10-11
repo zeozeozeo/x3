@@ -78,6 +78,7 @@ const (
 	openferenceBaseURL          = "https://api.openference.com/v1"
 	cloudflareBaseURLf          = "https://api.cloudflare.com/client/v4/accounts/%s/ai/v1"
 	cloudflareSystemOneBaseURLf = "https://api.cloudflare.com/client/v4/accounts/%s/ai/run/@cf/cloudflare/%s"
+	cloudflareWorkersAIBaseURLf = "https://api.cloudflare.com/client/v4/accounts/%s/ai/run/%s"
 	nimBaseURL                  = "https://integrate.api.nvidia.com/v1"
 	modelscopeBaseURL           = "https://api-inference.modelscope.ai/v1" // note: this is different from the chinese site (.cn), apikeys are not shared between them
 	tokenrouterBaseUrl          = "https://api.tokenrouter.com/v1"
@@ -709,7 +710,7 @@ func WorldMemEmbeddingClients() (baseUrls []string, tokens []string, apiModel st
 	if apiModel == "" {
 		return nil, nil, ""
 	}
-	baseUrls, tokens = cloudflareAccounts(cloudflareSystemOneBaseURLf, apiModel)
+	baseUrls, tokens = cloudflareAccounts(cloudflareWorkersAIBaseURLf, apiModel)
 	if len(baseUrls) == 0 || len(tokens) == 0 {
 		return nil, nil, ""
 	}

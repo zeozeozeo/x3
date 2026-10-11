@@ -146,6 +146,7 @@ func cleanABResponse(response string) string {
 	if display, _ := extractWorldTags(response); display != response {
 		response = display
 	}
+	response = stripWorldMemFooter(response)
 	return response
 }
 

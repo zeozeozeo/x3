@@ -116,6 +116,7 @@ func RegisterHandlers(r handler.Router) error {
 
 	mux.Command("/antiscam", HandleAntiscam)
 	mux.Command("/worldmem", HandleWorldmem)
+	mux.ButtonComponent("/worldmem/{action}", HandleWorldmemBrowser)
 	mux.Command("/site", HandleSite)
 	mux.ButtonComponent("/sitecancel/{id}", HandleSiteCancel)
 
