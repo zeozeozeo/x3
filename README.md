@@ -43,6 +43,7 @@ A Discord LLM roleplay and utility bot
 - `/site`: a real-time infinite website generator experiment. As you click on links, the LLM continues to generate new pages
 - An integrated code interpeter tool and discord utility. LLMs can run Python code, create and attach images and files in their temporary filesystem
 - A toggleable jailbreak for models with thinking prefill `/persona jailbreak:{prompt,think}`
+- RAG world memory
 - Free and Discord based, [add it](https://discord.com/oauth2/authorize?client_id=1307635432632094740)
 - Also is a Matrix bot: [@x3_bot:matrix.org](https://matrix.to/#/@x3_bot:matrix.org)
 

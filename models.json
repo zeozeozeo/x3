@@ -1,6 +1,23 @@
 {
   "models": [
     {
+      "name": "DeepSeek V4.1 Flash",
+      "command": "dsflash",
+      "vision": true,
+      "reasoning": true,
+      "providers": {
+        "inferx": {
+          "codenames": ["deepseek-v4.1-flash"]
+        },
+        "nim": {
+          "codenames": ["deepseek-ai/deepseek-v4.1-flash"]
+        },
+        "tokenharbor": {
+          "codenames": ["deepseek-v4.1-flash:free"]
+        }
+      }
+    },
+    {
       "name": "GLM 5.3",
       "command": "glm",
       "reasoning": true,
@@ -56,23 +73,6 @@
       "providers": {
         "nim": {
           "codenames": ["moonshotai/kimi-k3"]
-        }
-      }
-    },
-    {
-      "name": "DeepSeek V4.1 Flash",
-      "command": "dsflash",
-      "vision": true,
-      "reasoning": true,
-      "providers": {
-        "inferx": {
-          "codenames": ["deepseek-v4.1-flash"]
-        },
-        "nim": {
-          "codenames": ["deepseek-ai/deepseek-v4.1-flash"]
-        },
-        "tokenharbor": {
-          "codenames": ["deepseek-v4.1-flash:free"]
         }
       }
     },
@@ -425,6 +425,17 @@
       }
     },
     {
+      "name": " Qwen 3.8 Flash",
+      "command": "qwenflashj",
+      "vision": true,
+      "reasoning": true,
+      "providers": {
+        "tokenharbor": {
+          "codenames": ["qwen3.8-flash:free"]
+        }
+      }
+    },
+    {
       "name": "Xiaomi MiMo V2.6 Flash",
       "command": "mimo",
       "vision": true,
@@ -473,9 +484,10 @@
     }
   ],
   "default_models": [
+    "GLM 5.3 Flash",
     "DeepSeek V4.1 Flash",
-    "Gemma 4 26B A4B",
     "GLM 5.3",
+    "Gemma 4 26B A4B",
     "Kimi K3",
     "Gemini 3.6 Flash",
     "Gemini 3.7 Flash",
@@ -486,12 +498,7 @@
     "GLM 4.7 Flash",
     "Mistral Medium Latest"
   ],
-  "narrator_models": [
-    "GLM 4.7 Flash",
-    "Meta Llama 3.3 70B",
-    "Meta Llama 4 Scout 109B/17A",
-    "Meta Llama 4 Maverick 400B/17A"
-  ],
+  "narrator_models": ["GLM 5.3 Flash"],
   "default_vision_models": [
     "Gemma 4 31B",
     "Gemma 4 26B A4B",
@@ -518,11 +525,10 @@
     "GLM 4.7 Flash",
     "DeepSeek V4.1 Flash"
   ],
-  "world_mem_embedding_model": "@cf/qwen/qwen3-embedding-0.6b",
   "providers_order": [
     "orcarouter",
-    "nim",
     "tokenharbor",
+    "nim",
     "google",
     "openrouter",
     "deepseek",
@@ -598,5 +604,5 @@
       "native_tool_calling": true
     }
   },
-  "current_version": 73
+  "current_version": 77
 }
