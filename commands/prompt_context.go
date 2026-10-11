@@ -18,10 +18,13 @@ type visibleChannelRef struct {
 	categoryPosition int
 }
 
-func buildPromptContext(client *bot.Client, channelID snowflake.ID, guildID *snowflake.ID, cache *db.ChannelCache) persona.PromptContext {
+func buildPromptContext(client *bot.Client, channelID snowflake.ID, guildID *snowflake.ID, cache *db.ChannelCache, worldQuery string) persona.PromptContext {
 	ctx := persona.PromptContext{
 		Memories: append([]string(nil), cache.Memories...),
 		Context:  append([]string(nil), cache.Context...),
+	}
+	if !cache.WorldMemDisabled {
+		ctx.World = worldEntriesForPrompt(channelID.String(), worldQuery, false)
 	}
 	if summariesEnabled() {
 		ctx.Summaries = append([]persona.Summary(nil), cache.Summaries...)

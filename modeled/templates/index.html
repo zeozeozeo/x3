@@ -97,6 +97,20 @@
                     <div id="ab-pool" class="sortable-list"></div>
                 </div>
                 <div class="section">
+                    <h3>World Memory</h3>
+                    <p>Cloudflare Workers AI embedding model for the per-channel world bible RAG (e.g. @cf/qwen/qwen3-embedding-0.6b)</p>
+                    <div class="form-group">
+                        <label for="worldmem-embedding-model">Embedding model:</label>
+                        <input
+                            type="text"
+                            id="worldmem-embedding-model"
+                            style="width: 100%; padding: 8px;"
+                            placeholder="@cf/qwen/qwen3-embedding-0.6b"
+                            onchange="setWorldMemEmbeddingModel(this.value)"
+                        />
+                    </div>
+                </div>
+                <div class="section">
                     <h3>A/B Test Statistics</h3>
                     <p>Aggregate results for confirmed comparisons</p>
                     <div id="ab-stats-summary" class="stats-summary"></div>

@@ -38,12 +38,13 @@ func (env *DiscordEnvironment) IsEmpty() bool {
 type PromptContext struct {
 	Summaries []Summary           `json:"summaries,omitempty"`
 	Memories  []string            `json:"memories,omitempty"`
+	World     []string            `json:"world,omitempty"`
 	Context   []string            `json:"context,omitempty"`
 	Discord   *DiscordEnvironment `json:"discord,omitempty"`
 }
 
 func (ctx PromptContext) IsEmpty() bool {
-	return ctx.Discord == nil && len(ctx.Summaries) == 0 && len(ctx.Memories) == 0 && len(ctx.Context) == 0
+	return ctx.Discord == nil && len(ctx.Summaries) == 0 && len(ctx.Memories) == 0 && len(ctx.World) == 0 && len(ctx.Context) == 0
 }
 
 func (ctx PromptContext) BuildBlock() string {
@@ -118,6 +119,22 @@ func (ctx PromptContext) BuildBlock() string {
 		var sb strings.Builder
 		sb.WriteString("**Chat memories:**\n")
 		for _, item := range ctx.Memories {
+			text := strings.TrimSpace(item)
+			if text == "" {
+				continue
+			}
+			fmt.Fprintf(&sb, "- %s\n", text)
+		}
+		block := strings.TrimSpace(sb.String())
+		if block != "" {
+			sections = append(sections, block)
+		}
+	}
+
+	if len(ctx.World) > 0 {
+		var sb strings.Builder
+		sb.WriteString("**World bible (established canon, stay consistent with it):**\n")
+		for _, item := range ctx.World {
 			text := strings.TrimSpace(item)
 			if text == "" {
 				continue

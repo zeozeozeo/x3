@@ -1,6 +1,6 @@
 module github.com/zeozeozeo/x3
 
-go 1.26
+go 1.26.0
 
 require (
 	github.com/PuerkitoBio/goquery v1.12.0
@@ -32,7 +32,7 @@ require (
 	github.com/gorilla/css v1.0.1 // indirect
 	github.com/klauspost/compress v1.19.0 // indirect
 	github.com/mattn/go-colorable v0.1.15 // indirect
-	github.com/mattn/go-isatty v0.0.22 // indirect
+	github.com/mattn/go-isatty v0.0.24 // indirect
 	github.com/ncruces/go-strftime v1.0.0 // indirect
 	github.com/petermattis/goid v0.0.0-20260713124913-97594f28f5ca // indirect
 	github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec // indirect
@@ -44,9 +44,9 @@ require (
 	github.com/tidwall/pretty v1.2.1 // indirect
 	github.com/tidwall/sjson v1.2.5 // indirect
 	golang.org/x/exp v0.0.0-20260709172345-9ea1abe57597 // indirect
-	modernc.org/libc v1.74.1 // indirect
+	modernc.org/libc v1.77.1 // indirect
 	modernc.org/mathutil v1.7.1 // indirect
-	modernc.org/memory v1.11.0 // indirect
+	modernc.org/memory v1.12.1 // indirect
 )
 
 require (
@@ -60,6 +60,6 @@ require (
 	github.com/tiktoken-go/tokenizer v0.8.0
 	golang.org/x/crypto v0.54.0 // indirect
 	golang.org/x/image v0.44.0
-	golang.org/x/sys v0.47.0 // indirect
-	modernc.org/sqlite v1.53.0
+	golang.org/x/sys v0.48.0 // indirect
+	modernc.org/sqlite v1.60.1
 )

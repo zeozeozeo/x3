@@ -453,6 +453,13 @@ func (b *MatrixBot) onMessage(ctx context.Context, evt *event.Event) {
 		return
 	}
 
+	if handled, err := b.tryAutoImportWorldmem(ctx, msg); handled {
+		if err != nil {
+			slog.Error("matrix worldmem auto-import failed", "room_id", msg.RoomID.String(), "event_id", msg.EventID.String(), "err", err)
+		}
+		return
+	}
+
 	trimmed := strings.TrimSpace(msg.Content)
 	isDM := b.isDMRoom(ctx, msg.RoomID)
 	if rawCommand, ok := b.parseCommand(trimmed, isDM); ok {
@@ -741,6 +748,8 @@ func (b *MatrixBot) handleCommand(ctx context.Context, msg *matrixMessage, raw s
 		return b.sendText(ctx, msg.RoomID, msg.EventID, b.matrixModelListText(isDM))
 	case "chatlog":
 		return b.handleChatlogCommand(ctx, msg, rest, isDM)
+	case "worldmem":
+		return b.handleWorldmemCommand(ctx, msg, rest, isDM)
 	case "site":
 		return b.handleSiteCommand(ctx, msg, rest, isDM)
 	case "blacklist":
@@ -779,6 +788,7 @@ func (b *MatrixBot) helpText(isDM bool) string {
 		b.commandUsage("lobotomy", isDM) + " [turns] [reset_persona]",
 		b.commandUsage("regenerate", isDM) + " [prepend]",
 		b.commandUsage("chatlog", isDM) + " export|import",
+		b.commandUsage("worldmem", isDM) + " on|off|clear|export|import",
 	}, "\n")
 }
 
@@ -879,8 +889,19 @@ func (b *MatrixBot) chatlogHelpText(isDM bool) string {
 	}, "\n")
 }
 
-func (b *MatrixBot) blacklistHelpText(isDM bool, image bool) string {
-	name := "blacklist"
+func (b *MatrixBot) worldmemHelpText(isDM bool) string {
+	base := b.commandUsage("worldmem", isDM)
+	return strings.Join([]string{
+		"Worldmem command:",
+		base + " on              enable world-bible retrieval",
+		base + " off             disable retrieval (facts stay stored)",
+		base + " clear           delete all world facts for this room",
+		base + " export          export world facts as JSON",
+		"Upload an `x3-worldmem-<year>-<month>-<day>.json` file to import it automatically.",
+	}, "\n")
+}
+
+func (b *MatrixBot) blacklistHelpText(isDM bool, image bool) string {	name := "blacklist"
 	if image {
 		name = "imageblacklist"
 	}
@@ -1433,6 +1454,98 @@ func (b *MatrixBot) handleChatlogCommand(ctx context.Context, msg *matrixMessage
 	}
 }
 
+func (b *MatrixBot) handleWorldmemCommand(ctx context.Context, msg *matrixMessage, rest string, isDM bool) error {
+	parsed := parseMatrixCommandArgs(rest)
+	actionToken, action, diag := matrixCommandAction(parsed, "worldmem")
+	if diag != nil {
+		return b.sendText(ctx, msg.RoomID, msg.EventID, *diag+"\n\n"+b.worldmemHelpText(isDM))
+	}
+	if action == "help" || action == "-h" || action == "--help" || action == "?" {
+		return b.sendText(ctx, msg.RoomID, msg.EventID, b.worldmemHelpText(isDM))
+	}
+	key := b.roomKey(msg.RoomID)
+	cache := db.GetChannelCacheByKey(key)
+	switch action {
+	case "on":
+		if len(parsed.Args) > 1 {
+			return b.sendText(ctx, msg.RoomID, msg.EventID, matrixUnexpectedTokenDiagnostic(rest, parsed.At(1), "worldmem on"))
+		}
+		cache.WorldMemDisabled = false
+		if err := cache.WriteKey(key); err != nil {
+			return err
+		}
+		return b.sendText(ctx, msg.RoomID, msg.EventID, "World memory on: world-bible retrieval is now enabled in this room.")
+	case "off":
+		if len(parsed.Args) > 1 {
+			return b.sendText(ctx, msg.RoomID, msg.EventID, matrixUnexpectedTokenDiagnostic(rest, parsed.At(1), "worldmem off"))
+		}
+		cache.WorldMemDisabled = true
+		if err := cache.WriteKey(key); err != nil {
+			return err
+		}
+		return b.sendText(ctx, msg.RoomID, msg.EventID, "World memory off: retrieval disabled. Stored facts are kept and new facts are still recorded.")
+	case "clear":
+		if len(parsed.Args) > 1 {
+			return b.sendText(ctx, msg.RoomID, msg.EventID, matrixUnexpectedTokenDiagnostic(rest, parsed.At(1), "worldmem clear"))
+		}
+		n, err := db.ClearWorldEntries(key)
+		if err != nil {
+			return err
+		}
+		return b.sendText(ctx, msg.RoomID, msg.EventID, fmt.Sprintf("Deleted %s from this room's world memory.", pluralize(n, "fact")))
+	case "export":
+		if len(parsed.Args) > 1 {
+			return b.sendText(ctx, msg.RoomID, msg.EventID, matrixUnexpectedTokenDiagnostic(rest, parsed.At(1), "worldmem export"))
+		}
+		data, err := db.ExportWorldEntries(key)
+		if err != nil {
+			return err
+		}
+		n, err := db.CountWorldEntries(key)
+		if err != nil {
+			return err
+		}
+		_, err = b.sendFiles(ctx, msg.RoomID, msg.EventID, fmt.Sprintf("Exported %s from this room's world memory.", pluralize(n, "fact")), []matrixOutFile{{
+			Name:        worldmemExportFilename(time.Now().UTC()),
+			ContentType: "application/json",
+			Data:        data,
+		}})
+		return err
+	case "import":
+		if len(parsed.Args) > 1 {
+			return b.sendText(ctx, msg.RoomID, msg.EventID, matrixUnexpectedTokenDiagnostic(rest, parsed.At(1), "worldmem import"))
+		}
+		return b.sendText(ctx, msg.RoomID, msg.EventID, "Matrix imports world memory archives automatically. Upload an `x3-worldmem-<year>-<month>-<day>.json` file in the room.")
+	default:
+		return b.sendText(ctx, msg.RoomID, msg.EventID, matrixCommandDiagnostic(rest, actionToken, "Unknown worldmem action `"+actionToken.Text+"`.", "Valid actions: on, off, clear, export, import.")+"\n\n"+b.worldmemHelpText(isDM))
+	}
+}
+
+func (b *MatrixBot) tryAutoImportWorldmem(ctx context.Context, msg *matrixMessage) (bool, error) {
+	for _, att := range msg.Attachments {
+		if !isWorldmemExportFilename(att.Filename) {
+			continue
+		}
+		if att.Size > worldImportMaxSize || len(att.Data) > worldImportMaxSize {
+			return true, b.sendText(ctx, msg.RoomID, msg.EventID, fmt.Sprintf("World memory import failed: archive is too large; max size is %d bytes", worldImportMaxSize))
+		}
+
+		entries, err := db.ParseWorldExport(att.Data)
+		if err != nil {
+			return true, b.sendText(ctx, msg.RoomID, msg.EventID, "World memory import failed: "+err.Error())
+		}
+
+		key := b.roomKey(msg.RoomID)
+		imported, err := importWorldEntries(key, entries)
+		if err != nil {
+			return true, b.sendText(ctx, msg.RoomID, msg.EventID, "World memory import failed: "+err.Error())
+		}
+		return true, b.sendText(ctx, msg.RoomID, msg.EventID, fmt.Sprintf("Imported %s into this room's world memory.", pluralize(imported, "fact")))
+	}
+
+	return false, nil
+}
+
 func (b *MatrixBot) tryAutoImportChatArchive(ctx context.Context, msg *matrixMessage) (bool, error) {
 	for _, att := range msg.Attachments {
 		if !isChatArchiveFilename(att.Filename) {
@@ -1521,11 +1634,11 @@ func (b *MatrixBot) handleLlm(ctx context.Context, msg *matrixMessage, isRegener
 		llmer.LobotomizeUntilMessageID(lastID)
 		// refresh the system prompt so persona (e.g. jailbreak) changes
 		// apply to regenerations too, mirroring the Discord path
-		promptContext := matrixPromptContext(cache)
+		promptContext := matrixPromptContext(key, "", cache)
 		p := persona.GetPersonaByMetaWithBotName(cache.PersonaMeta, b.userName(msg), b.matrixBotName(ctx, msg.RoomID), b.isDMRoom(ctx, msg.RoomID), promptContext)
 		llmer.SetPersona(p, &cache.PersonaMeta.ExcessiveSplit)
 	} else {
-		promptContext := matrixPromptContext(cache)
+		promptContext := matrixPromptContext(key, msg.Content, cache)
 		p := persona.GetPersonaByMetaWithBotName(cache.PersonaMeta, b.userName(msg), b.matrixBotName(ctx, msg.RoomID), b.isDMRoom(ctx, msg.RoomID), promptContext)
 		content := matrixFormatMsg(augmentContentWithLinkMetadata(msg.Content), b.userName(msg), msg.ReplyTo)
 		if docBlocks := matrixDocumentBlocks(ctx, msg.Attachments); docBlocks != "" {
@@ -1580,6 +1693,9 @@ func (b *MatrixBot) handleLlm(ctx context.Context, msg *matrixMessage, isRegener
 		setLatestAssistantMessageContent(llmer, response)
 		cache.AddMemories(memories)
 	}
+	response = handleWorldTags(key, response, func(s string) {
+		setLatestAssistantMessageContent(llmer, s)
+	})
 
 	files := []*discord.File{}
 	if thinking != "" && cache.PersonaMeta.ThinkingTraces {
@@ -1628,10 +1744,13 @@ func (b *MatrixBot) handleLlm(ctx context.Context, msg *matrixMessage, isRegener
 	return cache.WriteKey(key)
 }
 
-func matrixPromptContext(cache *db.ChannelCache) persona.PromptContext {
+func matrixPromptContext(key, worldQuery string, cache *db.ChannelCache) persona.PromptContext {
 	ctx := persona.PromptContext{
 		Memories: append([]string(nil), cache.Memories...),
 		Context:  append([]string(nil), cache.Context...),
+	}
+	if !cache.WorldMemDisabled {
+		ctx.World = worldEntriesForPrompt(key, worldQuery, false)
 	}
 	if summariesEnabled() {
 		ctx.Summaries = append([]persona.Summary(nil), cache.Summaries...)

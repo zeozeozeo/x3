@@ -102,6 +102,19 @@ function renderConfig() {
   renderModels();
   renderProviders();
   renderDefaults();
+  renderWorldmem();
+}
+
+function renderWorldmem() {
+  const input = document.getElementById("worldmem-embedding-model");
+  if (!input) return;
+  if (document.activeElement !== input) {
+    input.value = currentConfig.world_mem_embedding_model || "@cf/qwen/qwen3-embedding-0.6b";
+  }
+}
+
+function setWorldMemEmbeddingModel(value) {
+  currentConfig.world_mem_embedding_model = value.trim();
 }
 
 function renderVersion() {

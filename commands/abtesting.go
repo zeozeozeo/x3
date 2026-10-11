@@ -143,6 +143,9 @@ func cleanABResponse(response string) string {
 	if display, _ := extractMemoryTags(response); display != response {
 		response = display
 	}
+	if display, _ := extractWorldTags(response); display != response {
+		response = display
+	}
 	return response
 }
 

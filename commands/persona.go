@@ -202,7 +202,7 @@ func enabledDisabled(v bool) string {
 // handlePersonaInfo displays the current persona settings for the channel.
 func handlePersonaInfo(event *handler.CommandEvent, ephemeral bool) error {
 	cache := db.GetChannelCache(event.Channel().ID())
-	promptContext := buildPromptContext(event.Client(), event.Channel().ID(), event.GuildID(), cache)
+	promptContext := buildPromptContext(event.Client(), event.Channel().ID(), event.GuildID(), cache, "")
 
 	meta, _ := persona.GetMetaByName(cache.PersonaMeta.Name)
 

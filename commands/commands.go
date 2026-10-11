@@ -25,6 +25,7 @@ var AllCommands []discord.ApplicationCommandCreate = []discord.ApplicationComman
 	GenerateCommand,
 	ImpersonateCommand,
 	ContextCommand,
+	WorldmemCommand,
 	AntiscamCommand,
 	SiteCommand,
 }
@@ -114,6 +115,7 @@ func RegisterHandlers(r handler.Router) error {
 	})
 
 	mux.Command("/antiscam", HandleAntiscam)
+	mux.Command("/worldmem", HandleWorldmem)
 	mux.Command("/site", HandleSite)
 	mux.ButtonComponent("/sitecancel/{id}", HandleSiteCancel)
 

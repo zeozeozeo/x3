@@ -365,6 +365,12 @@ You can save durable per-chat memory by including one or more hidden tags in you
 
 Use memories only for stable details that should matter in future replies, such as user preferences, relationships, long-term goals, decisions, or ongoing roleplay/world state. Keep each memory concise and self-contained. The memory tags are stripped before sending the message, so do not refer to them in visible prose.`
 
+const worldSystemPrompt = `**World memory:**
+You are building a persistent world bible for this roleplay. Whenever a lasting world fact is established or revealed - a world event, a character detail (appearance, backstory, ability, personality trait), a location, an item, a faction, a relationship change, or a rule of the setting - record it by including a hidden tag in your reply:
+<world>detailed self-contained description of the one thing that happened or was revealed</world>
+
+Write longer, detailed descriptions (several sentences): what happened, who was involved (use proper names, never bare pronouns), where and when, and why it matters going forward. Put exactly one fact in each <world> block, but include as many blocks as you need - there is no limit, thorough worldbuilding is encouraged. Only record stable facts that future replies should stay consistent with, not moment-to-moment dialogue or actions. The world tags are stripped before sending the message, so do not refer to them in visible prose.`
+
 type Summary struct {
 	Str string `json:"str"`
 	Age int    `json:"age"`
@@ -917,6 +923,7 @@ func finalizePersona(persona Persona, meta PersonaMeta) Persona {
 
 func appendResponseFeaturePrompts(system string, meta PersonaMeta) string {
 	system = appendMemoryPrompt(system, meta.allowsMemoryTags())
+	system = appendWorldPrompt(system, meta.allowsMemoryTags())
 	system = appendHTMLRenderingPrompt(system, meta.RenderHTML)
 	return system
 }
@@ -938,6 +945,16 @@ func appendMemoryPrompt(system string, enabled bool) string {
 		return memorySystemPrompt
 	}
 	return strings.TrimSpace(system + "\n\n" + memorySystemPrompt)
+}
+
+func appendWorldPrompt(system string, enabled bool) string {
+	if !enabled {
+		return system
+	}
+	if strings.TrimSpace(system) == "" {
+		return worldSystemPrompt
+	}
+	return strings.TrimSpace(system + "\n\n" + worldSystemPrompt)
 }
 
 func appendHTMLRenderingPrompt(system string, enabled bool) string {

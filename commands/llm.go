@@ -95,7 +95,7 @@ func HandleLlm(event *handler.CommandEvent, models []model.Model) error {
 	// if we can't read message history or an archive was imported, use cached context
 	useCache := cache.ImportedHistory != nil || event.GuildID() == nil || (event.AppPermissions() != nil && !event.AppPermissions().Has(discord.PermissionReadMessageHistory))
 	isDM := event.Channel().Type() == discord.ChannelTypeDM
-	promptContext := buildPromptContext(event.Client(), event.Channel().ID(), event.GuildID(), cache)
+	promptContext := buildPromptContext(event.Client(), event.Channel().ID(), event.GuildID(), cache, prompt)
 
 	usernames := map[string]struct{}{}
 
@@ -189,6 +189,9 @@ func HandleLlm(event *handler.CommandEvent, models []model.Model) error {
 			slog.Info("stored chat memories", slog.String("channel_id", event.Channel().ID().String()), slog.Int("found", len(memories)), slog.Int("added", added))
 		}
 	}
+	response = handleWorldTags(event.Channel().ID().String(), response, func(s string) {
+		setLatestAssistantMessageContent(llmer, s)
+	})
 
 	var files []*discord.File
 	if thinking != "" && cache.PersonaMeta.ThinkingTraces {

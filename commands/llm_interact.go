@@ -454,7 +454,7 @@ func handleLlmInteraction2(
 		}
 	}
 
-	promptContext := buildPromptContext(client, channelID, nil, cache)
+	promptContext := buildPromptContext(client, channelID, nil, cache, content)
 	p := persona.GetPersonaByMetaWithBotName(cache.PersonaMeta, username, discordBotName(client), isDM, promptContext)
 
 	// avoid formatting reply if the reference is the message we're about to regenerate
@@ -574,6 +574,9 @@ func handleLlmInteraction2(
 			slog.Info("stored chat memories", slog.String("channel_id", channelID.String()), slog.Int("found", len(memories)), slog.Int("added", added))
 		}
 	}
+	response = handleWorldTags(channelID.String(), response, func(s string) {
+		setLatestAssistantMessageContent(llmer, s)
+	})
 
 	// prepare to send reasoning trace as a file
 	var files []*discord.File

@@ -518,6 +518,7 @@
     "GLM 4.7 Flash",
     "DeepSeek V4.1 Flash"
   ],
+  "world_mem_embedding_model": "@cf/qwen/qwen3-embedding-0.6b",
   "providers_order": [
     "orcarouter",
     "nim",

@@ -209,6 +209,10 @@ var (
 	SiteModels          []string
 	ABPool              []string
 
+	// WorldMemEmbeddingModel is the Workers AI embedding model used by the
+	// worldmem RAG system. Configurable via models.json / modeled.
+	WorldMemEmbeddingModel = "@cf/qwen/qwen3-embedding-0.6b"
+
 	modelByName = map[string]Model{}
 
 	providerSettings = map[string]ProviderSettings{}
@@ -272,15 +276,16 @@ var (
 )
 
 type ModelsConfig struct {
-	Models              []Model                     `json:"models"`
-	DefaultModels       []string                    `json:"default_models"`
-	NarratorModels      []string                    `json:"narrator_models"`
-	DefaultVisionModels []string                    `json:"default_vision_models"`
-	SiteModels          []string                    `json:"site_models,omitempty"`
-	ABPool              []string                    `json:"ab_pool,omitempty"`
-	ProvidersOrder      []string                    `json:"providers_order"`
-	ProviderSettings    map[string]ProviderSettings `json:"provider_settings,omitempty"`
-	CurrentVersion      int                         `json:"current_version"`
+	Models                 []Model                     `json:"models"`
+	DefaultModels          []string                    `json:"default_models"`
+	NarratorModels         []string                    `json:"narrator_models"`
+	DefaultVisionModels    []string                    `json:"default_vision_models"`
+	SiteModels             []string                    `json:"site_models,omitempty"`
+	ABPool                 []string                    `json:"ab_pool,omitempty"`
+	WorldMemEmbeddingModel string                      `json:"world_mem_embedding_model,omitempty"`
+	ProvidersOrder         []string                    `json:"providers_order"`
+	ProviderSettings       map[string]ProviderSettings `json:"provider_settings,omitempty"`
+	CurrentVersion         int                         `json:"current_version"`
 }
 
 type ProviderSettings struct {
@@ -347,6 +352,10 @@ func LoadModelsFromJSONData(data []byte) error {
 	DefaultVisionModels = config.DefaultVisionModels
 	SiteModels = config.SiteModels
 	ABPool = config.ABPool
+	WorldMemEmbeddingModel = strings.TrimSpace(config.WorldMemEmbeddingModel)
+	if WorldMemEmbeddingModel == "" {
+		WorldMemEmbeddingModel = "@cf/qwen/qwen3-embedding-0.6b"
+	}
 	providerSettings = config.ProviderSettings
 	if providerSettings == nil {
 		providerSettings = map[string]ProviderSettings{}
@@ -689,6 +698,23 @@ func SystemOneClients(apiModel string) (baseUrls []string, tokens []string, mode
 		models[i] = apiModel
 	}
 	return
+}
+
+// WorldMemEmbeddingClients returns one run-endpoint base URL per configured
+// Cloudflare account for the worldmem embedding model, with the paired token
+// per URL. Callers must try every pair (like llm.go does for chat) so all
+// added accounts are used for failover.
+func WorldMemEmbeddingClients() (baseUrls []string, tokens []string, apiModel string) {
+	apiModel = strings.TrimSpace(WorldMemEmbeddingModel)
+	if apiModel == "" {
+		return nil, nil, ""
+	}
+	baseUrls, tokens = cloudflareAccounts(cloudflareSystemOneBaseURLf, apiModel)
+	if len(baseUrls) == 0 || len(tokens) == 0 {
+		return nil, nil, ""
+	}
+	SortPairByTokenError(baseUrls, tokens)
+	return baseUrls, tokens, apiModel
 }
 
 // Client returns lists of base URLs, tokens, and codenames for the given provider.

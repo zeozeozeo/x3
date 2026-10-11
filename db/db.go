@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	_ "modernc.org/sqlite"
+	_ "modernc.org/sqlite/vec"
 )
 
 // DB is the global database connection pool for the commands package.
@@ -57,6 +58,9 @@ func InitDB(dataSourceName string) error {
 		`CREATE TABLE IF NOT EXISTS user_cache ( user_id TEXT PRIMARY KEY, cache BLOB )`,
 		`CREATE TABLE IF NOT EXISTS link_metadata ( url TEXT PRIMARY KEY, metadata BLOB, fetched_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP )`,
 		`CREATE TABLE IF NOT EXISTS site_sessions ( site_id TEXT PRIMARY KEY, creator_id TEXT NOT NULL, discord_message_id TEXT, expires_at TEXT NOT NULL, data BLOB NOT NULL )`,
+		`CREATE TABLE IF NOT EXISTS world_memories ( id INTEGER PRIMARY KEY AUTOINCREMENT, channel_key TEXT NOT NULL, text TEXT NOT NULL, tokens INTEGER NOT NULL DEFAULT 0, parent_id INTEGER REFERENCES world_memories(id), use_count INTEGER NOT NULL DEFAULT 0, last_used TIMESTAMP, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP )`,
+		`CREATE INDEX IF NOT EXISTS idx_world_memories_channel ON world_memories(channel_key, id)`,
+		`CREATE VIRTUAL TABLE IF NOT EXISTS world_vec USING vec0(embedding float[1024], channel TEXT PARTITION KEY)`,
 	}
 
 	for i, migration := range migrations {
