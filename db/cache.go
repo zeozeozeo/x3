@@ -16,14 +16,14 @@ import (
 
 const (
 	// DefaultContextMessages is the default number of surrounding messages used for LLM context.
-	DefaultContextMessages = 60
+	DefaultContextMessages = 110
 	// MaxContextMessages is the maximum number of surrounding messages
 	// a whitelisted user may retain as LLM context.
-	MaxContextMessages = 75
+	MaxContextMessages = 300
 	// MaxContextMessagesUnwhitelisted caps message history for users
 	// that are not in the whitelist.
-	MaxContextMessagesUnwhitelisted = 100
-	maxChatMemories                 = 67
+	MaxContextMessagesUnwhitelisted = 150
+	maxChatMemories                 = 30
 	maxChatMemoryRunes              = 500
 )
 
