@@ -421,10 +421,10 @@ func importWorldEntries(channelKey string, entries []db.WorldEntry) (int, error)
 
 	imported := 0
 	for i, text := range texts {
-		if len(vecs[i]) != worldmem.WorldEmbeddingDim {
+		if len(vecs[i]) == 0 {
 			continue
 		}
-		if _, err := db.InsertWorldEntry(channelKey, text, vecs[i], worldmem.EstimateTokens(text), nil, worldmem.WorldEmbeddingDim); err != nil {
+		if _, err := db.InsertWorldEntry(channelKey, text, vecs[i], worldmem.EstimateTokens(text), nil, len(vecs[i])); err != nil {
 			slog.Warn("worldmem import insert failed", "channel", channelKey, "err", err)
 			continue
 		}

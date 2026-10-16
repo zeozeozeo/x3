@@ -174,9 +174,9 @@ const (
 	// adaptiveSlowStreakNeeded is how many consecutive slow successes it
 	// takes to schedule a probe. A single slow outlier (queue spike, cold
 	// start) must not flip traffic on its own.
-	adaptiveSlowStreakNeeded = 2
-	adaptiveProviderRouteTTL      = 5 * time.Minute
-	providerCircuitFailureLimit   = 3
+	adaptiveSlowStreakNeeded    = 2
+	adaptiveProviderRouteTTL    = 5 * time.Minute
+	providerCircuitFailureLimit = 3
 )
 
 type adaptiveProviderRoute struct {

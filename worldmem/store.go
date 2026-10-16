@@ -57,15 +57,13 @@ func StoreFacts(channelKey string, worlds []string) {
 	stored := 0
 	for i, u := range units {
 		vec := vecs[i]
-		if len(vec) != WorldEmbeddingDim {
-			slog.Warn("worldmem store: dim mismatch, skipping index rebuild",
-				"got", len(vec), "want", WorldEmbeddingDim)
+		if len(vec) == 0 {
 			continue
 		}
 		if dedup(ctx, channelKey, vec) {
 			continue
 		}
-		if _, err := db.InsertWorldEntry(channelKey, u.text, vec, EstimateTokens(u.text), u.parentID, WorldEmbeddingDim); err != nil {
+		if _, err := db.InsertWorldEntry(channelKey, u.text, vec, EstimateTokens(u.text), u.parentID, len(vec)); err != nil {
 			slog.Warn("worldmem store: insert failed", "channel", channelKey, "err", err)
 			continue
 		}

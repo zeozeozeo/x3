@@ -94,11 +94,16 @@ type embeddingResponse struct {
 // Embed returns one normalized embedding per input text, trying every
 // configured Cloudflare account in order like llm.go does for chat.
 func Embed(ctx context.Context, texts []string) ([][]float32, error) {
+	cacheModel := strings.TrimSpace(model.WorldMemEmbeddingModel)
+	if cacheModel == "" {
+		cacheModel = "@cf/qwen/qwen3-embedding-0.6b"
+	}
+
 	cached := make([][]float32, len(texts))
 	var missing []string
 	var missingIdx []int
 	for i, t := range texts {
-		if v, ok := cacheGet(t); ok {
+		if v, ok := cacheGet(t + "\x00" + cacheModel); ok {
 			cached[i] = v
 		} else {
 			missing = append(missing, t)
@@ -131,7 +136,7 @@ func Embed(ctx context.Context, texts []string) ([][]float32, error) {
 		if err == nil {
 			for j, v := range vecs {
 				cached[missingIdx[j]] = v
-				cacheSet(missing[j], v)
+				cacheSet(missing[j]+"\x00"+cacheModel, v)
 			}
 			slog.Info("worldmem embedded", "texts", len(missing), "model", apiModel, "account", i+1, "accounts", len(baseUrls))
 			return cached, nil

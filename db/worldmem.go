@@ -4,6 +4,8 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"regexp"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -83,6 +85,9 @@ func insertWorldEntry(channelKey, text string, vec []float32, tokens int, parent
 	if len(vec) != vecDim {
 		return 0, fmt.Errorf("embedding dim %d != index dim %d", len(vec), vecDim)
 	}
+	if err := ensureWorldVecTable(vecDim); err != nil {
+		return 0, fmt.Errorf("world vec table: %w", err)
+	}
 	tx, err := DB.Begin()
 	if err != nil {
 		return 0, err
@@ -128,6 +133,12 @@ func SearchWorldSimilar(channelKey string, queryVec []float32, k int) ([]WorldSi
 	}
 	if k <= 0 {
 		k = 8
+	}
+	if len(queryVec) == 0 {
+		return nil, fmt.Errorf("query vector is required")
+	}
+	if err := ensureWorldVecTable(len(queryVec)); err != nil {
+		return nil, err
 	}
 	rows, err := DB.Query(
 		`SELECT rowid, distance FROM world_vec WHERE embedding MATCH ? AND k = ? AND channel = ?`,
@@ -313,7 +324,9 @@ func clearWorldEntries(channelKey string) (int, error) {
 	}()
 	for _, id := range ids {
 		if _, err = tx.Exec(`DELETE FROM world_vec WHERE rowid = ?`, id); err != nil {
-			return 0, err
+			if !strings.Contains(strings.ToLower(err.Error()), "no such table") {
+				return 0, err
+			}
 		}
 	}
 	res, err := tx.Exec(`DELETE FROM world_memories WHERE channel_key = ?`, channelKey)
@@ -363,4 +376,46 @@ func ParseWorldExport(data []byte) ([]WorldEntry, error) {
 		out = append(out, WorldEntry{Text: strings.TrimSpace(e.Text)})
 	}
 	return out, nil
+}
+
+var worldVecSchemaMu sync.Mutex
+
+// ensureWorldVecTable makes sure the world_vec virtual table uses the requested
+// embedding dimension. If an existing table uses a different dimension (for
+// example after switching embedding models), it is rebuilt so new vectors can
+// be stored instead of failing with a dim mismatch.
+func ensureWorldVecTable(dim int) error {
+	if dim <= 0 {
+		return fmt.Errorf("invalid embedding dimension %d", dim)
+	}
+	worldVecSchemaMu.Lock()
+	defer worldVecSchemaMu.Unlock()
+
+	if cur := currentWorldVecDim(); cur == dim {
+		return nil
+	}
+	if _, err := DB.Exec(`DROP TABLE IF EXISTS world_vec`); err != nil {
+		return fmt.Errorf("drop world_vec: %w", err)
+	}
+	if _, err := DB.Exec(fmt.Sprintf(`CREATE VIRTUAL TABLE world_vec USING vec0(embedding float[%d], channel TEXT PARTITION KEY)`, dim)); err != nil {
+		return fmt.Errorf("create world_vec[%d]: %w", dim, err)
+	}
+	return nil
+}
+
+func currentWorldVecDim() int {
+	var sqlText string
+	err := DB.QueryRow(`SELECT sql FROM sqlite_master WHERE type='table' AND name='world_vec'`).Scan(&sqlText)
+	if err != nil {
+		return 0
+	}
+	m := regexp.MustCompile(`float\[(\d+)\]`).FindStringSubmatch(sqlText)
+	if len(m) != 2 {
+		return 0
+	}
+	dim, err := strconv.Atoi(m[1])
+	if err != nil {
+		return 0
+	}
+	return dim
 }
