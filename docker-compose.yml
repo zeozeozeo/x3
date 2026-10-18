@@ -1,26 +1,34 @@
-version: "3.3"
 services:
   x3:
-    restart: always
+    # Published by .github/workflows/deploy-image.yml (linux/amd64 + linux/arm64).
+    image: ghcr.io/zeozeozeo/x3:latest
     container_name: x3
-    image: x3
-    volumes:
-      - .:/app
-      - /var/run/docker.sock:/var/run/docker.sock
+    restart: unless-stopped
     working_dir: /app
-    # The app's HTTP servers bind to the container network and are published on
-    # the host loopback only. That lets cloudflared (running on the host) reach
-    # them while keeping 6741/6743 closed to the internet.
+    volumes:
+      # Run this from the cloned repo directory. .env, models.json, x3.db and
+      # models/ all live there and are mounted into the container, so config and
+      # data persist across upgrades.
+      - .:/app
+      # Required only if you enable the sandboxed code interpreter
+      # (X3_CODE_INTERPRETER_ENABLED=true). Mounting the Docker socket is a
+      # host-level trust boundary; remove this line if you don't use it.
+      - /var/run/docker.sock:/var/run/docker.sock
     ports:
-      - "127.0.0.1:6741:6741"
-      - "127.0.0.1:6743:6743"
+      # Host loopback only. cloudflared, running on the host, reaches these; the
+      # internet cannot. Never publish them on 0.0.0.0.
+      - "127.0.0.1:6741:6741" # model editor (secret path + login)
+      - "127.0.0.1:6743:6743" # /site generator (exposed publicly via the tunnel)
     environment:
       - X3_GOTENBERG_URL=http://gotenberg:3000
+      # Bind on the container network so the published ports above work. These
+      # override the loopback defaults from .env.
       - X3_MODELED_BIND_ADDR=0.0.0.0:6741
       - X3_SITE_BIND_ADDR=0.0.0.0:6743
     depends_on:
       - gotenberg
+
   gotenberg:
-    restart: always
     image: gotenberg/gotenberg:8
     container_name: x3-gotenberg
+    restart: unless-stopped
