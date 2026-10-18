@@ -25,6 +25,7 @@ import (
 	"github.com/zeozeozeo/x3/imagedesc"
 	"github.com/zeozeozeo/x3/modeled"
 	"github.com/zeozeozeo/x3/site"
+	"github.com/zeozeozeo/x3/worldmem"
 )
 
 var (
@@ -75,6 +76,24 @@ func main() {
 	}()
 
 	imagedesc.DB = db.DB
+
+	// Re-embed any world-memory facts whose vectors are missing: this happens
+	// after an embedding-model change (a vec0 column has a fixed width) and for
+	// facts created by /worldmem import. Reindex does nothing when the index is
+	// already healthy, so this costs one local read on a normal boot, not an
+	// embedding request. Runs in the background so boot is not delayed.
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
+		defer cancel()
+		n, err := worldmem.Reindex(ctx)
+		if err != nil {
+			slog.Warn("world memory reindex failed", "err", err, "reembedded", n)
+			return
+		}
+		if n > 0 {
+			slog.Info("world memory reindex complete", "reembedded", n)
+		}
+	}()
 
 	commands.StartTime = startTime
 	siteServer := site.NewServerFromEnv()

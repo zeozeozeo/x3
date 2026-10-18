@@ -50,7 +50,12 @@ type WorldEntry struct {
 	UseCount  int        `json:"use_count,omitempty"`
 	LastUsed  *time.Time `json:"last_used,omitempty"`
 	CreatedAt time.Time  `json:"created_at"`
+	// ChannelKey is the owning channel/room. It is not serialized: exports are
+	// already scoped to one channel, and imports re-target their own key.
+	ChannelKey string `json:"-"`
 }
+
+const worldEntryColumns = `id, channel_key, text, tokens, parent_id, use_count, last_used, created_at`
 
 // worldVectorText serializes a float vector for sqlite-vec MATCH queries.
 func worldVectorText(vec []float32) string {
@@ -176,9 +181,9 @@ func SearchWorldSimilar(channelKey string, queryVec []float32, k int) ([]WorldSi
 		var lastUsed sql.NullTime
 		var created sql.NullTime
 		err := DB.QueryRow(
-			`SELECT id, text, tokens, parent_id, use_count, last_used, created_at FROM world_memories WHERE id = ? AND channel_key = ?`,
+			`SELECT `+worldEntryColumns+` FROM world_memories WHERE id = ? AND channel_key = ?`,
 			item.id, channelKey,
-		).Scan(&e.ID, &e.Text, &e.Tokens, &parent, &e.UseCount, &lastUsed, &created)
+		).Scan(&e.ID, &e.ChannelKey, &e.Text, &e.Tokens, &parent, &e.UseCount, &lastUsed, &created)
 		if err == sql.ErrNoRows {
 			continue
 		}
@@ -204,7 +209,7 @@ func SearchWorldSimilar(channelKey string, queryVec []float32, k int) ([]WorldSi
 // GetWorldEntries lists all entries for a channel, oldest first.
 func GetWorldEntries(channelKey string) ([]WorldEntry, error) {
 	rows, err := DB.Query(
-		`SELECT id, text, tokens, parent_id, use_count, last_used, created_at FROM world_memories WHERE channel_key = ? ORDER BY id ASC`,
+		`SELECT `+worldEntryColumns+` FROM world_memories WHERE channel_key = ? ORDER BY id ASC`,
 		channelKey,
 	)
 	if err != nil {
@@ -217,7 +222,7 @@ func GetWorldEntries(channelKey string) ([]WorldEntry, error) {
 // GetRecentWorldEntries returns the n newest entries for a channel.
 func GetRecentWorldEntries(channelKey string, n int) ([]WorldEntry, error) {
 	rows, err := DB.Query(
-		`SELECT id, text, tokens, parent_id, use_count, last_used, created_at FROM world_memories WHERE channel_key = ? ORDER BY id DESC LIMIT ?`,
+		`SELECT `+worldEntryColumns+` FROM world_memories WHERE channel_key = ? ORDER BY id DESC LIMIT ?`,
 		channelKey, n,
 	)
 	if err != nil {
@@ -242,6 +247,108 @@ func CountWorldEntries(channelKey string) (int, error) {
 	return n, err
 }
 
+// CountAllWorldEntries counts entries across every channel.
+func CountAllWorldEntries() (int, error) {
+	var n int
+	err := DB.QueryRow(`SELECT COUNT(*) FROM world_memories`).Scan(&n)
+	return n, err
+}
+
+// CountWorldEntriesWithoutVectors counts stored facts that currently have no
+// vector, so callers can tell "nothing to repair" from "reindex needed"
+// without loading the facts themselves.
+func CountWorldEntriesWithoutVectors() (int, error) {
+	if !worldVecShadowTableExists() {
+		return CountAllWorldEntries()
+	}
+	var n int
+	err := DB.QueryRow(
+		`SELECT COUNT(*) FROM world_memories WHERE id NOT IN (SELECT rowid FROM world_vec_rowids)`,
+	).Scan(&n)
+	return n, err
+}
+
+// WorldIndexMeta records which embedding model produced the vectors currently
+// stored in world_vec. Knowing it lets x3 detect an embedding-model change
+// without spending an embedding request on every startup.
+type WorldIndexMeta struct {
+	Model string
+	Dim   int
+}
+
+const (
+	worldIndexMetaModelKey = "embedding_model"
+	worldIndexMetaDimKey   = "embedding_dim"
+)
+
+// GetWorldIndexMeta returns the recorded embedding model and dimension. ok is
+// false when nothing has been recorded yet, which is the case for a database
+// written before this bookkeeping existed.
+func GetWorldIndexMeta() (m WorldIndexMeta, ok bool, err error) {
+	rows, err := DB.Query(
+		`SELECT key, value FROM world_index_meta WHERE key IN (?, ?)`,
+		worldIndexMetaModelKey, worldIndexMetaDimKey,
+	)
+	if err != nil {
+		return WorldIndexMeta{}, false, err
+	}
+	defer rows.Close()
+
+	seen := 0
+	for rows.Next() {
+		var k, v string
+		if err = rows.Scan(&k, &v); err != nil {
+			return WorldIndexMeta{}, false, err
+		}
+		switch k {
+		case worldIndexMetaModelKey:
+			m.Model = v
+			seen++
+		case worldIndexMetaDimKey:
+			if n, convErr := strconv.Atoi(v); convErr == nil {
+				m.Dim = n
+				seen++
+			}
+		}
+	}
+	if err = rows.Err(); err != nil {
+		return WorldIndexMeta{}, false, err
+	}
+	return m, seen == 2 && m.Model != "" && m.Dim > 0, nil
+}
+
+// SetWorldIndexMeta records the embedding model and dimension behind world_vec.
+func SetWorldIndexMeta(m WorldIndexMeta) error {
+	if strings.TrimSpace(m.Model) == "" || m.Dim <= 0 {
+		return fmt.Errorf("invalid world index metadata")
+	}
+	return withWorldWrite(func() error {
+		tx, err := DB.Begin()
+		if err != nil {
+			return err
+		}
+		defer func() {
+			if err != nil {
+				_ = tx.Rollback()
+			}
+		}()
+		for _, kv := range [][2]string{
+			{worldIndexMetaModelKey, m.Model},
+			{worldIndexMetaDimKey, strconv.Itoa(m.Dim)},
+		} {
+			if _, err = tx.Exec(
+				`INSERT INTO world_index_meta(key, value) VALUES (?, ?)
+				 ON CONFLICT(key) DO UPDATE SET value = excluded.value`,
+				kv[0], kv[1],
+			); err != nil {
+				return err
+			}
+		}
+		err = tx.Commit()
+		return err
+	})
+}
+
 func scanWorldEntries(rows *sql.Rows) ([]WorldEntry, error) {
 	var out []WorldEntry
 	for rows.Next() {
@@ -249,7 +356,7 @@ func scanWorldEntries(rows *sql.Rows) ([]WorldEntry, error) {
 		var parent sql.NullInt64
 		var lastUsed sql.NullTime
 		var created sql.NullTime
-		if err := rows.Scan(&e.ID, &e.Text, &e.Tokens, &parent, &e.UseCount, &lastUsed, &created); err != nil {
+		if err := rows.Scan(&e.ID, &e.ChannelKey, &e.Text, &e.Tokens, &parent, &e.UseCount, &lastUsed, &created); err != nil {
 			return nil, err
 		}
 		if parent.Valid {
@@ -381,9 +488,13 @@ func ParseWorldExport(data []byte) ([]WorldEntry, error) {
 var worldVecSchemaMu sync.Mutex
 
 // ensureWorldVecTable makes sure the world_vec virtual table uses the requested
-// embedding dimension. If an existing table uses a different dimension (for
-// example after switching embedding models), it is rebuilt so new vectors can
-// be stored instead of failing with a dim mismatch.
+// embedding dimension.
+//
+// It never silently discards stored vectors. A vec0 column has a fixed width,
+// so a mismatched dimension used to mean "drop the whole index", which turned a
+// configuration mistake into memories that could never be retrieved again,
+// with no error anywhere. Instead the mismatch is reported; worldmem.Reindex
+// rebuilds the table and re-embeds every fact.
 func ensureWorldVecTable(dim int) error {
 	if dim <= 0 {
 		return fmt.Errorf("invalid embedding dimension %d", dim)
@@ -391,9 +502,35 @@ func ensureWorldVecTable(dim int) error {
 	worldVecSchemaMu.Lock()
 	defer worldVecSchemaMu.Unlock()
 
-	if cur := currentWorldVecDim(); cur == dim {
+	cur := currentWorldVecDim()
+	if cur == dim {
 		return nil
 	}
+	if cur != 0 && worldVecRowCount() > 0 {
+		return fmt.Errorf(
+			"world_vec holds %d-dim vectors but the configured embedding model produces %d; reindex required (worldmem.Reindex)",
+			cur, dim)
+	}
+	return recreateWorldVecTableLocked(dim)
+}
+
+// CurrentWorldVecDim reports the embedding width of the world_vec table, or 0
+// when the table does not exist yet.
+func CurrentWorldVecDim() int { return currentWorldVecDim() }
+
+// RebuildWorldVecTable drops and recreates world_vec at dim. It is destructive:
+// every stored vector is discarded, so callers must re-embed stored facts
+// afterwards. worldmem.Reindex does that; nothing else should call this.
+func RebuildWorldVecTable(dim int) error {
+	if dim <= 0 {
+		return fmt.Errorf("invalid embedding dimension %d", dim)
+	}
+	worldVecSchemaMu.Lock()
+	defer worldVecSchemaMu.Unlock()
+	return recreateWorldVecTableLocked(dim)
+}
+
+func recreateWorldVecTableLocked(dim int) error {
 	if _, err := DB.Exec(`DROP TABLE IF EXISTS world_vec`); err != nil {
 		return fmt.Errorf("drop world_vec: %w", err)
 	}
@@ -401,6 +538,80 @@ func ensureWorldVecTable(dim int) error {
 		return fmt.Errorf("create world_vec[%d]: %w", dim, err)
 	}
 	return nil
+}
+
+// worldVecRowCount reports how many vectors are stored. It returns 0 when the
+// vector table (or its sqlite-vec shadow table) does not exist yet.
+func worldVecRowCount() int {
+	var n int
+	if err := DB.QueryRow(`SELECT COUNT(*) FROM world_vec_rowids`).Scan(&n); err != nil {
+		return 0
+	}
+	return n
+}
+
+// WorldEntriesMissingVectors returns up to limit stored facts that have no
+// vector, oldest first. Facts like these are what /worldmem import and an
+// embedding-model change leave behind; re-embedding them restores retrieval.
+func WorldEntriesMissingVectors(limit int) ([]WorldEntry, error) {
+	if limit <= 0 {
+		limit = 64
+	}
+	q := `SELECT ` + worldEntryColumns + ` FROM world_memories ORDER BY id ASC LIMIT ?`
+	if worldVecShadowTableExists() {
+		q = `SELECT ` + worldEntryColumns + ` FROM world_memories ` +
+			`WHERE id NOT IN (SELECT rowid FROM world_vec_rowids) ORDER BY id ASC LIMIT ?`
+	}
+	rows, err := DB.Query(q, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	return scanWorldEntries(rows)
+}
+
+func worldVecShadowTableExists() bool {
+	var n int
+	err := DB.QueryRow(
+		`SELECT COUNT(*) FROM sqlite_master WHERE type IN ('table','view') AND name = 'world_vec_rowids'`,
+	).Scan(&n)
+	return err == nil && n > 0
+}
+
+// UpsertWorldVector attaches vec to an existing world_memories row, replacing
+// any vector already stored for it.
+func UpsertWorldVector(id int64, channelKey string, vec []float32, vecDim int) error {
+	if id == 0 || strings.TrimSpace(channelKey) == "" {
+		return fmt.Errorf("row id and channel key are required")
+	}
+	if len(vec) != vecDim {
+		return fmt.Errorf("embedding dim %d != index dim %d", len(vec), vecDim)
+	}
+	return withWorldWrite(func() error {
+		if err := ensureWorldVecTable(vecDim); err != nil {
+			return err
+		}
+		tx, err := DB.Begin()
+		if err != nil {
+			return err
+		}
+		defer func() {
+			if err != nil {
+				_ = tx.Rollback()
+			}
+		}()
+		if _, err = tx.Exec(`DELETE FROM world_vec WHERE rowid = ?`, id); err != nil {
+			return err
+		}
+		if _, err = tx.Exec(
+			`INSERT INTO world_vec(rowid, embedding, channel) VALUES (?, ?, ?)`,
+			id, worldVectorText(vec), channelKey,
+		); err != nil {
+			return err
+		}
+		err = tx.Commit()
+		return err
+	})
 }
 
 func currentWorldVecDim() int {

@@ -29,15 +29,42 @@ import (
 )
 
 const (
-	// Defaults for the retrieval preset.
-	DefaultTopK          = 5
-	DefaultMinSimilarity = 0.55
-	DefaultMaxTokens     = 1000
-	DefaultFetchK        = 8
+	// DefaultTopK is how many facts one retrieval may inject.
+	DefaultTopK = 5
+	// DefaultMaxTokens budgets retrieved facts so they cannot crowd out the
+	// conversation.
+	DefaultMaxTokens = 1000
+	// DefaultFetchK is how many vector candidates the embedding fallback pulls
+	// before applying its relative rule.
+	DefaultFetchK = 8
+	// FallbackTopK caps how many facts the embedding fallback may inject. It is
+	// deliberately smaller than DefaultTopK: the fallback only runs when
+	// lexical matching found nothing, so it should hedge rather than flood.
+	FallbackTopK = 3
+	// FallbackMinSimilarity is a loose floor for the embedding fallback. Below
+	// it nothing is plausibly related and injecting a fact would be noise.
+	FallbackMinSimilarity = 0.40
+	// FallbackKeepMargin keeps fallback candidates within this cosine distance
+	// of the best hit.
+	FallbackKeepMargin = 0.10
+	// FallbackMinLead / FallbackLeadMinDocs express the relative rule: as soon
+	// as a channel holds more than one fact, the best hit must stand out this
+	// far above the channel's median similarity before anything is injected.
+	//
+	// This is the part that replaced a fixed absolute gate. Absolute cosine
+	// thresholds do not transfer: the same value is far too strict for one
+	// embedding model and far too loose for another, and it also drifts as a
+	// channel accumulates facts. A lead over the channel's own median
+	// self-calibrates instead, and in practice separates unrelated chatter from
+	// genuine questions where no single absolute cutoff did.
+	FallbackMinLead     = 0.15
+	FallbackLeadMinDocs = 2
+	// FallbackRecentCount is how many recent facts the error path injects.
+	FallbackRecentCount = 3
 
 	// EmbedTimeout bounds a single embedding account attempt.
 	EmbedTimeout = 30 * time.Second
-	// RetrieveTimeout bounds the whole retrieval path so chat never stalls.
+	// RetrieveTimeout bounds the embedding fallback so chat never stalls.
 	RetrieveTimeout = 8 * time.Second
 
 	// MaxWorldRunes caps a single stored fact.
@@ -51,10 +78,6 @@ const (
 
 	// DedupSimilarity skips storing a fact this similar to an existing one.
 	DedupSimilarity = 0.95
-
-	// WorldEmbeddingDim is the vec0 table width. Changing the embedding model
-	// to one with a different dimension requires rebuilding the index.
-	WorldEmbeddingDim = 1024
 )
 
 var httpClient = &http.Client{Timeout: EmbedTimeout}
@@ -91,12 +114,23 @@ type embeddingResponse struct {
 	} `json:"errors"`
 }
 
+// EmbeddingsAvailable reports whether at least one embedding account is
+// configured.
+//
+// Retrieval does not depend on it: lexical matching is local and needs no
+// network. Without an account x3 simply cannot store new facts or run the
+// semantic fallback, and it stays quiet about that instead of failing.
+func EmbeddingsAvailable() bool {
+	baseUrls, tokens, _ := model.WorldMemEmbeddingClients()
+	return len(baseUrls) > 0 && len(tokens) > 0
+}
+
 // Embed returns one normalized embedding per input text, trying every
 // configured Cloudflare account in order like llm.go does for chat.
 func Embed(ctx context.Context, texts []string) ([][]float32, error) {
 	cacheModel := strings.TrimSpace(model.WorldMemEmbeddingModel)
 	if cacheModel == "" {
-		cacheModel = "@cf/qwen/qwen3-embedding-0.6b"
+		cacheModel = model.DefaultWorldMemEmbeddingModel
 	}
 
 	cached := make([][]float32, len(texts))
@@ -251,13 +285,13 @@ func topScored(query []float32, candidates [][]float32) []int {
 		idx int
 		sim float64
 	}
-	scored_list := make([]scored, 0, len(candidates))
+	scoredList := make([]scored, 0, len(candidates))
 	for i, c := range candidates {
-		scored_list = append(scored_list, scored{i, Cosine(query, c)})
+		scoredList = append(scoredList, scored{i, Cosine(query, c)})
 	}
-	sort.Slice(scored_list, func(i, j int) bool { return scored_list[i].sim > scored_list[j].sim })
-	out := make([]int, len(scored_list))
-	for i, s := range scored_list {
+	sort.Slice(scoredList, func(i, j int) bool { return scoredList[i].sim > scoredList[j].sim })
+	out := make([]int, len(scoredList))
+	for i, s := range scoredList {
 		out[i] = s.idx
 	}
 	return out

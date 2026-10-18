@@ -18,6 +18,7 @@ import (
 	"github.com/disgoorg/disgo/handler"
 	"github.com/disgoorg/snowflake/v2"
 	"github.com/zeozeozeo/x3/db"
+	"github.com/zeozeozeo/x3/llm"
 	"github.com/zeozeozeo/x3/worldmem"
 )
 
@@ -118,6 +119,82 @@ func worldEntriesForPrompt(channelKey, query string, disabled bool) []string {
 		}
 	}
 	return out
+}
+
+const (
+	// worldQueryMinTokens is how many content tokens a message needs before it
+	// is treated as carrying enough retrieval signal on its own.
+	worldQueryMinTokens = 3
+	// worldQueryContextMessages is how many recent messages a very short
+	// message may borrow from.
+	worldQueryContextMessages = 2
+	// worldQueryContextRunes caps each borrowed message.
+	worldQueryContextRunes = 300
+)
+
+// composeWorldQuery builds the world-memory retrieval query for one turn.
+//
+// Lexical matching over the current message alone already covers the common
+// case, and keeping the query tight keeps precision high. Messages with only
+// one or two content tokens ("and that?", "the vault thing") are ambiguous, so
+// for those only, the tail of the conversation is appended to give the matcher
+// something to work with. Pure chatter is left alone: it carries no intent to
+// recall anything, and borrowing context for it would only drag unrelated canon
+// into the prompt.
+func composeWorldQuery(current string, recent []string) string {
+	query := strings.TrimSpace(current)
+	tokens := worldmem.Tokenize(query)
+	if len(tokens) >= worldQueryMinTokens || len(tokens) == 0 {
+		return query
+	}
+	parts := make([]string, 0, worldQueryContextMessages+1)
+	if query != "" {
+		parts = append(parts, query)
+	}
+	added := 0
+	for i := len(recent) - 1; i >= 0 && added < worldQueryContextMessages; i-- {
+		p := truncateRunes(strings.TrimSpace(recent[i]), worldQueryContextRunes)
+		if p == "" {
+			continue
+		}
+		parts = append(parts, p)
+		added++
+	}
+	return strings.Join(parts, "\n")
+}
+
+// recentWorldQueryContext returns up to n recent conversational message
+// contents in chronological order, for composeWorldQuery's short-message case.
+func recentWorldQueryContext(llmer *llm.Llmer, n int) []string {
+	if llmer == nil || n <= 0 {
+		return nil
+	}
+	out := make([]string, 0, n)
+	for i := len(llmer.Messages) - 1; i >= 0 && len(out) < n; i-- {
+		m := llmer.Messages[i]
+		if m.Role != llm.RoleUser && m.Role != llm.RoleAssistant {
+			continue
+		}
+		if strings.TrimSpace(m.Content) == "" {
+			continue
+		}
+		out = append(out, m.Content)
+	}
+	for i, j := 0, len(out)-1; i < j; i, j = i+1, j-1 {
+		out[i], out[j] = out[j], out[i]
+	}
+	return out
+}
+
+func truncateRunes(s string, n int) string {
+	if n <= 0 {
+		return ""
+	}
+	r := []rune(s)
+	if len(r) <= n {
+		return s
+	}
+	return string(r[:n])
 }
 
 var WorldmemCommand = discord.SlashCommandCreate{

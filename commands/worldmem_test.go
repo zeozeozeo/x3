@@ -1,9 +1,11 @@
 package commands
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/zeozeozeo/x3/db"
+	"github.com/zeozeozeo/x3/llm"
 )
 
 func TestExtractWorldTags(t *testing.T) {
@@ -110,5 +112,73 @@ func TestWorldmemBrowserMessagePaging(t *testing.T) {
 	last := worldmemBrowserMessage(entries, 99, worldBrowserPageSize)
 	if last.Embeds == nil || len(*last.Embeds) != 1 {
 		t.Fatalf("expected one embed on clamped page")
+	}
+}
+
+func TestComposeWorldQueryKeepsClearMessage(t *testing.T) {
+	current := "north gate closed"
+	got := composeWorldQuery(current, []string{"unrelated recent line"})
+	if got != current {
+		t.Fatalf("composeWorldQuery() = %q, want the message unchanged", got)
+	}
+}
+
+func TestComposeWorldQueryBorrowsNewestFirst(t *testing.T) {
+	got := composeWorldQuery("gate?", []string{"one", "two", "three", "four"})
+	want := "gate?\nfour\nthree"
+	if got != want {
+		t.Fatalf("composeWorldQuery() = %q, want %q", got, want)
+	}
+}
+
+func TestComposeWorldQueryBorrowsForAmbiguousMessage(t *testing.T) {
+	got := composeWorldQuery("the gate?", []string{"older line", "the north gate closed at dusk"})
+	want := "the gate?\nthe north gate closed at dusk\nolder line"
+	if got != want {
+		t.Fatalf("composeWorldQuery() = %q, want %q", got, want)
+	}
+}
+
+func TestComposeWorldQueryIgnoresSignalFreeChatter(t *testing.T) {
+	// Pure chatter carries no intent to recall anything, so it must not drag
+	// the conversation (and with it, unrelated canon) into the query.
+	for _, current := range []string{"ok", "the a of", "!!!", "2+2"} {
+		got := composeWorldQuery(current, []string{"the north gate closed at dusk"})
+		if got != current {
+			t.Fatalf("composeWorldQuery(%q) = %q, want it unchanged", current, got)
+		}
+	}
+}
+
+func TestComposeWorldQueryTruncatesBorrowedContext(t *testing.T) {
+	long := strings.Repeat("x", worldQueryContextRunes+120)
+	got := composeWorldQuery("gate?", []string{long})
+	parts := strings.Split(got, "\n")
+	if len(parts) != 2 {
+		t.Fatalf("composeWorldQuery() = %q, want two lines", got)
+	}
+	if n := len([]rune(parts[1])); n != worldQueryContextRunes {
+		t.Fatalf("borrowed context = %d runes, want %d", n, worldQueryContextRunes)
+	}
+}
+
+func TestRecentWorldQueryContext(t *testing.T) {
+	l := &llm.Llmer{Messages: []llm.Message{
+		{Role: llm.RoleSystem, Content: "system prompt"},
+		{Role: llm.RoleUser, Content: "first"},
+		{Role: llm.RoleAssistant, Content: "   "},
+		{Role: llm.RoleAssistant, Content: "second"},
+		{Role: llm.RoleUser, Content: "third"},
+	}}
+	got := recentWorldQueryContext(l, 2)
+	if len(got) != 2 || got[0] != "second" || got[1] != "third" {
+		t.Fatalf("recentWorldQueryContext() = %#v, want [second third] in order", got)
+	}
+
+	if got := recentWorldQueryContext(nil, 2); got != nil {
+		t.Fatalf("nil llmer should give nil, got %#v", got)
+	}
+	if got := recentWorldQueryContext(l, 0); got != nil {
+		t.Fatalf("n=0 should give nil, got %#v", got)
 	}
 }

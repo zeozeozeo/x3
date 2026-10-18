@@ -207,6 +207,15 @@ type providerCircuit struct {
 	openUntil    time.Time
 }
 
+// DefaultWorldMemEmbeddingModel is the Workers AI embedding model used by the
+// worldmem RAG system when world_mem_embedding_model is not configured. It is
+// also the value the model editor shows as the baseline.
+//
+// Changing it changes the width of the vector index, which worldmem.Reindex
+// repairs by re-embedding every stored fact. Keep models.json, the model editor
+// and this constant in agreement.
+const DefaultWorldMemEmbeddingModel = "@cf/google/embeddinggemma-300m"
+
 var (
 	AllModels           []Model
 	DefaultModels       []string
@@ -218,7 +227,7 @@ var (
 
 	// WorldMemEmbeddingModel is the Workers AI embedding model used by the
 	// worldmem RAG system. Configurable via models.json / modeled.
-	WorldMemEmbeddingModel = "@cf/qwen/qwen3-embedding-0.6b"
+	WorldMemEmbeddingModel = DefaultWorldMemEmbeddingModel
 
 	modelByName = map[string]Model{}
 
@@ -362,7 +371,7 @@ func LoadModelsFromJSONData(data []byte) error {
 	ABPool = config.ABPool
 	WorldMemEmbeddingModel = strings.TrimSpace(config.WorldMemEmbeddingModel)
 	if WorldMemEmbeddingModel == "" {
-		WorldMemEmbeddingModel = "@cf/qwen/qwen3-embedding-0.6b"
+		WorldMemEmbeddingModel = DefaultWorldMemEmbeddingModel
 	}
 	providerSettings = config.ProviderSettings
 	if providerSettings == nil {

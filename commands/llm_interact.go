@@ -305,8 +305,15 @@ func collapseRepeatedSplitMessages(messages []string) []string {
 	result := make([]string, 0, len(unique))
 	for i, msg := range unique {
 		redundant := false
-		for j := 0; j < i; j++ {
-			if strings.Contains(unique[j], msg) {
+		for j := range unique {
+			if j == i {
+				continue
+			}
+			// A split is redundant if another split wholly contains it. This
+			// also catches repeated facts where the later split merely appends
+			// a trailing footer or marker, so identical sentences do not end
+			// up being sent twice.
+			if strings.Contains(unique[j], msg) && unique[j] != msg {
 				redundant = true
 				break
 			}
@@ -455,7 +462,8 @@ func handleLlmInteraction2(
 		}
 	}
 
-	promptContext, worldFacts := buildPromptContext(client, channelID, nil, cache, content)
+	worldQuery := composeWorldQuery(content, recentWorldQueryContext(llmer, worldQueryContextMessages))
+	promptContext, worldFacts := buildPromptContext(client, channelID, nil, cache, worldQuery)
 	p := persona.GetPersonaByMetaWithBotName(cache.PersonaMeta, username, discordBotName(client), isDM, promptContext)
 
 	// avoid formatting reply if the reference is the message we're about to regenerate

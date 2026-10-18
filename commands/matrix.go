@@ -1665,7 +1665,7 @@ func (b *MatrixBot) handleLlm(ctx context.Context, msg *matrixMessage, isRegener
 		llmer.SetPersona(p, &cache.PersonaMeta.ExcessiveSplit)
 		llmer.WorldBible = ""
 	} else {
-		promptContext, worldFacts := matrixPromptContext(key, msg.Content, cache)
+		promptContext, worldFacts := matrixPromptContext(key, composeWorldQuery(msg.Content, recentWorldQueryContext(llmer, worldQueryContextMessages)), cache)
 		p := persona.GetPersonaByMetaWithBotName(cache.PersonaMeta, b.userName(msg), b.matrixBotName(ctx, msg.RoomID), b.isDMRoom(ctx, msg.RoomID), promptContext)
 		content := matrixFormatMsg(augmentContentWithLinkMetadata(msg.Content), b.userName(msg), msg.ReplyTo)
 		if docBlocks := matrixDocumentBlocks(ctx, msg.Attachments); docBlocks != "" {

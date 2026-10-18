@@ -604,5 +604,6 @@
       "native_tool_calling": true
     }
   },
+  "world_mem_embedding_model": "@cf/google/embeddinggemma-300m",
   "current_version": 77
 }
