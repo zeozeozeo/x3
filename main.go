@@ -23,6 +23,7 @@ import (
 	"github.com/zeozeozeo/x3/commands"
 	"github.com/zeozeozeo/x3/db"
 	"github.com/zeozeozeo/x3/imagedesc"
+	"github.com/zeozeozeo/x3/logstream"
 	"github.com/zeozeozeo/x3/modeled"
 	"github.com/zeozeozeo/x3/site"
 	"github.com/zeozeozeo/x3/worldmem"
@@ -50,7 +51,7 @@ func levelFromString(s string) slog.Level {
 }
 
 func main() {
-	slog.SetLogLoggerLevel(levelFromString(os.Getenv("X3_LOG_LEVEL")))
+	logstream.Install(levelFromString(os.Getenv("X3_LOG_LEVEL")))
 	slog.Info("x3 booting up...")
 	slog.Info("disgo version", "version", disgo.Version)
 

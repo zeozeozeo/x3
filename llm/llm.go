@@ -349,10 +349,7 @@ func ContextHardMessageLimit(softLimit int) int {
 	if softLimit <= 0 {
 		return 0
 	}
-	overshoot := max(softLimit, contextOvershootMin)
-	if overshoot > contextOvershootMax {
-		overshoot = contextOvershootMax
-	}
+	overshoot := min(max(softLimit, contextOvershootMin), contextOvershootMax)
 	hardLimit := min(softLimit+overshoot, contextMessageMax)
 	return hardLimit
 }

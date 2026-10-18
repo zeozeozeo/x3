@@ -117,8 +117,8 @@ func (s *Server) cookiePath() string {
 // URL returns the local address the editor is reachable at, for logging.
 func (s *Server) URL() string {
 	host := s.cfg.BindAddr
-	if strings.HasPrefix(host, "0.0.0.0:") {
-		host = "127.0.0.1:" + strings.TrimPrefix(host, "0.0.0.0:")
+	if after, ok := strings.CutPrefix(host, "0.0.0.0:"); ok {
+		host = "127.0.0.1:" + after
 	}
 	return "http://" + host + s.appPath()
 }

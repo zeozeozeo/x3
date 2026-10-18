@@ -10,6 +10,7 @@ import (
 
 	"github.com/fsnotify/fsnotify"
 	"github.com/joho/godotenv"
+	"github.com/zeozeozeo/x3/logstream"
 )
 
 const dotEnvReloadDebounce = 200 * time.Millisecond
@@ -54,7 +55,7 @@ func (s *dotEnvState) reload(path string) error {
 	}
 	s.values = values
 
-	slog.SetLogLoggerLevel(levelFromString(os.Getenv("X3_LOG_LEVEL")))
+	logstream.SetLevel(levelFromString(os.Getenv("X3_LOG_LEVEL")))
 	slog.Info("reloaded .env", "path", path, "keys", len(values))
 	return nil
 }

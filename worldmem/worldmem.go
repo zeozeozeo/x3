@@ -239,7 +239,7 @@ func Normalize(v []float32) []float32 {
 func Cosine(a, b []float32) float64 {
 	n := min(len(b), len(a))
 	var dot, na, nb float64
-	for i := 0; i < n; i++ {
+	for i := range n {
 		dot += float64(a[i]) * float64(b[i])
 		na += float64(a[i]) * float64(a[i])
 		nb += float64(b[i]) * float64(b[i])

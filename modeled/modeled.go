@@ -54,7 +54,6 @@ func newServerWithConfig(dbPath string, cfg Config) *Server {
 	mux.HandleFunc("/api/models/save", handleSaveModels)
 	mux.HandleFunc("/api/ab-stats", handleABStats)
 	mux.HandleFunc("/", handleIndex)
-
 	s := &Server{
 		dbPath:  dbPath,
 		cfg:     cfg,
@@ -62,6 +61,7 @@ func newServerWithConfig(dbPath string, cfg Config) *Server {
 	}
 
 	mux.HandleFunc("/api/backup", s.handleBackup)
+	mux.HandleFunc("/api/logs", s.handleLogStream)
 	mux.HandleFunc("/login", s.handleLogin)
 	mux.HandleFunc("/logout", s.handleLogout)
 

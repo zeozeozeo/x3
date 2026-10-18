@@ -30,7 +30,7 @@ func withWorldWrite(fn func() error) error {
 	worldWriteMu.Lock()
 	defer worldWriteMu.Unlock()
 	var err error
-	for attempt := 0; attempt < 6; attempt++ {
+	for attempt := range 6 {
 		if err = fn(); err == nil || !isBusyError(err) {
 			return err
 		}

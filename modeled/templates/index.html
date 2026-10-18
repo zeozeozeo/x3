@@ -57,6 +57,7 @@
                     Provider Order
                 </button>
                 <button class="tab-btn" data-tab="defaults">Defaults</button>
+                <button class="tab-btn" data-tab="logs">Logs</button>
             </div>
 
             <div id="models-tab" class="tab-content active">
@@ -118,6 +119,26 @@
                     <p>Aggregate results for confirmed comparisons</p>
                     <div id="ab-stats-summary" class="stats-summary"></div>
                     <div id="ab-stats" class="stats-table-container"></div>
+                </div>
+            </div>
+
+            <div id="logs-tab" class="tab-content">
+                <div class="section">
+                    <div class="section-header log-header">
+                        <h3>Live logs</h3>
+                        <button
+                            type="button"
+                            class="btn btn-secondary btn-sm"
+                            onclick="clearLogs()"
+                        >
+                            Clear
+                        </button>
+                    </div>
+                    <p>
+                        Live output from the bot process &mdash; the same lines
+                        shown by <code>docker logs</code>.
+                    </p>
+                    <div id="log-view" class="log-view"></div>
                 </div>
             </div>
         </div>

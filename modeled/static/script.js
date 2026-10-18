@@ -79,6 +79,8 @@ function setupTabs() {
         initProviderSortable();
       } else if (tabId === "defaults") {
         initDefaultModelsSortable();
+      } else if (tabId === "logs") {
+        initLogStream();
       }
     });
   });
@@ -1098,8 +1100,55 @@ async function downloadBackup() {
   }
 }
 
-async function logout() {
-  try {
+let logSource = null;
+let logStreamDown = false;
+
+function initLogStream() {
+  if (logSource || typeof EventSource === "undefined") return;
+  if (!document.getElementById("log-view")) return;
+
+  logSource = new EventSource("api/logs");
+  logSource.onopen = () => {
+    logStreamDown = false;
+  };
+  // The server sends a reset event at the start of every connection, so stale
+  // lines are dropped before the backlog is replayed.
+  logSource.addEventListener("reset", () => {
+    const view = document.getElementById("log-view");
+    if (view) view.textContent = "";
+  });
+  logSource.addEventListener("line", (event) => appendLogLine(event.data));
+  logSource.onerror = () => {
+    // EventSource reconnects on its own; avoid spamming a line per retry.
+    if (logStreamDown) return;
+    logStreamDown = true;
+    appendLogLine("--- log stream disconnected, reconnecting... ---");
+  };
+}
+
+function appendLogLine(text) {
+  const view = document.getElementById("log-view");
+  if (!view) return;
+  const atBottom =
+    view.scrollTop + view.clientHeight >= view.scrollHeight - 24;
+  const line = document.createElement("div");
+  line.className = "log-line";
+  line.textContent = text;
+  view.appendChild(line);
+  while (view.childElementCount > 2000) {
+    view.removeChild(view.firstChild);
+  }
+  if (atBottom) {
+    view.scrollTop = view.scrollHeight;
+  }
+}
+
+function clearLogs() {
+  const view = document.getElementById("log-view");
+  if (view) view.textContent = "";
+}
+
+async function logout() {  try {
     await fetch("logout", { method: "POST" });
   } catch (error) {
     console.error("Error logging out:", error);
