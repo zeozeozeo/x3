@@ -104,15 +104,6 @@ type RetrieveResult struct {
 
 // Retrieve returns up to DefaultTopK world facts from this channel for prompt
 // injection.
-//
-// Lexical BM25 matching is the primary path. It is free, local, deterministic
-// and it matches the common case: people refer to world facts using the same
-// rare words the facts contain. Only when a message shares no token with any
-// stored fact does it fall back to embedding similarity, and only when
-// embedding also fails does it fall back to recency.
-//
-// All paths are scoped to channelKey, so memories never leak across channels
-// and never leave their channel.
 func Retrieve(ctx context.Context, channelKey, query string) []RetrieveResult {
 	if strings.TrimSpace(channelKey) == "" || strings.TrimSpace(query) == "" {
 		return nil
@@ -262,12 +253,6 @@ func selectEmbedding(ctx context.Context, channelKey, query string, entries []db
 // fallbackKeep applies the embedding fallback's relative rule to similarity
 // scores ordered best-first, returning the indices to inject plus a short
 // reason for logging.
-//
-// An absolute gate is deliberately avoided: the useful cutoff depends on the
-// embedding model and on how many facts a channel has accumulated, so the same
-// number is either far too strict or far too loose depending on the channel.
-// Instead the best hit must clear a loose floor and, once a channel holds more
-// than one fact, must also stand out above the channel's own median.
 func fallbackKeep(sims []float64) ([]int, string) {
 	if len(sims) == 0 {
 		return nil, "no-vector-hits"

@@ -53,21 +53,6 @@ func planReindex(modelName string, meta db.WorldIndexMeta, metaOK bool, tableDim
 }
 
 // Reindex repairs the vector index so every stored fact can be retrieved again.
-//
-// Vectors are tied to one embedding model: a vec0 column has a fixed width, so
-// changing the model leaves every stored vector unusable, and a fact that was
-// stored without an embedding has no vector to begin with. Reindex rebuilds the
-// vector table when the width changed and re-embeds every fact that has no
-// vector.
-//
-// It does nothing, and makes no embedding request, when there is nothing to do.
-// That is the normal case: the model and dimension that produced the stored
-// vectors are recorded, so a healthy index costs one local read. A request is
-// only spent when the configured model is new to the database or has actually
-// changed.
-//
-// It is a no-op when no embedding account is configured, which is not an error:
-// lexical retrieval needs no network.
 func Reindex(ctx context.Context) (int, error) {
 	reindexMu.Lock()
 	defer reindexMu.Unlock()
