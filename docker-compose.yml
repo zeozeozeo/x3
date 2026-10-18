@@ -8,8 +8,16 @@ services:
       - .:/app
       - /var/run/docker.sock:/var/run/docker.sock
     working_dir: /app
+    # The app's HTTP servers bind to the container network and are published on
+    # the host loopback only. That lets cloudflared (running on the host) reach
+    # them while keeping 6741/6743 closed to the internet.
+    ports:
+      - "127.0.0.1:6741:6741"
+      - "127.0.0.1:6743:6743"
     environment:
       - X3_GOTENBERG_URL=http://gotenberg:3000
+      - X3_MODELED_BIND_ADDR=0.0.0.0:6741
+      - X3_SITE_BIND_ADDR=0.0.0.0:6743
     depends_on:
       - gotenberg
   gotenberg:

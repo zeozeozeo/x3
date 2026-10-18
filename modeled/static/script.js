@@ -23,6 +23,11 @@ function setupEventListeners() {
   // Backup button
   document.getElementById("backupBtn").addEventListener("click", openBackupModal);
 
+  // Log out button
+  document
+    .getElementById("logoutBtn")
+    .addEventListener("click", logout);
+
   // Version edit button
   document
     .getElementById("editVersionBtn")
@@ -81,7 +86,8 @@ function setupTabs() {
 
 async function loadConfig() {
   try {
-    const response = await fetch("/api/models");
+    const response = await fetch("api/models");
+    if (handleUnauthorized(response)) return;
     if (!response.ok) throw new Error("Failed to load configuration");
 
     currentConfig = await response.json();
@@ -267,7 +273,8 @@ async function loadABStats() {
   const container = document.getElementById("ab-stats");
   if (!container) return;
   try {
-    const response = await fetch("/api/ab-stats");
+    const response = await fetch("api/ab-stats");
+    if (handleUnauthorized(response)) return;
     if (!response.ok) throw new Error("Failed to load A/B statistics");
     renderABStats(await response.json());
   } catch (error) {
@@ -916,7 +923,7 @@ function deleteModel() {
 
 async function saveConfig() {
   try {
-    const response = await fetch("/api/models/save", {
+    const response = await fetch("api/models/save", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -924,6 +931,7 @@ async function saveConfig() {
       body: JSON.stringify(currentConfig),
     });
 
+    if (handleUnauthorized(response)) return;
     if (!response.ok) {
       const error = await response.text();
       throw new Error(error);
@@ -1057,12 +1065,13 @@ async function downloadBackup() {
   }
 
   try {
-    const response = await fetch("/api/backup", {
+    const response = await fetch("api/backup", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ token }),
     });
 
+    if (handleUnauthorized(response)) return;
     if (!response.ok) {
       const errText = await response.text();
       throw new Error(errText || "Invalid download token");
@@ -1087,6 +1096,25 @@ async function downloadBackup() {
   } catch (error) {
     showStatus(`Backup failed: ${error.message}`, "error");
   }
+}
+
+async function logout() {
+  try {
+    await fetch("logout", { method: "POST" });
+  } catch (error) {
+    console.error("Error logging out:", error);
+  }
+  window.location.href = "login";
+}
+
+// Redirects to the login page when the session has expired. Returns true when
+// the response was a 401 so callers can stop processing.
+function handleUnauthorized(response) {
+  if (response.status === 401) {
+    window.location.href = "login";
+    return true;
+  }
+  return false;
 }
 
 function escapeHtml(unsafe) {

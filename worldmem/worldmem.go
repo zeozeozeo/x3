@@ -34,38 +34,9 @@ const (
 	// DefaultMaxTokens budgets retrieved facts so they cannot crowd out the
 	// conversation.
 	DefaultMaxTokens = 1000
-	// DefaultFetchK is how many vector candidates the embedding fallback pulls
-	// before applying its relative rule.
-	DefaultFetchK = 8
-	// FallbackTopK caps how many facts the embedding fallback may inject. It is
-	// deliberately smaller than DefaultTopK: the fallback only runs when
-	// lexical matching found nothing, so it should hedge rather than flood.
-	FallbackTopK = 3
-	// FallbackMinSimilarity is a loose floor for the embedding fallback. Below
-	// it nothing is plausibly related and injecting a fact would be noise.
-	FallbackMinSimilarity = 0.40
-	// FallbackKeepMargin keeps fallback candidates within this cosine distance
-	// of the best hit.
-	FallbackKeepMargin = 0.10
-	// FallbackMinLead / FallbackLeadMinDocs express the relative rule: as soon
-	// as a channel holds more than one fact, the best hit must stand out this
-	// far above the channel's median similarity before anything is injected.
-	//
-	// This is the part that replaced a fixed absolute gate. Absolute cosine
-	// thresholds do not transfer: the same value is far too strict for one
-	// embedding model and far too loose for another, and it also drifts as a
-	// channel accumulates facts. A lead over the channel's own median
-	// self-calibrates instead, and in practice separates unrelated chatter from
-	// genuine questions where no single absolute cutoff did.
-	FallbackMinLead     = 0.15
-	FallbackLeadMinDocs = 2
-	// FallbackRecentCount is how many recent facts the error path injects.
-	FallbackRecentCount = 3
 
 	// EmbedTimeout bounds a single embedding account attempt.
 	EmbedTimeout = 30 * time.Second
-	// RetrieveTimeout bounds the embedding fallback so chat never stalls.
-	RetrieveTimeout = 8 * time.Second
 
 	// MaxWorldRunes caps a single stored fact.
 	MaxWorldRunes = 2000

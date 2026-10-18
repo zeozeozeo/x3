@@ -201,8 +201,9 @@ func main() {
 	}
 
 	// start GUI server
+	modelEditorServer := modeled.NewServer(dbPath)
+	slog.Info("model editor available", "url", modelEditorServer.URL())
 	go func() {
-		modelEditorServer := modeled.NewServer(dbPath)
 		if err := modelEditorServer.Start(); err != nil && err != http.ErrServerClosed {
 			slog.Error("GUI server error", "err", err)
 		}
@@ -219,7 +220,6 @@ func main() {
 	}
 
 	slog.Info("x3 is running. press ctrl+c to exit")
-	slog.Info("GUI editor available at http://localhost" + modeled.Port)
 	s := make(chan os.Signal, 1)
 	signal.Notify(s, syscall.SIGINT, syscall.SIGTERM, os.Interrupt)
 	<-s

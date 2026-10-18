@@ -49,3 +49,5 @@ Use Go’s built-in `testing` package. Name tests `TestThing` and table-driven c
 ## Security & Configuration
 
 Use `.env.example` as the configuration reference and keep credentials in `.env` or the deployment environment. Treat `x3.db`, model-provider settings, Discord tokens, Matrix credentials, and external service URLs as sensitive. Preserve SQLite migrations and test database behavior when changing `db/`.
+
+The model editor (`modeled/`) is an admin interface. It is guarded by `X3_MODELED_SECRET_PATH` (an unguessable URL prefix), a login page backed by `X3_MODELED_USER`/`X3_MODELED_PASSWORD`, and an HMAC-signed session cookie (`X3_MODELED_SESSION_SECRET`). It binds to `X3_MODELED_BIND_ADDR` (loopback by default). Do not add routes that bypass `Server.protect`, do not log passwords or session tokens, and keep any new endpoints behind the same guard. The `/site` generator is public by design and relies on per-site capability tokens instead.

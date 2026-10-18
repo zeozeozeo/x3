@@ -108,7 +108,7 @@ func worldEntriesForPrompt(channelKey, query string, disabled bool) []string {
 	if n == 0 {
 		return nil
 	}
-	results := worldmem.Retrieve(context.Background(), channelKey, query)
+	results := worldmem.Retrieve(channelKey, query)
 	if len(results) == 0 {
 		return nil
 	}

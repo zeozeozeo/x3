@@ -103,14 +103,23 @@ type RetrieveResult struct {
 }
 
 // Retrieve returns up to DefaultTopK world facts from this channel for prompt
-// injection.
-func Retrieve(ctx context.Context, channelKey, query string) []RetrieveResult {
+// injection, ranked by BM25 lexical match.
+//
+// Retrieval is lexical-only, deliberately. BM25 is free, local and
+// deterministic, it needs no network call, and world facts are built from
+// exactly the rare words people use when they ask about them. It also means
+// reading memories never competes with chat for embedding quota.
+//
+// The consequence is deliberate too: a message that shares no content token
+// with any stored fact retrieves nothing, rather than guessing at a near match.
+// Embeddings are still produced when facts are *stored*, because they power
+// duplicate detection.
+func Retrieve(channelKey, query string) []RetrieveResult {
 	if strings.TrimSpace(channelKey) == "" || strings.TrimSpace(query) == "" {
 		return nil
 	}
-	// A message with no content tokens has no intent to recall anything. It
-	// cannot match lexically, and the embedding fallback is exactly the
-	// unreliable path, so do not push canon at pure chatter ("ok", "?!").
+	// A message with no content tokens has no intent to recall anything
+	// ("ok", "?!"), so do not push canon at pure chatter.
 	if len(Tokenize(query)) == 0 {
 		return nil
 	}
@@ -124,21 +133,14 @@ func Retrieve(ctx context.Context, channelKey, query string) []RetrieveResult {
 		return nil
 	}
 
-	if out := selectLexical(entries, query); len(out) > 0 {
-		slog.Debug("worldmem retrieve: lexical match",
-			"channel", channelKey, "candidates", len(entries), "kept", len(out))
-		touchRetrieved(out)
-		return out
-	}
-
-	out, reason := selectEmbedding(ctx, channelKey, query, entries)
+	out := selectLexical(entries, query)
 	if len(out) == 0 {
-		slog.Debug("worldmem retrieve: nothing kept",
-			"channel", channelKey, "candidates", len(entries), "path", reason)
+		slog.Debug("worldmem retrieve: no lexical match",
+			"channel", channelKey, "candidates", len(entries))
 		return nil
 	}
-	slog.Debug("worldmem retrieve: embedding fallback",
-		"channel", channelKey, "candidates", len(entries), "kept", len(out), "path", reason)
+	slog.Debug("worldmem retrieve: lexical match",
+		"channel", channelKey, "candidates", len(entries), "kept", len(out))
 	touchRetrieved(out)
 	return out
 }
@@ -189,101 +191,6 @@ func selectLexical(entries []db.WorldEntry, query string) []RetrieveResult {
 	return out
 }
 
-// selectEmbedding is the semantic fallback. It applies a relative rule rather
-// than a fixed absolute gate, because the useful absolute threshold depends on
-// both the embedding model and how many facts a channel has accumulated.
-// The returned string is a short reason, for logging.
-func selectEmbedding(ctx context.Context, channelKey, query string, entries []db.WorldEntry) ([]RetrieveResult, string) {
-	if !EmbeddingsAvailable() {
-		// No embedding account is configured: lexical matching is the whole
-		// retrieval story. Return quietly rather than logging an error on every
-		// message.
-		return nil, "no-embedding-accounts"
-	}
-
-	ctx, cancel := context.WithTimeout(ctx, RetrieveTimeout)
-	defer cancel()
-
-	if len(query) > 2000 {
-		query = query[:2000]
-	}
-	qvec, err := EmbedOne(ctx, query)
-	if err != nil {
-		slog.Warn("worldmem retrieve: embedding failed, using recency fallback", "channel", channelKey, "err", err)
-		return recentFallback(channelKey, FallbackRecentCount), "embed-error"
-	}
-
-	// Fetch every fact in the channel (channels are small) so the relative rule
-	// can compare the best hit against the channel's own distribution.
-	k := max(len(entries), DefaultFetchK)
-	hits, err := db.SearchWorldSimilar(channelKey, qvec, k)
-	if err != nil {
-		slog.Warn("worldmem retrieve: vector search failed, using recency fallback", "channel", channelKey, "err", err)
-		return recentFallback(channelKey, FallbackRecentCount), "search-error"
-	}
-	if len(hits) == 0 {
-		return nil, "no-vector-hits"
-	}
-
-	sims := make([]float64, len(hits))
-	for i, h := range hits {
-		// L2 distance on unit vectors -> cosine: cos = 1 - dist^2/2.
-		sims[i] = 1 - (h.Distance*h.Distance)/2
-	}
-
-	keep, reason := fallbackKeep(sims)
-	if len(keep) == 0 {
-		return nil, reason
-	}
-
-	var out []RetrieveResult
-	usedTokens := 0
-	for _, i := range keep {
-		h := hits[i]
-		tokens := entryTokens(h.Entry)
-		if len(out) > 0 && usedTokens+tokens > DefaultMaxTokens {
-			break
-		}
-		usedTokens += tokens
-		out = append(out, RetrieveResult{Text: h.Entry.Text, ID: h.Entry.ID})
-	}
-	return out, "ok"
-}
-
-// fallbackKeep applies the embedding fallback's relative rule to similarity
-// scores ordered best-first, returning the indices to inject plus a short
-// reason for logging.
-func fallbackKeep(sims []float64) ([]int, string) {
-	if len(sims) == 0 {
-		return nil, "no-vector-hits"
-	}
-	best := sims[0]
-	if best < FallbackMinSimilarity {
-		return nil, "below-floor"
-	}
-	if len(sims) >= FallbackLeadMinDocs {
-		median := sims[len(sims)/2]
-		if best-median < FallbackMinLead {
-			return nil, "no-lead-over-median"
-		}
-	}
-	cutoff := best - FallbackKeepMargin
-	var keep []int
-	for i, sim := range sims {
-		if sim < cutoff {
-			break
-		}
-		keep = append(keep, i)
-		if len(keep) >= FallbackTopK {
-			break
-		}
-	}
-	if len(keep) == 0 {
-		return nil, "no-kept"
-	}
-	return keep, "ok"
-}
-
 // entryTokens prefers the stored token estimate and falls back to estimating.
 func entryTokens(e db.WorldEntry) int {
 	if e.Tokens > 0 {
@@ -300,16 +207,4 @@ func touchRetrieved(out []RetrieveResult) {
 	if err := db.TouchWorldEntries(ids); err != nil {
 		slog.Warn("worldmem retrieve: recording usage failed", "err", err)
 	}
-}
-
-func recentFallback(channelKey string, n int) []RetrieveResult {
-	entries, err := db.GetRecentWorldEntries(channelKey, n)
-	if err != nil || len(entries) == 0 {
-		return nil
-	}
-	out := make([]RetrieveResult, 0, len(entries))
-	for _, e := range entries {
-		out = append(out, RetrieveResult{Text: e.Text, ID: e.ID})
-	}
-	return out
 }

@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <meta name="robots" content="noindex, nofollow" />
+        <title>Sign in · x3</title>
+        <style>
+            :root {
+                color-scheme: dark;
+            }
+            * {
+                box-sizing: border-box;
+            }
+            body {
+                margin: 0;
+                min-height: 100vh;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                background: #1a1d24;
+                color: #e6e8eb;
+                font-family: Rubik, system-ui, -apple-system, "Segoe UI", Roboto,
+                    sans-serif;
+            }
+            .card {
+                width: min(360px, 92vw);
+                padding: 32px 28px;
+                background: #22262f;
+                border: 1px solid #2f3542;
+                border-radius: 12px;
+                box-shadow: 0 18px 50px rgba(0, 0, 0, 0.45);
+            }
+            h1 {
+                margin: 0 0 4px;
+                font-size: 20px;
+                font-weight: 600;
+            }
+            p.sub {
+                margin: 0 0 20px;
+                color: #8b93a1;
+                font-size: 13px;
+            }
+            label {
+                display: block;
+                font-size: 13px;
+                color: #b7bdc8;
+                margin: 14px 0 6px;
+            }
+            input {
+                width: 100%;
+                padding: 10px 12px;
+                border-radius: 8px;
+                border: 1px solid #39404e;
+                background: #1a1d24;
+                color: #e6e8eb;
+                font-size: 14px;
+            }
+            input:focus {
+                outline: 2px solid #4a7cff;
+                outline-offset: 1px;
+                border-color: #4a7cff;
+            }
+            button {
+                width: 100%;
+                margin-top: 22px;
+                padding: 11px 12px;
+                border: 0;
+                border-radius: 8px;
+                background: #4a7cff;
+                color: #fff;
+                font-size: 14px;
+                font-weight: 600;
+                cursor: pointer;
+            }
+            button:hover {
+                background: #3f6ee6;
+            }
+            .error {
+                margin-top: 16px;
+                padding: 10px 12px;
+                border-radius: 8px;
+                background: rgba(255, 86, 86, 0.12);
+                border: 1px solid rgba(255, 86, 86, 0.35);
+                color: #ff9b9b;
+                font-size: 13px;
+            }
+        </style>
+    </head>
+    <body>
+        <form class="card" method="post" autocomplete="off">
+            <h1>Sign in</h1>
+            <p class="sub">x3 model editor</p>
+            <label for="username">Username</label>
+            <input
+                id="username"
+                name="username"
+                type="text"
+                value="{{ .Username }}"
+                autocomplete="username"
+                required
+                autofocus
+            />
+            <label for="password">Password</label>
+            <input
+                id="password"
+                name="password"
+                type="password"
+                autocomplete="current-password"
+                required
+            />
+            {{ if .Error }}
+            <div class="error">{{ .Error }}</div>
+            {{ end }}
+            <button type="submit">Continue</button>
+        </form>
+    </body>
+</html>

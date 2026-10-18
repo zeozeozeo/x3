@@ -17,7 +17,6 @@ import (
 
 const (
 	modelsFilePath = "models.json"
-	Port           = ":6741"
 )
 
 //go:embed static/*
@@ -29,9 +28,22 @@ var templateFiles embed.FS
 type Server struct {
 	httpServer *http.Server
 	dbPath     string
+	cfg        Config
+	limiter    *loginLimiter
 }
 
 func NewServer(dbPath string) *Server {
+	return newServerWithConfig(dbPath, ConfigFromEnv())
+}
+
+func newServerWithConfig(dbPath string, cfg Config) *Server {
+	if len(cfg.SessionSecret) == 0 {
+		cfg.SessionSecret = randomBytes(32)
+	}
+	if cfg.SessionTTL <= 0 {
+		cfg.SessionTTL = defaultSessionTTL
+	}
+
 	mux := http.NewServeMux()
 
 	// Serve static files
@@ -43,17 +55,31 @@ func NewServer(dbPath string) *Server {
 	mux.HandleFunc("/api/ab-stats", handleABStats)
 	mux.HandleFunc("/", handleIndex)
 
-	server := &http.Server{
-		Addr:    Port,
-		Handler: mux,
-	}
-
 	s := &Server{
-		httpServer: server,
-		dbPath:     dbPath,
+		dbPath:  dbPath,
+		cfg:     cfg,
+		limiter: newLoginLimiter(),
 	}
 
 	mux.HandleFunc("/api/backup", s.handleBackup)
+	mux.HandleFunc("/login", s.handleLogin)
+	mux.HandleFunc("/logout", s.handleLogout)
+
+	if cfg.Password == "" {
+		slog.Warn("model editor authentication is DISABLED; set X3_MODELED_PASSWORD to enable it")
+	} else if cfg.SecretPath == "" {
+		slog.Warn("model editor has no secret path; set X3_MODELED_SECRET_PATH to hide it")
+	}
+
+	var handler http.Handler = s.protect(mux)
+	if cfg.SecretPath != "" {
+		handler = secretPathHandler(cfg.SecretPath, handler)
+	}
+
+	s.httpServer = &http.Server{
+		Addr:    cfg.BindAddr,
+		Handler: handler,
+	}
 
 	return s
 }
@@ -136,7 +162,7 @@ func (s *Server) handleBackup(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) Start() error {
-	slog.Info("Starting modeled server", "port", Port)
+	slog.Info("Starting modeled server", "addr", s.cfg.BindAddr, "url", s.URL())
 	return s.httpServer.ListenAndServe()
 }
 
