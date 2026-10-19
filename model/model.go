@@ -86,6 +86,7 @@ const (
 	inferxBaseUrl               = "https://model.inferx.net/endpoints/v1"
 	tokenharborBaseUrl          = "https://tokenharbor.ai/v1"
 	orcarouterBaseUrl           = "https://api.orcarouter.ai/v1"
+	aionBaseUrl                 = "https://api.aionlabs.ai/v1"
 )
 
 const (
@@ -135,6 +136,7 @@ const (
 	ProviderInferx       = "inferx"
 	ProviderTokenharbor  = "tokenharbor"
 	ProviderOrcarouter   = "orcarouter"
+	ProviderAion         = "aion"
 )
 
 type ModelProvider struct {
@@ -928,6 +930,8 @@ func (m Model) Client(provider string) (baseUrls []string, tokens []string, code
 		tokenEnvKey, apiVar = "X3_TOKENHARBOR_TOKEN", tokenharborBaseUrl
 	case ProviderOrcarouter:
 		tokenEnvKey, apiVar = "X3_ORCAROUTER_TOKEN", orcarouterBaseUrl
+	case ProviderAion:
+		tokenEnvKey, apiVar = "X3_AION_TOKEN", aionBaseUrl
 	default:
 		return nil, nil, nil
 	}
