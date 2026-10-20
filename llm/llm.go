@@ -660,13 +660,13 @@ func (l Llmer) convertMessages(hasVision, supportsImageURL bool, prepend, thinkP
 	}
 
 	if searchResults != "" && len(messages) > 0 {
-		messages[len(messages)-1].Content += searchResults
+		appendChatMessageText(&messages[len(messages)-1], searchResults)
 	}
 
 	// Retrieved world facts go on the tail, not in the system prompt, so a
 	// changing bible doesn't invalidate the cached prompt prefix.
 	if l.WorldBible != "" && len(messages) > 0 {
-		messages[len(messages)-1].Content += l.WorldBible
+		appendChatMessageText(&messages[len(messages)-1], l.WorldBible)
 	}
 
 	if thinkPrefill != "" {
@@ -687,6 +687,30 @@ func (l Llmer) convertMessages(hasVision, supportsImageURL bool, prepend, thinkP
 	}
 
 	return messages
+}
+
+// appendChatMessageText appends text to a message without setting both Content
+// and MultiContent, which the OpenAI message marshaller rejects. Messages with
+// image parts carry their text in a MultiContent text part, so append there.
+func appendChatMessageText(msg *openai.ChatCompletionMessage, text string) {
+	if text == "" {
+		return
+	}
+	if len(msg.MultiContent) == 0 {
+		msg.Content += text
+		return
+	}
+	for i := range msg.MultiContent {
+		if msg.MultiContent[i].Type == openai.ChatMessagePartTypeText {
+			msg.MultiContent[i].Text += text
+			return
+		}
+	}
+	// No text part yet: put one before the image parts.
+	msg.MultiContent = append([]openai.ChatMessagePart{{
+		Type: openai.ChatMessagePartTypeText,
+		Text: text,
+	}}, msg.MultiContent...)
 }
 
 // applyThinkPrefillToResponse folds an open <think> prefill into a text
