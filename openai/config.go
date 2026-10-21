@@ -45,6 +45,10 @@ type ClientConfig struct {
 	AzureModelMapperFunc func(model string) string // replace model to azure deployment name func
 	HTTPClient           HTTPDoer
 
+	// DefaultHeaders are sent with every request. They are applied after the
+	// authentication header, so they cannot be used to override it.
+	DefaultHeaders map[string]string
+
 	EmptyMessagesLimit uint
 }
 

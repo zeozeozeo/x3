@@ -27,6 +27,7 @@ import (
 	"github.com/zeozeozeo/x3/markov"
 	"github.com/zeozeozeo/x3/model"
 	"github.com/zeozeozeo/x3/openai"
+	"github.com/zeozeozeo/x3/opencode"
 	"github.com/zeozeozeo/x3/persona"
 
 	"github.com/zeozeozeo/go-aiml"
@@ -171,6 +172,11 @@ const (
 var (
 	errNoModelsForCompletion = errors.New("no models provided for completion")
 )
+
+// ErrNoClientConfig is returned when a provider has no usable configuration,
+// for example when its API key is not set. Such a provider is skipped without
+// being counted as a failure.
+var ErrNoClientConfig = errors.New("no valid client configurations")
 
 func ErrNoModelsForCompletion() error {
 	return errNoModelsForCompletion
@@ -1103,6 +1109,11 @@ const (
 	toolNameCodeInterp    = "code_interpreter"
 )
 
+// openCodeGateToolUnavailableResult is the tool result sent when a model
+// calls the "read" tool the OpenCode Zen free tier gate requires. The tool is
+// a stub, so the model is told to answer without it.
+const openCodeGateToolUnavailableResult = "The read tool is not available in this environment. Answer using only the conversation."
+
 var webSearchTool = openai.Tool{
 	Type: openai.ToolTypeFunction,
 	Function: &openai.FunctionDefinition{
@@ -1296,7 +1307,14 @@ func (l *Llmer) executeSearchTool(ctx context.Context, name, query string, searc
 // createChatCompletionWithTTFT intentionally uses the non-streaming endpoint.
 // The completion router retains the TTFT return value for compatibility, but
 // non-streaming providers are measured using the total request duration.
-func createChatCompletionWithTTFT(ctx context.Context, client *openai.Client, req openai.ChatCompletionRequest) (openai.ChatCompletionResponse, time.Duration, error) {
+//
+// The OpenCode Zen free tier is the exception: its gate only accepts streamed
+// requests, so that provider goes through the opencode package.
+func createChatCompletionWithTTFT(ctx context.Context, client *openai.Client, req openai.ChatCompletionRequest, provider string) (openai.ChatCompletionResponse, time.Duration, error) {
+	if provider == model.ProviderOpencode {
+		response, err := opencode.CreateChatCompletion(ctx, client, req)
+		return response, 0, err
+	}
 	response, err := client.CreateChatCompletion(ctx, req)
 	return response, 0, err
 }
@@ -1349,6 +1367,14 @@ func (l *Llmer) requestCompletionInternal2(
 		}
 	}
 
+	// The OpenCode Zen free tier gate requires a tool named "read" in the
+	// body of every request, including the follow-up requests that follow a
+	// tool call.
+	isOpenCode := provider == model.ProviderOpencode
+	if isOpenCode {
+		req.Tools = opencode.EnsureGateTool(req.Tools)
+	}
+
 	completionStart := time.Now()
 	ctx, cancel := context.WithDeadline(ctx, completionStart.Add(5*time.Minute))
 	defer cancel()
@@ -1376,7 +1402,7 @@ func (l *Llmer) requestCompletionInternal2(
 		}
 		var err error
 		var requestTimeToFirstToken time.Duration
-		response, requestTimeToFirstToken, err = createChatCompletionWithTTFT(ctx, client, req)
+		response, requestTimeToFirstToken, err = createChatCompletionWithTTFT(ctx, client, req, provider)
 		if timeToFirstToken == 0 {
 			timeToFirstToken = requestTimeToFirstToken
 		}
@@ -1415,7 +1441,7 @@ func (l *Llmer) requestCompletionInternal2(
 		}
 		usage = usage.Add(currentUsage)
 
-		if !nativeToolCalling || len(message.ToolCalls) == 0 {
+		if (!nativeToolCalling && !isOpenCode) || len(message.ToolCalls) == 0 {
 			break
 		}
 		if toolDepth >= 3 {
@@ -1434,12 +1460,21 @@ func (l *Llmer) requestCompletionInternal2(
 			ToolCalls:    toolCalls,
 			ExtraContent: message.ExtraContent, // Google requires that we pass encrypted thought signatures forward
 		})
-		req.Tools = nil
-		req.ToolChoice = nil
+		if isOpenCode {
+			// The gate tool has to stay in the body of the next request.
+			req.Tools = opencode.EnsureGateTool(req.Tools)
+		} else {
+			req.Tools = nil
+			req.ToolChoice = nil
+		}
 		nativeToolCalling = false
 		for i, call := range toolCalls {
 			var results string
-			if call.Function.Name == toolNameCodeInterp {
+			if isOpenCode && call.Function.Name == opencode.GateToolName {
+				// The gate tool is a stub, the bot cannot read files.
+				slog.Info("opencode gate tool called, answering as unavailable", "model", m.Name, "provider", provider)
+				results = openCodeGateToolUnavailableResult
+			} else if call.Function.Name == toolNameCodeInterp {
 				args := parseCodeToolArguments(call.Function.Arguments)
 				slog.Info("executing native tool call", "tool", call.Function.Name, "language", args.Language, "code_len", len(args.Code))
 				results = l.executeCodeTool(ctx, args.Language, args.Code)
@@ -1549,7 +1584,7 @@ func (l *Llmer) requestCompletionInternal(
 
 	baseUrls, tokens, codenames := m.Client(provider)
 	if len(baseUrls) == 0 || len(tokens) == 0 || len(codenames) == 0 {
-		return "", Usage{}, 0, fmt.Errorf("no valid client configurations for provider %s", provider)
+		return "", Usage{}, 0, fmt.Errorf("%w for provider %s", ErrNoClientConfig, provider)
 	}
 
 	var lastErr error
@@ -1570,6 +1605,11 @@ func (l *Llmer) requestCompletionInternal(
 			if provider == model.ProviderGithub { // for github we need an azure config, idfk why
 				config = openai.DefaultAzureConfig(token, baseUrl)
 				config.APIType = openai.APITypeOpenAI
+			}
+			if provider == model.ProviderOpencode {
+				version := model.OpenCodeVersion()
+				config.DefaultHeaders = opencode.Headers(version)
+				slog.Info("using opencode free tier client", "version", version, "baseUrl", baseUrl)
 			}
 			client := openai.NewClientWithConfig(config)
 
@@ -1846,6 +1886,7 @@ func (l *Llmer) RequestCompletionWithThinkPrefill(models []model.Model, settings
 		slog.Info("attempting completion with model", "model", m.Name)
 		for _, provider := range model.ProvidersForModel(m, m.Reasoning && settings.Reasoning) {
 			adaptiveFallbackTriggered := false
+			providerSkipped := false
 			for retries := range 3 {
 				slog.Info("requesting completion", "model", m.Name, "provider", provider.Name, "providerErrors", provider.Errors, "retries", retries, "adaptive", model.AdaptiveRouteDescribe(m))
 
@@ -1865,6 +1906,13 @@ func (l *Llmer) RequestCompletionWithThinkPrefill(models []model.Model, settings
 				}
 
 				if err != nil {
+					if errors.Is(err, ErrNoClientConfig) {
+						// The provider is not configured (missing API key);
+						// skip it without counting a failure.
+						slog.Info("skipping unconfigured provider", "model", m.Name, "provider", provider.Name)
+						providerSkipped = true
+						break
+					}
 					// A cancelled caller is not evidence that this provider is unhealthy.
 					failure := model.ProviderFailureResult{}
 					if ctx.Err() == nil {
@@ -1900,6 +1948,9 @@ func (l *Llmer) RequestCompletionWithThinkPrefill(models []model.Model, settings
 
 				slog.Info("request successful", "model", m.Name, "provider", provider.Name, "usage", usage.String())
 				return res, usage, nil // return on success
+			}
+			if providerSkipped {
+				continue
 			}
 			if adaptiveFallbackTriggered {
 				slog.Info("adaptive provider failed; trying fallback", "provider", provider.Name, "model", m.Name)

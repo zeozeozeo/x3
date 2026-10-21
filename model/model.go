@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/tiktoken-go/tokenizer"
+	"github.com/zeozeozeo/x3/opencode"
 )
 
 // Helper function to split env vars and filter empty strings
@@ -74,6 +75,7 @@ const (
 	deepseekBaseURL             = "https://api.deepseek.com"
 	mistralBaseURL              = "https://api.mistral.ai/v1"
 	zenBaseURL                  = "https://opencode.ai/zen/v1"
+	opencodeBaseURL             = "https://opencode.ai/zen/v1"
 	mimoBaseURL                 = "https://token-plan-sgp.xiaomimimo.com/v1"
 	makoraBaseURL               = "https://inference.makora.com/glm-5-1-fp8/v1"
 	openferenceBaseURL          = "https://api.openference.com/v1"
@@ -126,7 +128,8 @@ const (
 	ProviderZenmux       = "zenmux"
 	ProviderDeepseek     = "deepseek"
 	ProviderMistral      = "mistral"
-	ProviderZen          = "zen" // OpenCode Zen
+	ProviderZen          = "zen"      // OpenCode Zen
+	ProviderOpencode     = "opencode" // OpenCode Zen free tier
 	ProviderMiMo         = "mimo"
 	ProviderMakora       = "makora"
 	ProviderOpenference  = "openference"
@@ -272,6 +275,7 @@ var (
 		{Name: ProviderDeepseek},
 		{Name: ProviderMistral},
 		{Name: ProviderZen},
+		{Name: ProviderOpencode},
 		{Name: ProviderMiMo},
 		{Name: ProviderMakora},
 		{Name: ProviderOpenference},
@@ -399,6 +403,14 @@ func LoadModelsFromJSONData(data []byte) error {
 
 func ProviderUsesNativeToolCalling(provider string) bool {
 	return providerSettings[provider].NativeToolCalling
+}
+
+func OpenCodeVersion() string {
+	version := strings.TrimSpace(os.Getenv("X3_OPENCODE_VERSION"))
+	if version == "" {
+		return opencode.DefaultVersion
+	}
+	return version
 }
 
 func resetProviderScore() {
@@ -912,6 +924,14 @@ func (m Model) Client(provider string) (baseUrls []string, tokens []string, code
 		tokenEnvKey, apiVar = "X3_MISTRAL_TOKEN", mistralBaseURL
 	case ProviderZen:
 		tokenEnvKey, apiVar = "X3_ZEN_TOKEN", zenBaseURL
+	case ProviderOpencode:
+		tokens = getEnvList("X3_OPENCODE_TOKEN")
+		if len(tokens) == 0 {
+			return nil, nil, nil
+		}
+		baseUrls = []string{opencodeBaseURL}
+		SortTokensByError(tokens)
+		return
 	case ProviderMiMo:
 		tokenEnvKey, apiVar = "X3_MIMO_TOKEN", mimoBaseURL
 	case ProviderMakora:

@@ -200,6 +200,13 @@ func (c *Client) setCommonHeaders(req *http.Request) {
 	if c.config.OrgID != "" {
 		req.Header.Set("OpenAI-Organization", c.config.OrgID)
 	}
+
+	for key, value := range c.config.DefaultHeaders {
+		if key == "" {
+			continue
+		}
+		req.Header.Set(key, value)
+	}
 }
 
 func isFailureStatusCode(resp *http.Response) bool {
