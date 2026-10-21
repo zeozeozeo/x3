@@ -19,12 +19,16 @@ services:
       # internet cannot. Never publish them on 0.0.0.0.
       - "127.0.0.1:6741:6741" # model editor (secret path + login)
       - "127.0.0.1:6743:6743" # /site generator (exposed publicly via the tunnel)
+      # Local OpenAI-compatible API. Published on the LAN so other devices can
+      # use it; it always requires a bearer key (X3_OPENAI_PROXY_API_KEYS).
+      - "6745:6745"
     environment:
       - X3_GOTENBERG_URL=http://gotenberg:3000
       # Bind on the container network so the published ports above work. These
       # override the loopback defaults from .env.
       - X3_MODELED_BIND_ADDR=0.0.0.0:6741
       - X3_SITE_BIND_ADDR=0.0.0.0:6743
+      - X3_OPENAI_PROXY_BIND_ADDR=0.0.0.0:6745
     depends_on:
       - gotenberg
 

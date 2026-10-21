@@ -25,6 +25,7 @@ import (
 	"github.com/zeozeozeo/x3/imagedesc"
 	"github.com/zeozeozeo/x3/logstream"
 	"github.com/zeozeozeo/x3/modeled"
+	"github.com/zeozeozeo/x3/openaiapi"
 	"github.com/zeozeozeo/x3/site"
 	"github.com/zeozeozeo/x3/worldmem"
 )
@@ -212,6 +213,14 @@ func main() {
 	go func() {
 		if err := siteServer.Start(); err != nil && err != http.ErrServerClosed {
 			slog.Error("site server error", "err", err)
+		}
+	}()
+
+	openAIProxy := openaiapi.NewServerFromEnv()
+	slog.Info("openai proxy available", "url", openAIProxy.URL()+"/v1")
+	go func() {
+		if err := openAIProxy.Start(); err != nil && err != http.ErrServerClosed {
+			slog.Error("openai proxy server error", "err", err)
 		}
 	}()
 

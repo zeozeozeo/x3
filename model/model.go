@@ -236,6 +236,10 @@ var (
 
 	modelByName = map[string]Model{}
 
+	// modelByCommand maps the short codename (the /slash-command name, the
+	// `command` field in models.json) to a model.
+	modelByCommand = map[string]Model{}
+
 	providerSettings = map[string]ProviderSettings{}
 
 	// default errors are set for default order of trial
@@ -395,6 +399,15 @@ func LoadModelsFromJSONData(data []byte) error {
 	modelByName = make(map[string]Model)
 	for _, m := range AllModels {
 		modelByName[m.Name] = m
+	}
+
+	// Update modelByCommand map
+	modelByCommand = make(map[string]Model)
+	for _, m := range AllModels {
+		if m.Command == "" {
+			continue
+		}
+		modelByCommand[m.Command] = m
 	}
 	resetAdaptiveProviderRoutes()
 
@@ -772,6 +785,27 @@ func GetModelsByNames(names []string) []Model {
 	models := make([]Model, len(names))
 	for i, name := range names {
 		models[i] = GetModelByName(name)
+	}
+	return models
+}
+
+// GetModelByCommand looks a model up by its short codename (the `command`
+// field in models.json, e.g. "dsflash"). It reports whether the codename is
+// known; unlike GetModelByName it never falls back to a default model.
+func GetModelByCommand(command string) (Model, bool) {
+	m, ok := modelByCommand[command]
+	return m, ok
+}
+
+// ModelsByCommand returns every model that has a short codename, in the order
+// they appear in models.json.
+func ModelsByCommand() []Model {
+	models := make([]Model, 0, len(modelByCommand))
+	for _, m := range AllModels {
+		if m.Command == "" {
+			continue
+		}
+		models = append(models, m)
 	}
 	return models
 }

@@ -305,6 +305,40 @@ type ChatCompletionRequest struct {
 	ChatTemplateKwargs map[string]any `json:"chat_template_kwargs,omitempty"`
 	ProviderOptions    map[string]any `json:"providerOptions,omitempty"`
 	Private            bool           `json:"private,omitempty"`
+	// Extra holds additional top-level parameters that are not part of the
+	// OpenAI chat completion schema. They are merged into the request body
+	// verbatim when the request is marshalled. This is used by the local
+	// OpenAI-compatible proxy to forward parameters it does not know about.
+	Extra map[string]any `json:"-"`
+}
+
+// MarshalJSON marshals the request, merging any Extra parameters into the
+// resulting object. Keys that are already present in the request body are
+// never overwritten.
+func (r ChatCompletionRequest) MarshalJSON() ([]byte, error) {
+	type alias ChatCompletionRequest
+	data, err := json.Marshal(alias(r))
+	if err != nil {
+		return nil, err
+	}
+	if len(r.Extra) == 0 {
+		return data, nil
+	}
+	var merged map[string]json.RawMessage
+	if err := json.Unmarshal(data, &merged); err != nil {
+		return nil, err
+	}
+	for key, value := range r.Extra {
+		if _, exists := merged[key]; exists {
+			continue
+		}
+		raw, err := json.Marshal(value)
+		if err != nil {
+			return nil, err
+		}
+		merged[key] = raw
+	}
+	return json.Marshal(merged)
 }
 
 type ReasoningConfig struct {
