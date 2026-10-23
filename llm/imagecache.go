@@ -1,9 +1,13 @@
 package llm
 
 import (
+	"bytes"
 	"container/list"
 	"encoding/base64"
 	"fmt"
+	"image"
+	"image/gif"
+	"image/jpeg"
 	"io"
 	"log/slog"
 	"mime"
@@ -13,6 +17,10 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	_ "image/png"
+
+	"golang.org/x/image/webp"
 )
 
 const maxFetchedImageBytes = 10 * 1024 * 1024
@@ -105,8 +113,29 @@ func buildDataURI(data []byte, sourceURL string) (string, error) {
 	}
 
 	mimeType := getMimeTypeFromExtension(ext)
-	encoded := base64.StdEncoding.EncodeToString(data)
+	animated := ext == ".gif" || ext == ".webp" || ext == ".apng"
 
+	if animated {
+		var img image.Image
+		var decErr error
+		switch ext {
+		case ".gif":
+			img, decErr = gif.Decode(bytes.NewReader(data))
+		case ".webp":
+			img, decErr = webp.Decode(bytes.NewReader(data))
+		case ".apng":
+			img, _, decErr = image.Decode(bytes.NewReader(data))
+		}
+		if decErr == nil && img != nil {
+			var buf bytes.Buffer
+			if err := jpeg.Encode(&buf, img, &jpeg.Options{Quality: 85}); err == nil {
+				encoded := base64.StdEncoding.EncodeToString(buf.Bytes())
+				return fmt.Sprintf("data:image/jpeg;base64,%s", encoded), nil
+			}
+		}
+	}
+
+	encoded := base64.StdEncoding.EncodeToString(data)
 	return fmt.Sprintf("data:%s;base64,%s", mimeType, encoded), nil
 }
 

@@ -46,6 +46,7 @@ var imageURLRegexp = regexp.MustCompile(`https?://[^\s<>"']+`)
 
 var imageURLExtensions = map[string]struct{}{
 	".png":  {},
+	".apng": {},
 	".jpg":  {},
 	".jpeg": {},
 	".webp": {},
