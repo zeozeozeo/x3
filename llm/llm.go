@@ -250,9 +250,10 @@ func applyReasoningSettings(req *openai.ChatCompletionRequest, provider, codenam
 	}
 }
 
-// truncateForPrompt caps error text embedded in prompts so a huge URL or
-// payload can never be inlined into the request.
-func truncateForPrompt(s string) string {
+// TruncateForPrompt caps error text embedded in prompts so a huge URL or
+// payload can never be inlined into the request. Also for logging URIs that
+// may be full base64 data URIs.
+func TruncateForPrompt(s string) string {
 	const maxLen = 200
 	if len(s) <= maxLen {
 		return s
@@ -666,7 +667,7 @@ func (l Llmer) convertMessages(hasVision, supportsImageURL bool, prepend, thinkP
 				if data == "" {
 					var content strings.Builder
 					content.WriteString(msg.Content)
-					fmt.Fprintf(&content, "\n<failed to fetch image `%s`>", truncateForPrompt(imageURL))
+					fmt.Fprintf(&content, "\n<failed to fetch image `%s`>", TruncateForPrompt(imageURL))
 					messages = append(messages, openai.ChatCompletionMessage{
 						Role:    msg.Role,
 						Content: content.String(),

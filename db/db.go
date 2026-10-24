@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"strings"
 
+	"github.com/zeozeozeo/x3/imagedesc"
 	_ "modernc.org/sqlite"
 	_ "modernc.org/sqlite/vec"
 )
@@ -75,7 +76,7 @@ func InitDB(dataSourceName string) error {
 		`CREATE TABLE IF NOT EXISTS users ( user_id TEXT PRIMARY KEY, last_interaction_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP )`,
 		`CREATE TABLE IF NOT EXISTS antiscam_servers ( server_id TEXT PRIMARY KEY )`,
 		`CREATE TABLE IF NOT EXISTS antiscam_channels ( guild_id TEXT NOT NULL, parent_id TEXT NOT NULL, channel_id TEXT PRIMARY KEY, prompt_message_id TEXT, UNIQUE(guild_id, parent_id) )`,
-		`CREATE TABLE IF NOT EXISTS image_descriptions ( image_url TEXT PRIMARY KEY, description TEXT, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP )`,
+		`CREATE TABLE IF NOT EXISTS image_descriptions ( image_hash TEXT PRIMARY KEY, description TEXT, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP )`,
 		`CREATE TABLE IF NOT EXISTS user_cache ( user_id TEXT PRIMARY KEY, cache BLOB )`,
 		`CREATE TABLE IF NOT EXISTS link_metadata ( url TEXT PRIMARY KEY, metadata BLOB, fetched_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP )`,
 		`CREATE TABLE IF NOT EXISTS site_sessions ( site_id TEXT PRIMARY KEY, creator_id TEXT NOT NULL, discord_message_id TEXT, expires_at TEXT NOT NULL, data BLOB NOT NULL )`,
@@ -95,6 +96,10 @@ func InitDB(dataSourceName string) error {
 
 	if err := migrateSiteSessionsSchema(); err != nil {
 		return fmt.Errorf("failed to migrate site_sessions schema: %w", err)
+	}
+
+	if err := migrateImageDescriptionsSchema(DB); err != nil {
+		return fmt.Errorf("failed to migrate image_descriptions schema: %w", err)
 	}
 
 	// Ensure global_stats has one row
@@ -174,4 +179,110 @@ func migrateSiteSessionsSchema() error {
 	}
 	err = tx.Commit()
 	return err
+}
+
+// migrateImageDescriptionsSchema rekeys image_descriptions by a SHA-256 of
+// the image URI (imagedesc.DescriptionKey) so multi-megabyte base64 data
+// URIs never become row keys. Legacy rows keyed by a raw data: URI are
+// dropped, not rehashed: they can only come from the Matrix image path
+// before it could actually send images, so their descriptions were generated
+// from a "failed to fetch" placeholder and are worthless. URL-keyed rows are
+// rehashed in place. The database is vacuumed afterwards to reclaim the
+// freed space.
+func migrateImageDescriptionsSchema(conn *sql.DB) error {
+	hasLegacyColumn := false
+	rows, err := conn.Query(`PRAGMA table_info(image_descriptions)`)
+	if err != nil {
+		return err
+	}
+	for rows.Next() {
+		var cid int
+		var name string
+		var colType string
+		var notNull int
+		var defaultValue sql.NullString
+		var pk int
+		if err := rows.Scan(&cid, &name, &colType, &notNull, &defaultValue, &pk); err != nil {
+			rows.Close()
+			return err
+		}
+		if strings.EqualFold(name, "image_hash") {
+			rows.Close()
+			return nil // already migrated
+		}
+		if strings.EqualFold(name, "image_url") {
+			hasLegacyColumn = true
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	rows.Close()
+	if !hasLegacyColumn {
+		return nil
+	}
+
+	// URLs (Discord CDN links etc.) are short, so collecting their rowids and
+	// hashes up front is cheap; data: URIs are never read into memory at all.
+	type rekey struct {
+		rowid int64
+		hash  string
+	}
+	var rekeys []rekey
+	rows, err = conn.Query(`SELECT rowid, image_url FROM image_descriptions WHERE image_url NOT LIKE 'data:%'`)
+	if err != nil {
+		return err
+	}
+	for rows.Next() {
+		var rowid int64
+		var imageURL string
+		if err := rows.Scan(&rowid, &imageURL); err != nil {
+			rows.Close()
+			return err
+		}
+		rekeys = append(rekeys, rekey{rowid: rowid, hash: imagedesc.DescriptionKey(imageURL)})
+	}
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return err
+	}
+	rows.Close()
+
+	tx, err := conn.Begin()
+	if err != nil {
+		return err
+	}
+	defer func() {
+		if err != nil {
+			_ = tx.Rollback()
+		}
+	}()
+
+	var dropped int64
+	result, err := tx.Exec(`DELETE FROM image_descriptions WHERE image_url LIKE 'data:%'`)
+	if err != nil {
+		return err
+	}
+	if n, err := result.RowsAffected(); err == nil {
+		dropped = n
+	}
+	for _, rk := range rekeys {
+		if _, err = tx.Exec(`UPDATE image_descriptions SET image_url = ? WHERE rowid = ?`, rk.hash, rk.rowid); err != nil {
+			return err
+		}
+	}
+	if _, err = tx.Exec(`ALTER TABLE image_descriptions RENAME COLUMN image_url TO image_hash`); err != nil {
+		return err
+	}
+	if err = tx.Commit(); err != nil {
+		return err
+	}
+
+	slog.Info("migrated image_descriptions to hashed keys", "rekeyed", len(rekeys), "dropped", dropped)
+
+	// compaction is best-effort: the schema is already correct without it
+	if _, err := conn.Exec(`VACUUM`); err != nil {
+		slog.Warn("failed to vacuum database after image_descriptions migration", "err", err)
+	}
+	return nil
 }
