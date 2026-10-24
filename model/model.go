@@ -89,6 +89,7 @@ const (
 	tokenharborBaseUrl          = "https://tokenharbor.ai/v1"
 	orcarouterBaseUrl           = "https://api.orcarouter.ai/v1"
 	aionBaseUrl                 = "https://api.aionlabs.ai/v1"
+	unorouterBaseUrl            = "https://api.unorouter.com/v1"
 )
 
 const (
@@ -140,6 +141,7 @@ const (
 	ProviderTokenharbor  = "tokenharbor"
 	ProviderOrcarouter   = "orcarouter"
 	ProviderAion         = "aion"
+	ProviderUnorouter    = "unorouter"
 )
 
 type ModelProvider struct {
@@ -986,6 +988,8 @@ func (m Model) Client(provider string) (baseUrls []string, tokens []string, code
 		tokenEnvKey, apiVar = "X3_ORCAROUTER_TOKEN", orcarouterBaseUrl
 	case ProviderAion:
 		tokenEnvKey, apiVar = "X3_AION_TOKEN", aionBaseUrl
+	case ProviderUnorouter:
+		tokenEnvKey, apiVar = "X3_UNOROUTER_TOKEN", unorouterBaseUrl
 	default:
 		return nil, nil, nil
 	}
