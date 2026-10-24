@@ -486,6 +486,7 @@ func handleLlmInteraction2(
 		}
 	}
 	addImageSources(llmer, content, attachments, embeds)
+	addVideoThumbnailSources(llmer, attachments)
 
 	var regenerateFirstID snowflake.ID
 	var regenerateDeleteIDs []snowflake.ID

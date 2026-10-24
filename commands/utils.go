@@ -937,6 +937,18 @@ func isImageAttachment(attachment discord.Attachment) bool {
 	return attachment.ContentType != nil && strings.HasPrefix(*attachment.ContentType, "image/")
 }
 
+// isVideoAttachment checks if a message attachment is a video.
+func isVideoAttachment(attachment discord.Attachment) bool {
+	if attachment.ContentType != nil && strings.HasPrefix(*attachment.ContentType, "video/") {
+		return true
+	}
+	switch strings.ToLower(filepath.Ext(attachment.Filename)) {
+	case ".mp4", ".webm", ".mov", ".mkv", ".m4v":
+		return true
+	}
+	return false
+}
+
 func purgeBotMessagesAfter(client *bot.Client, messageID, channelID snowflake.ID, inclusive, inDM bool) error {
 	if messageID == 0 {
 		return errors.New("message ID cannot be zero")

@@ -27,6 +27,7 @@ import (
 	"github.com/zeozeozeo/x3/model"
 	"github.com/zeozeozeo/x3/persona"
 	"github.com/zeozeozeo/x3/site"
+	"github.com/zeozeozeo/x3/videothumb"
 	"github.com/zeozeozeo/x3/worldmem"
 	"maunium.net/go/mautrix"
 	"maunium.net/go/mautrix/crypto/attachment"
@@ -61,6 +62,7 @@ type matrixAttachment struct {
 	Data        []byte
 	DataURI     string
 	IsImage     bool
+	IsVideo     bool
 }
 
 type matrixMessage struct {
@@ -588,6 +590,10 @@ func (b *MatrixBot) buildMessage(ctx context.Context, evt *event.Event) *matrixM
 			slog.Warn("failed to read matrix attachment", "room_id", evt.RoomID.String(), "event_id", evt.ID.String(), "err", err)
 		} else if att != nil {
 			msg.Attachments = append(msg.Attachments, *att)
+			if att.IsVideo {
+				// keep history readable even when no thumbnail is available
+				msg.Content = appendContextLine(msg.Content, fmt.Sprintf("[video attachment: %s]", att.Filename))
+			}
 		}
 	}
 	return msg
@@ -635,6 +641,9 @@ func (b *MatrixBot) matrixBotName(ctx context.Context, roomID id.RoomID) string 
 
 func (b *MatrixBot) attachmentFromContent(ctx context.Context, content *event.MessageEventContent) (*matrixAttachment, error) {
 	filename := firstNonEmpty(content.FileName, content.Body, "attachment")
+	if content.MsgType == event.MsgVideo {
+		return b.videoAttachmentFromContent(ctx, content, filename)
+	}
 	contentType := ""
 	if content.Info != nil {
 		contentType = content.Info.MimeType
@@ -681,6 +690,124 @@ func (b *MatrixBot) attachmentFromContent(ctx context.Context, content *event.Me
 		}
 	}
 	return att, nil
+}
+
+// videoAttachmentFromContent builds a video attachment carrying a thumbnail
+// data URI: the client-provided info thumbnail when present, otherwise a
+// frame extracted by the videothumb ffmpeg backend. The video itself is only
+// downloaded when extraction is possible and its size fits the configured
+// cap; the raw bytes are never retained on the attachment.
+func (b *MatrixBot) videoAttachmentFromContent(ctx context.Context, content *event.MessageEventContent, filename string) (*matrixAttachment, error) {
+	contentType := ""
+	if content.Info != nil {
+		contentType = content.Info.MimeType
+	}
+	if contentType == "" {
+		contentType = "video/mp4"
+	}
+	att := &matrixAttachment{
+		Filename:    filename,
+		ContentType: contentType,
+		IsVideo:     true,
+	}
+
+	if uri, ok := b.downloadMatrixVideoThumbnail(ctx, content.Info); ok {
+		att.DataURI = uri
+		return att, nil
+	}
+
+	if !videothumb.Enabled() || !videothumb.BackendAvailable() {
+		return att, nil
+	}
+	if content.Info != nil && content.Info.Size > 0 && content.Info.Size > videothumb.MaxDownloadBytes() {
+		slog.Warn("matrix video exceeds size limit, skipping frame extraction",
+			"filename", filename, "size", content.Info.Size, "limit", videothumb.MaxDownloadBytes())
+		return att, nil
+	}
+
+	uri := content.URL
+	file := content.File
+	if file != nil {
+		uri = file.URL
+	}
+	if uri == "" {
+		return att, nil
+	}
+	parsed, err := uri.Parse()
+	if err != nil {
+		slog.Warn("invalid matrix video url", "err", err, "filename", filename)
+		return att, nil
+	}
+	data, err := b.client.DownloadBytes(ctx, parsed)
+	if err != nil {
+		slog.Warn("failed to download matrix video for thumbnail", "err", err, "filename", filename)
+		return att, nil
+	}
+	if file != nil {
+		if err := file.DecryptInPlace(data); err != nil {
+			slog.Warn("failed to decrypt matrix video", "err", err, "filename", filename)
+			return att, nil
+		}
+	}
+	att.Size = len(data)
+
+	dataURI := videothumb.Thumbnail(ctx, videothumb.Source{
+		Data:        data,
+		Filename:    filename,
+		ContentType: contentType,
+	})
+	if dataURI != "" {
+		att.DataURI = dataURI
+	}
+	return att, nil
+}
+
+// downloadMatrixVideoThumbnail downloads the client-provided video thumbnail
+// (info.thumbnail_file / info.thumbnail_url), decrypting it when needed.
+func (b *MatrixBot) downloadMatrixVideoThumbnail(ctx context.Context, info *event.FileInfo) (string, bool) {
+	if info == nil {
+		return "", false
+	}
+	uri := info.ThumbnailURL
+	file := info.ThumbnailFile
+	if file != nil {
+		uri = file.URL
+	}
+	if uri == "" {
+		return "", false
+	}
+	parsed, err := uri.Parse()
+	if err != nil {
+		slog.Warn("invalid matrix video thumbnail url", "err", err)
+		return "", false
+	}
+	data, err := b.client.DownloadBytes(ctx, parsed)
+	if err != nil {
+		slog.Warn("failed to download matrix video thumbnail", "err", err)
+		return "", false
+	}
+	if file != nil {
+		if err := file.DecryptInPlace(data); err != nil {
+			slog.Warn("failed to decrypt matrix video thumbnail", "err", err)
+			return "", false
+		}
+	}
+	contentType := ""
+	if info.ThumbnailInfo != nil {
+		contentType = info.ThumbnailInfo.MimeType
+	}
+	if contentType == "" || !strings.HasPrefix(contentType, "image/") {
+		contentType = http.DetectContentType(data)
+	}
+	if !strings.HasPrefix(contentType, "image/") {
+		slog.Warn("matrix video thumbnail is not an image", "content_type", contentType)
+		return "", false
+	}
+	if len(data) > llm.MaxImageBytes {
+		slog.Warn("matrix video thumbnail exceeds size limit", "size", len(data), "limit", llm.MaxImageBytes)
+		return "", false
+	}
+	return fmt.Sprintf("data:%s;base64,%s", contentType, base64.StdEncoding.EncodeToString(data)), true
 }
 
 // matrixDocumentBlocks extracts text from non-image document attachments
@@ -1685,7 +1812,7 @@ func (b *MatrixBot) handleLlm(ctx context.Context, msg *matrixMessage, isRegener
 			added.MessageID = msg.EventID.String()
 		}
 		for _, attachment := range msg.Attachments {
-			if attachment.IsImage && attachment.DataURI != "" {
+			if attachment.DataURI != "" && (attachment.IsImage || attachment.IsVideo) {
 				llmer.AddImage(attachment.DataURI)
 			} else if attachment.IsImage && added != nil {
 				// downloaded but over llm.MaxImageBytes, so not attached

@@ -2,6 +2,7 @@ package commands
 
 import (
 	"context"
+	"encoding/base64"
 	"fmt"
 	"io"
 	"log/slog"
@@ -23,6 +24,7 @@ import (
 	"github.com/zeozeozeo/x3/db"
 	"github.com/zeozeozeo/x3/docs"
 	"github.com/zeozeozeo/x3/llm"
+	"github.com/zeozeozeo/x3/videothumb"
 )
 
 var lobotomyMessagesRegex = regexp.MustCompile(`(?i)Removed last (\d+) (messages|turns) from the context`)
@@ -123,6 +125,86 @@ func addImageLinks(llmer *llm.Llmer, content string) {
 func addImageSources(llmer *llm.Llmer, content string, attachments []discord.Attachment, embeds []discord.Embed) {
 	for _, imageURL := range messageImageURLs(content, attachments, embeds) {
 		llmer.AddImage(imageURL)
+	}
+}
+
+var videoThumbClient = &http.Client{Timeout: 10 * time.Second}
+
+// discordVideoThumbnailURL derives Discord's server-generated video thumbnail
+// URL from the attachment's media proxy URL. The sizing parameters ride on
+// the same signed proxy URL the API already returned.
+func discordVideoThumbnailURL(proxyURL string) string {
+	if proxyURL == "" {
+		return ""
+	}
+	sep := "?"
+	if strings.Contains(proxyURL, "?") {
+		sep = "&"
+	}
+	return proxyURL + sep + "format=jpeg&width=640&height=640"
+}
+
+// discordVideoThumbnailProbe fetches the media proxy thumbnail and returns a
+// ready data URI, or "" when the proxy does not serve one for this video.
+func discordVideoThumbnailProbe(ctx context.Context, proxyURL string) string {
+	thumbURL := discordVideoThumbnailURL(proxyURL)
+	if thumbURL == "" {
+		return ""
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, thumbURL, nil)
+	if err != nil {
+		return ""
+	}
+	resp, err := videoThumbClient.Do(req)
+	if err != nil {
+		return ""
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return ""
+	}
+	data, err := io.ReadAll(io.LimitReader(resp.Body, llm.MaxImageBytes+1))
+	if err != nil || len(data) == 0 || len(data) > llm.MaxImageBytes {
+		return ""
+	}
+	contentType := strings.ToLower(resp.Header.Get("Content-Type"))
+	if idx := strings.Index(contentType, ";"); idx >= 0 {
+		contentType = strings.TrimSpace(contentType[:idx])
+	}
+	if contentType == "" || contentType == "application/octet-stream" {
+		contentType = http.DetectContentType(data)
+	}
+	if !strings.HasPrefix(contentType, "image/") {
+		return ""
+	}
+	return fmt.Sprintf("data:%s;base64,%s", contentType, base64.StdEncoding.EncodeToString(data))
+}
+
+// addVideoThumbnailSources resolves thumbnails for video attachments and
+// attaches them to the latest user message like regular image sources.
+// Discord's own media proxy thumbnail is preferred; local ffmpeg frame
+// extraction is the fallback.
+func addVideoThumbnailSources(llmer *llm.Llmer, attachments []discord.Attachment) {
+	for _, attachment := range attachments {
+		if !isVideoAttachment(attachment) {
+			continue
+		}
+		contentType := ""
+		if attachment.ContentType != nil {
+			contentType = *attachment.ContentType
+		}
+		uri := videothumb.Thumbnail(context.Background(), videothumb.Source{
+			CacheKey:    "discord:" + attachment.ID.String(),
+			URL:         attachment.URL,
+			Filename:    attachment.Filename,
+			ContentType: contentType,
+			Probe: func(ctx context.Context) string {
+				return discordVideoThumbnailProbe(ctx, attachment.ProxyURL)
+			},
+		})
+		if uri != "" {
+			llmer.AddImage(uri)
+		}
 	}
 }
 
@@ -466,6 +548,13 @@ func getMessageContent(message discord.Message) string {
 				continue
 			}
 
+			// videos surface as thumbnails via addVideoThumbnailSources; a
+			// text note keeps history readable and covers the no-thumbnail case
+			if isVideoAttachment(attachment) {
+				content = appendContextLine(content, fmt.Sprintf("[video attachment: %s]", attachment.Filename))
+				continue
+			}
+
 			contentType := ""
 			if attachment.ContentType != nil {
 				contentType = *attachment.ContentType
@@ -705,6 +794,7 @@ func addContextMessages(
 	latestImageIdx := -1
 	for i, msg := range messages { // newest to oldest
 		if !isCodeRunResultMessage(msg) && (slices.ContainsFunc(msg.Attachments, isImageAttachment) ||
+			slices.ContainsFunc(msg.Attachments, isVideoAttachment) ||
 			len(imageURLsFromContent(msg.Content)) > 0 ||
 			len(imageURLsFromEmbeds(msg.Embeds)) > 0) {
 			latestImageIdx = i
@@ -827,6 +917,7 @@ func addContextMessages(
 		// add image sources if this is the newest message containing one
 		if i == latestImageIdx {
 			addImageSources(llmer, rawContent, msg.Attachments, msg.Embeds)
+			addVideoThumbnailSources(llmer, msg.Attachments)
 		}
 	}
 

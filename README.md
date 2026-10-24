@@ -134,3 +134,15 @@ Treat the runtime installation as part of the sandbox boundary:
 - Pin `X3_CODE_INTERPRETER_IMAGE` to an image digest in production. Confirm the
   runtime registration with `docker info`, and smoke-test the rebuilt image before
   enabling the feature.
+
+## Video thumbnails
+
+```console
+docker build --pull --no-cache -t x3-ffmpeg-sandbox:latest videothumb/sandbox
+```
+
+```dotenv
+X3_FFMPEG_SANDBOX_ENABLED=true
+X3_FFMPEG_SANDBOX_IMAGE=x3-ffmpeg-sandbox:latest
+X3_FFMPEG_SANDBOX_RUNTIME=runsc
+```
