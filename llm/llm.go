@@ -250,7 +250,28 @@ func applyReasoningSettings(req *openai.ChatCompletionRequest, provider, codenam
 	}
 }
 
+// truncateForPrompt caps error text embedded in prompts so a huge URL or
+// payload can never be inlined into the request.
+func truncateForPrompt(s string) string {
+	const maxLen = 200
+	if len(s) <= maxLen {
+		return s
+	}
+	return s[:maxLen] + "...(truncated)"
+}
+
 func imageFilename(imageURL string) string {
+	if strings.HasPrefix(imageURL, "data:") {
+		// data URIs carry no filename; derive one from the mime type
+		rest := strings.TrimPrefix(imageURL, "data:")
+		if idx := strings.Index(rest, ";"); idx > 0 {
+			ext := strings.TrimPrefix(rest[:idx], "image/")
+			if ext != "" && !strings.Contains(ext, "/") {
+				return "image." + ext
+			}
+		}
+		return "image.png"
+	}
 	parsed, err := url.Parse(imageURL)
 	if err == nil {
 		if filename := filepath.Base(parsed.Path); filename != "." && filename != "/" && filename != "" {
@@ -566,6 +587,31 @@ func (l *Llmer) AddImage(imageURL string) {
 	msg.Images = append(msg.Images, imageURL)
 }
 
+// TrimPersistedMessages returns a copy of messages with image data cleared
+// from every message except the newest one bearing images, which keeps only
+// its first image — exactly what convertMessages can ever send. Matrix
+// persists full base64 data URIs, so anything more is dead weight in storage.
+// The input slice and its messages are not modified.
+func TrimPersistedMessages(messages []Message) []Message {
+	out := append([]Message(nil), messages...)
+	last := -1
+	for i := len(out) - 1; i >= 0; i-- {
+		if len(out[i].Images) > 0 {
+			last = i
+			break
+		}
+	}
+	for i := range out {
+		switch {
+		case i == last:
+			out[i].Images = []string{out[i].Images[0]}
+		case len(out[i].Images) > 0:
+			out[i].Images = nil
+		}
+	}
+	return out
+}
+
 func (l Llmer) convertMessages(hasVision, supportsImageURL bool, prepend, thinkPrefill, searchResults string, ctx context.Context) []openai.ChatCompletionMessage {
 	// find the index of the last message with images
 	imageIdx := -1
@@ -611,16 +657,22 @@ func (l Llmer) convertMessages(hasVision, supportsImageURL bool, prepend, thinkP
 			})
 		} else {
 			imageURL := msg.Images[0]
-			data := gImageCache.MemoizedImageBase64(imageURL)
-			if data == "" {
-				var content strings.Builder
-				content.WriteString(msg.Content)
-				fmt.Fprintf(&content, "\n<failed to fetch image `%s`>", imageURL)
-				messages = append(messages, openai.ChatCompletionMessage{
-					Role:    msg.Role,
-					Content: content.String(),
-				})
-				continue
+			// data: URIs (e.g. matrix attachments) are already inline images;
+			// fetching them over http always fails, which would fall back to
+			// inlining the whole base64 payload into the prompt as text.
+			data := imageURL
+			if !strings.HasPrefix(imageURL, "data:") {
+				data = gImageCache.MemoizedImageBase64(imageURL)
+				if data == "" {
+					var content strings.Builder
+					content.WriteString(msg.Content)
+					fmt.Fprintf(&content, "\n<failed to fetch image `%s`>", truncateForPrompt(imageURL))
+					messages = append(messages, openai.ChatCompletionMessage{
+						Role:    msg.Role,
+						Content: content.String(),
+					})
+					continue
+				}
 			}
 
 			// must structure as a multipart message if we have images

@@ -673,7 +673,12 @@ func (b *MatrixBot) attachmentFromContent(ctx context.Context, content *event.Me
 		IsImage:     isImage,
 	}
 	if isImage {
-		att.DataURI = fmt.Sprintf("data:%s;base64,%s", contentType, base64.StdEncoding.EncodeToString(data))
+		if len(data) > llm.MaxImageBytes {
+			slog.Warn("matrix image exceeds size limit, omitting from llm context",
+				"filename", filename, "size", len(data), "limit", llm.MaxImageBytes)
+		} else {
+			att.DataURI = fmt.Sprintf("data:%s;base64,%s", contentType, base64.StdEncoding.EncodeToString(data))
+		}
 	}
 	return att, nil
 }
@@ -1672,8 +1677,9 @@ func (b *MatrixBot) handleLlm(ctx context.Context, msg *matrixMessage, isRegener
 			content = appendContextLine(content, docBlocks)
 		}
 		llmer.AddMessageWithID(llm.RoleUser, content, 0, msg.EventID.String())
+		var added *llm.Message
 		if len(llmer.Messages) > 0 {
-			added := &llmer.Messages[len(llmer.Messages)-1]
+			added = &llmer.Messages[len(llmer.Messages)-1]
 			added.Author = msg.Author
 			added.Timestamp = msg.Timestamp
 			added.MessageID = msg.EventID.String()
@@ -1681,6 +1687,11 @@ func (b *MatrixBot) handleLlm(ctx context.Context, msg *matrixMessage, isRegener
 		for _, attachment := range msg.Attachments {
 			if attachment.IsImage && attachment.DataURI != "" {
 				llmer.AddImage(attachment.DataURI)
+			} else if attachment.IsImage && added != nil {
+				// downloaded but over llm.MaxImageBytes, so not attached
+				note := fmt.Sprintf("[image %s omitted: larger than %dMB]",
+					attachment.Filename, llm.MaxImageBytes/(1024*1024))
+				added.Content = appendContextLine(added.Content, note)
 			}
 		}
 		llmer.SetPersona(p, &cache.PersonaMeta.ExcessiveSplit)
@@ -1764,9 +1775,13 @@ func (b *MatrixBot) handleLlm(ctx context.Context, msg *matrixMessage, isRegener
 			cache.Summaries[i].Age++
 		}
 	}
-	cache.Llmer = llmer
+	persistedLlmer := *llmer
+	// data URIs are multi-MB; only the newest image is ever sent, so don't
+	// persist the rest
+	persistedLlmer.Messages = llm.TrimPersistedMessages(llmer.Messages)
+	cache.Llmer = &persistedLlmer
 	if cache.ImportedHistory != nil {
-		cache.ImportedHistory.Messages = append([]llm.Message(nil), llmer.Messages...)
+		cache.ImportedHistory.Messages = append([]llm.Message(nil), persistedLlmer.Messages...)
 	}
 	cache.UpdateInteractionTime()
 	return cache.WriteKey(key)

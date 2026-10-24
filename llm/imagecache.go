@@ -23,7 +23,9 @@ import (
 	"golang.org/x/image/webp"
 )
 
-const maxFetchedImageBytes = 10 * 1024 * 1024
+// MaxImageBytes caps images sent to the LLM, whether fetched from a URL or
+// attached inline (e.g. matrix data URIs).
+const MaxImageBytes = 10 * 1024 * 1024
 
 var imageFetchClient = &http.Client{
 	Timeout: 10 * time.Second,
@@ -156,13 +158,13 @@ func fetchImage(uri string) []byte {
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		return nil
 	}
-	if resp.ContentLength > maxFetchedImageBytes {
+	if resp.ContentLength > MaxImageBytes {
 		return nil
 	}
 
-	lr := io.LimitReader(resp.Body, maxFetchedImageBytes+1)
+	lr := io.LimitReader(resp.Body, MaxImageBytes+1)
 	data, err := io.ReadAll(lr)
-	if err != nil || len(data) > maxFetchedImageBytes {
+	if err != nil || len(data) > MaxImageBytes {
 		return nil
 	}
 	contentType := strings.ToLower(resp.Header.Get("Content-Type"))
