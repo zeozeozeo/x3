@@ -200,12 +200,30 @@ func unmarshalChannelCache(data []byte) (*ChannelCache, error) {
 	return &cache, err
 }
 
+func sanitizeCachedHistory(cache *ChannelCache) {
+	if cache == nil {
+		return
+	}
+	maxNonSystem := llm.ContextHardMessageLimit(MaxContextMessages)
+	if cache.Llmer != nil {
+		sanitized := *cache.Llmer
+		sanitized.Messages = llm.MessagesForStorage(cache.Llmer.Messages, maxNonSystem)
+		cache.Llmer = &sanitized
+	}
+	if cache.ImportedHistory != nil {
+		cache.ImportedHistory = &ImportedChatHistory{
+			Messages: llm.MessagesForStorage(cache.ImportedHistory.Messages, maxNonSystem),
+		}
+	}
+}
+
 // write saves the ChannelCache state to the database for the given channel ID.
 func (cache ChannelCache) Write(id snowflake.ID) error {
 	return cache.WriteKey(id.String())
 }
 
 func (cache ChannelCache) WriteKey(key string) error {
+	sanitizeCachedHistory(&cache)
 	slog.Debug("writing channel cache", slog.String("channel_id", key))
 	data, err := json.Marshal(cache)
 	if err != nil {
@@ -243,6 +261,8 @@ func GetChannelCacheByKey(key string) *ChannelCache {
 		// Return a new cache and attempt to overwrite the corrupted one
 		cache = NewChannelCache()
 		go cache.WriteKey(key) // Attempt to fix the corrupted entry asynchronously
+	} else {
+		sanitizeCachedHistory(cache)
 	}
 	return cache
 }
@@ -271,4 +291,98 @@ func GetCachedChannelIDs() ([]snowflake.ID, error) {
 	}
 
 	return ids, nil
+}
+
+const channelCacheCompactionKey = "channel_cache_compaction_v1"
+
+func maintenanceDone(key string) bool {
+	var v string
+	err := DB.QueryRow(`SELECT value FROM maintenance_meta WHERE key = ?`, key).Scan(&v)
+	return err == nil && v == "done"
+}
+
+func CompactChannelCaches() (int, error) {
+	if DB == nil || maintenanceDone(channelCacheCompactionKey) {
+		return 0, nil
+	}
+
+	rows, err := DB.Query("SELECT channel_id, cache FROM channel_cache")
+	if err != nil {
+		return 0, err
+	}
+	type update struct {
+		key  string
+		data []byte
+	}
+	var updates []update
+	for rows.Next() {
+		var key string
+		var data []byte
+		if err := rows.Scan(&key, &data); err != nil {
+			rows.Close()
+			return 0, err
+		}
+		var cache ChannelCache
+		if err := json.Unmarshal(data, &cache); err != nil {
+			continue
+		}
+		sanitizeCachedHistory(&cache)
+		compacted, err := json.Marshal(cache)
+		if err != nil || string(compacted) == string(data) {
+			continue
+		}
+		updates = append(updates, update{key: key, data: compacted})
+	}
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return 0, err
+	}
+	rows.Close()
+
+	err = withWorldWrite(func() error {
+		tx, err := DB.Begin()
+		if err != nil {
+			return err
+		}
+		defer func() {
+			if err != nil {
+				_ = tx.Rollback()
+			}
+		}()
+		for _, u := range updates {
+			if _, err = tx.Exec("UPDATE channel_cache SET cache = ? WHERE channel_id = ?", u.data, u.key); err != nil {
+				return err
+			}
+		}
+		if _, err = tx.Exec(
+			`INSERT INTO maintenance_meta(key, value) VALUES (?, 'done')
+			 ON CONFLICT(key) DO UPDATE SET value = excluded.value`,
+			channelCacheCompactionKey,
+		); err != nil {
+			return err
+		}
+		return tx.Commit()
+	})
+	if err != nil {
+		return 0, err
+	}
+
+	if len(updates) > 0 {
+		slog.Info("compacted channel caches", "channels", len(updates))
+		Vacuum()
+	}
+	return len(updates), nil
+}
+
+func Vacuum() {
+	if DB == nil {
+		return
+	}
+	err := withWorldWrite(func() error {
+		_, execErr := DB.Exec("VACUUM")
+		return execErr
+	})
+	if err != nil {
+		slog.Warn("database vacuum failed", "err", err)
+	}
 }

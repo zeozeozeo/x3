@@ -611,6 +611,7 @@ func handleLlmInteraction2(
 
 	var jumpURL string
 	var botMessage *discord.Message
+	var firstBotMessage *discord.Message
 	var messages []string
 	if isRegenerate {
 		// delete trailing split messages of the previous response, keeping
@@ -684,6 +685,9 @@ func handleLlmInteraction2(
 			if err != nil {
 				slog.Error("failed to send message split", "err", err, slog.Int("split_index", i))
 				return response, 0, fmt.Errorf("failed to send message split %d: %w", i+1, err)
+			}
+			if i == 0 {
+				firstBotMessage = botMessage
 			}
 			event = nil // updated the event, send the next split as a new message
 		}
@@ -761,11 +765,17 @@ func handleLlmInteraction2(
 	}
 
 	cache.IsLastRandomDM = timeInteraction
-	setLatestAssistantMessageMetadata(llmer, botMessage)
+	metadataMessage := botMessage
+	if firstBotMessage != nil {
+		metadataMessage = firstBotMessage
+	}
+	setLatestAssistantMessageMetadata(llmer, metadataMessage)
 	if !isRegenerate {
-		cache.Llmer = llmer
+		persisted := *llmer
+		persisted.Messages = llm.MessagesForStorage(llmer.Messages, llm.ContextHardMessageLimit(db.MaxContextMessages))
+		cache.Llmer = &persisted
 		if cache.ImportedHistory != nil {
-			cache.ImportedHistory.Messages = append([]llm.Message(nil), llmer.Messages...)
+			cache.ImportedHistory.Messages = append([]llm.Message(nil), persisted.Messages...)
 		}
 	}
 	cache.UpdateInteractionTime()

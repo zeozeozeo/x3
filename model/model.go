@@ -181,9 +181,10 @@ const (
 	// adaptiveSlowStreakNeeded is how many consecutive slow successes it
 	// takes to schedule a probe. A single slow outlier (queue spike, cold
 	// start) must not flip traffic on its own.
-	adaptiveSlowStreakNeeded    = 2
-	adaptiveProviderRouteTTL    = 5 * time.Minute
+	adaptiveSlowStreakNeeded = 2
+	adaptiveProviderRouteTTL    = 2 * time.Minute
 	providerCircuitFailureLimit = 3
+	providerCircuitProbeInterval = 2 * time.Minute
 )
 
 type adaptiveProviderRoute struct {
@@ -212,6 +213,7 @@ type ProviderFailureResult struct {
 type providerCircuit struct {
 	failureScore int
 	openUntil    time.Time
+	nextProbeAt time.Time
 }
 
 // DefaultWorldMemEmbeddingModel is the Workers AI embedding model used by the
@@ -709,7 +711,11 @@ func RecordProviderFailure(m Model, provider string, failure ProviderFailure) Pr
 	if circuit.failureScore >= providerCircuitFailureLimit {
 		circuit.failureScore = 0
 		circuit.openUntil = now.Add(failure.Cooldown)
+		circuit.nextProbeAt = now.Add(providerCircuitProbeInterval)
 		result.CircuitOpened = true
+		slog.Warn("provider circuit opened",
+			"model", m.Name, "provider", provider,
+			"cooldown", failure.Cooldown, "next_probe", providerCircuitProbeInterval)
 	}
 	providerCircuits[key] = circuit
 
@@ -757,6 +763,14 @@ func circuitOpenLocked(modelName, provider string, now time.Time) bool {
 	}
 	if !now.Before(circuit.openUntil) {
 		delete(providerCircuits, key)
+		return false
+	}
+	if circuit.nextProbeAt.IsZero() || !now.Before(circuit.nextProbeAt) {
+		circuit.nextProbeAt = now.Add(providerCircuitProbeInterval)
+		providerCircuits[key] = circuit
+		slog.Info("provider circuit half-open: allowing recovery probe",
+			"model", modelName, "provider", provider,
+			"cooldown_remaining", circuit.openUntil.Sub(now).Round(time.Second))
 		return false
 	}
 	return true

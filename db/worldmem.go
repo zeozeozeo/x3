@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"regexp"
 	"strconv"
 	"strings"
@@ -534,9 +535,64 @@ func recreateWorldVecTableLocked(dim int) error {
 	if _, err := DB.Exec(`DROP TABLE IF EXISTS world_vec`); err != nil {
 		return fmt.Errorf("drop world_vec: %w", err)
 	}
-	if _, err := DB.Exec(fmt.Sprintf(`CREATE VIRTUAL TABLE world_vec USING vec0(embedding float[%d], channel TEXT PARTITION KEY)`, dim)); err != nil {
+	if _, err := DB.Exec(fmt.Sprintf(`CREATE VIRTUAL TABLE world_vec USING vec0(embedding float[%d], channel TEXT)`, dim)); err != nil {
 		return fmt.Errorf("create world_vec[%d]: %w", dim, err)
 	}
+	return nil
+}
+
+func WorldVecUsesLegacyPartition() bool {
+	if DB == nil {
+		return false
+	}
+	var sqlText string
+	err := DB.QueryRow(`SELECT sql FROM sqlite_master WHERE type='table' AND name='world_vec'`).Scan(&sqlText)
+	if err != nil {
+		return false
+	}
+	return strings.Contains(strings.ToUpper(sqlText), "PARTITION KEY")
+}
+
+func MigrateWorldVecPartitionSchema(dim int) error {
+	if dim <= 0 {
+		return fmt.Errorf("invalid embedding dimension %d", dim)
+	}
+	worldVecSchemaMu.Lock()
+	defer worldVecSchemaMu.Unlock()
+	if !WorldVecUsesLegacyPartition() {
+		return nil
+	}
+	if err := withWorldWrite(func() error {
+		tx, err := DB.Begin()
+		if err != nil {
+			return err
+		}
+		defer func() {
+			if err != nil {
+				_ = tx.Rollback()
+			}
+		}()
+		create := fmt.Sprintf(`CREATE VIRTUAL TABLE %%s USING vec0(embedding float[%d], channel TEXT)`, dim)
+		for _, stmt := range []string{
+			fmt.Sprintf(create, "world_vec_migrated"),
+			`INSERT INTO world_vec_migrated(rowid, embedding, channel)
+			 SELECT rowid, embedding, channel FROM world_vec`,
+			`DROP TABLE world_vec`,
+			fmt.Sprintf(create, "world_vec"),
+			`INSERT INTO world_vec(rowid, embedding, channel)
+			 SELECT rowid, embedding, channel FROM world_vec_migrated`,
+			`DROP TABLE world_vec_migrated`,
+		} {
+			if _, err = tx.Exec(stmt); err != nil {
+				return fmt.Errorf("migrate world_vec: %w", err)
+			}
+		}
+		err = tx.Commit()
+		return err
+	}); err != nil {
+		return err
+	}
+	slog.Info("migrated world_vec away from per-channel partitions", "dim", dim)
 	return nil
 }
 

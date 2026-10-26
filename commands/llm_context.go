@@ -740,7 +740,8 @@ func appendMissingMessages(dst *llm.Llmer, src []llm.Message) int {
 		return 0
 	}
 	seen := make(map[string]struct{}, len(dst.Messages))
-	for _, msg := range dst.Messages {
+	lastAssistantIdx := -1
+	for i, msg := range dst.Messages {
 		key := msg.MessageID
 		if key == "" && msg.ID != 0 {
 			key = msg.ID.String()
@@ -748,6 +749,13 @@ func appendMissingMessages(dst *llm.Llmer, src []llm.Message) int {
 		if key != "" {
 			seen[key] = struct{}{}
 		}
+		if msg.Role == llm.RoleAssistant {
+			lastAssistantIdx = i
+		}
+	}
+	lastAssistantNorm := ""
+	if lastAssistantIdx >= 0 {
+		lastAssistantNorm = llm.NormalizeMessageForDedupe(dst.Messages[lastAssistantIdx].Content)
 	}
 
 	added := 0
@@ -763,6 +771,23 @@ func appendMissingMessages(dst *llm.Llmer, src []llm.Message) int {
 			if _, ok := seen[key]; ok {
 				continue
 			}
+		}
+		if msg.Role == llm.RoleAssistant && lastAssistantIdx >= 0 {
+			norm := llm.NormalizeMessageForDedupe(msg.Content)
+			if norm != "" && norm == lastAssistantNorm {
+				if msg.MessageID != "" {
+					dst.Messages[lastAssistantIdx].MessageID = msg.MessageID
+				}
+				if dst.Messages[lastAssistantIdx].ID == 0 {
+					dst.Messages[lastAssistantIdx].ID = msg.ID
+				}
+				if key != "" {
+					seen[key] = struct{}{}
+				}
+				continue
+			}
+		}
+		if key != "" {
 			seen[key] = struct{}{}
 		}
 		dst.Messages = append(dst.Messages, msg)

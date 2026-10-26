@@ -526,7 +526,12 @@ func (l *Llmer) AddMessageWithID(role, content string, id snowflake.ID, messageI
 		// previous message is also an assistant message, merge this
 		// (this is required when x3 splits the message up into multiple parts to bypass
 		// discord's 2000 character message limit)
-		l.Messages[len(l.Messages)-1].Content += content
+		prev := &l.Messages[len(l.Messages)-1]
+		if prev.Content != "" && content != "" &&
+			!strings.HasSuffix(prev.Content, "\n") && !strings.HasPrefix(content, "\n") {
+			prev.Content += "\n\n"
+		}
+		prev.Content += content
 		return
 	}
 
