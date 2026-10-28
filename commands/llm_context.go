@@ -735,6 +735,39 @@ func defaultKnownUsernames() map[string]struct{} {
 	}
 }
 
+// lastNonSystemMessageID returns the cache key of the newest cached
+// non-system message, or "" when the history has no messages yet.
+func lastNonSystemMessageID(messages []llm.Message) string {
+	for i := len(messages) - 1; i >= 0; i-- {
+		if messages[i].Role == llm.RoleSystem {
+			continue
+		}
+		if key := llm.MessageCacheKey(messages[i]); key != "" {
+			return key
+		}
+	}
+	return ""
+}
+
+// messagesAfterMessageID returns the messages that follow the given cache key
+// in chronological order. The second return value is false when the message is
+// not present, so callers never append an older window after newer history.
+func messagesAfterMessageID(messages []llm.Message, messageID string) ([]llm.Message, bool) {
+	if messageID == "" {
+		return nil, false
+	}
+	for i, msg := range messages {
+		if msg.Role == llm.RoleSystem {
+			continue
+		}
+		if llm.MessageCacheKey(msg) != messageID {
+			continue
+		}
+		return append([]llm.Message(nil), messages[i+1:]...), true
+	}
+	return nil, false
+}
+
 func appendMissingMessages(dst *llm.Llmer, src []llm.Message) int {
 	if dst == nil || len(src) == 0 {
 		return 0

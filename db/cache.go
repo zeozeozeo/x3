@@ -69,6 +69,10 @@ type ImportedChatHistory struct {
 type ChannelCache struct {
 	// Llmer is used for caching message history in channels where the bot cannot read messages (e.g., DMs).
 	Llmer *llm.Llmer `json:"llmer"`
+	// CacheAnchorMessageID is the first message included in the LLM request.
+	// It is kept stable across turns so provider prompt caches can reuse the
+	// prefix; it only moves forward when the context exceeds its hard limit.
+	CacheAnchorMessageID string `json:"cache_anchor_message_id,omitempty"`
 	// PersonaMeta stores the persona configuration (name, model, system prompt, settings).
 	PersonaMeta persona.PersonaMeta `json:"persona_meta"`
 	// Usage tracks token usage for this channel.

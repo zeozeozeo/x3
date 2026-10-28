@@ -428,6 +428,139 @@ func (l *Llmer) TrimCacheFriendlyContext(softLimit int) bool {
 	return l.TrimNonSystemMessages(softLimit)
 }
 
+// MessageCacheKey returns the stable cache key for a message. MessageID is
+// preferred because it survives history re-renders; ID is the Discord fallback.
+func MessageCacheKey(msg Message) string {
+	if msg.MessageID != "" {
+		return msg.MessageID
+	}
+	if msg.ID != 0 {
+		return msg.ID.String()
+	}
+	return ""
+}
+
+// CacheAnchorFor returns the message ID that should start the next request.
+// The returned anchor is kept stable while the non-system history fits within
+// the hard message limit. When it does not, the anchor moves forward to leave
+// at most softLimit non-system messages, preferring to start on a user message.
+// Passing an empty or unknown anchor starts from the oldest cached message.
+func (l *Llmer) CacheAnchorFor(anchor string, softLimit int) string {
+	if softLimit <= 0 {
+		return ""
+	}
+	hardLimit := ContextHardMessageLimit(softLimit)
+	if hardLimit <= 0 {
+		return ""
+	}
+
+	start := -1
+	if anchor != "" {
+		for i, msg := range l.Messages {
+			if msg.Role == RoleSystem {
+				continue
+			}
+			if MessageCacheKey(msg) == anchor {
+				start = i
+				break
+			}
+		}
+	}
+	if start < 0 {
+		for i, msg := range l.Messages {
+			if msg.Role != RoleSystem {
+				start = i
+				break
+			}
+		}
+	}
+	for start >= 0 && start < len(l.Messages) && l.Messages[start].Role == RoleSystem {
+		start++
+	}
+	if start < 0 || start >= len(l.Messages) {
+		return ""
+	}
+
+	count := 0
+	for i := start; i < len(l.Messages); i++ {
+		if l.Messages[i].Role != RoleSystem {
+			count++
+		}
+	}
+	if count > hardLimit {
+		start = l.advanceCacheAnchor(start, softLimit)
+	}
+	for i := start; i < len(l.Messages); i++ {
+		if l.Messages[i].Role == RoleSystem {
+			continue
+		}
+		if key := MessageCacheKey(l.Messages[i]); key != "" {
+			return key
+		}
+	}
+	return ""
+}
+
+// advanceCacheAnchor moves start forward until at most keep non-system messages
+// remain, then prefers to start the window on a user message.
+func (l *Llmer) advanceCacheAnchor(start, keep int) int {
+	remaining := 0
+	for i := start; i < len(l.Messages); i++ {
+		if l.Messages[i].Role != RoleSystem {
+			remaining++
+		}
+	}
+
+	idx := start
+	for idx < len(l.Messages) && remaining > keep {
+		if l.Messages[idx].Role != RoleSystem {
+			remaining--
+		}
+		idx++
+	}
+	for i := idx; i < len(l.Messages); i++ {
+		if l.Messages[i].Role == RoleUser {
+			idx = i
+			break
+		}
+	}
+	for idx < len(l.Messages) && l.Messages[idx].Role == RoleSystem {
+		idx++
+	}
+	if idx >= len(l.Messages) {
+		idx = len(l.Messages) - 1
+	}
+	return idx
+}
+
+// TrimBeforeMessageID drops all non-system messages before messageID while
+// preserving the leading system prompt. It returns false when the ID is empty
+// or not present.
+func (l *Llmer) TrimBeforeMessageID(messageID string) bool {
+	if messageID == "" {
+		return false
+	}
+	for i, msg := range l.Messages {
+		if msg.Role == RoleSystem {
+			continue
+		}
+		if MessageCacheKey(msg) != messageID {
+			continue
+		}
+		if i == 0 {
+			return false
+		}
+		newMessages := make([]Message, 0, len(l.Messages)-i+1)
+		if len(l.Messages) > 0 && l.Messages[0].Role == RoleSystem {
+			newMessages = append(newMessages, l.Messages[0])
+		}
+		newMessages = append(newMessages, l.Messages[i:]...)
+		l.Messages = newMessages
+		return true
+	}
+	return false
+}
+
 func IsContextLengthError(err error) bool {
 	if err == nil {
 		return false
