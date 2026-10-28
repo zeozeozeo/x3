@@ -29,6 +29,11 @@
             "deepseek-v4.1-flash-free"
           ]
         },
+        "opencode-go": {
+          "codenames": [
+            "deepseek-v4.1-flash"
+          ]
+        },
         "orcarouter": {
           "codenames": [
             "deepseek/deepseek-v4.1-flash-free"
@@ -56,6 +61,11 @@
         "opencode": {
           "codenames": [
             "mimo-v2.6-flash-free"
+          ]
+        },
+        "opencode-go": {
+          "codenames": [
+            "mimo-v2.6-flash"
           ]
         },
         "tokenharbor": {
@@ -788,6 +798,7 @@
     "unorouter",
     "orcarouter",
     "opencode",
+    "opencode-go",
     "nim",
     "google",
     "openrouter",
@@ -857,6 +868,9 @@
     "opencode": {
       "native_tool_calling": true
     },
+    "opencode-go": {
+      "native_tool_calling": true
+    },
     "orcarouter": {
       "native_tool_calling": true
     },
@@ -867,5 +881,5 @@
       "native_tool_calling": true
     }
   },
-  "current_version": 97
+  "current_version": 98
 }

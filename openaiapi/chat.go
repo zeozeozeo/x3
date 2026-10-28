@@ -20,15 +20,6 @@ import (
 const (
 	// maxRequestBytes is the maximum size of an incoming request body.
 	maxRequestBytes = 32 << 20
-
-	// openCodeMaxGateRounds bounds how many times the OpenCode gate tool is
-	// answered internally before giving up.
-	openCodeMaxGateRounds = 3
-
-	// openCodeGateToolUnavailableResult is sent as the result of the gate
-	// tool the OpenCode Zen free tier requires. The tool is a stub here, so
-	// the model is told to answer without it.
-	openCodeGateToolUnavailableResult = "The read tool is not available in this environment. Answer using only the conversation."
 )
 
 // handleChatCompletions implements POST /v1/chat/completions.
@@ -223,7 +214,7 @@ func (s *Server) callUpstream(
 			resp openai.ChatCompletionResponse
 			err  error
 		)
-		if provider == model.ProviderOpencode {
+		if model.IsOpenCodeProvider(provider) {
 			resp, err = s.callOpenCode(ctx, client, upstream)
 		} else {
 			resp, err = client.CreateChatCompletion(ctx, upstream)
@@ -246,79 +237,21 @@ func (s *Server) callUpstream(
 	return openai.ChatCompletionResponse{}, lastErr
 }
 
-// callOpenCode talks to the OpenCode Zen free tier. The tier requires a
-// "read" gate tool in every request and only accepts streamed calls, so the
-// response is aggregated and the gate tool is answered internally.
+// callOpenCode aggregates OpenCode's streamed response into a single
+// completion. OpenCode 2.x no longer needs the old "read" gate tool.
 func (s *Server) callOpenCode(
 	ctx context.Context,
 	client *openai.Client,
 	req openai.ChatCompletionRequest,
 ) (openai.ChatCompletionResponse, error) {
-	current := req
-	var resp openai.ChatCompletionResponse
-	var err error
-
-	for round := 0; round < openCodeMaxGateRounds; round++ {
-		resp, err = opencode.CreateChatCompletion(ctx, client, current)
-		if err != nil {
-			return openai.ChatCompletionResponse{}, err
-		}
-		if len(resp.Choices) == 0 {
-			return resp, errors.New("empty response received")
-		}
-
-		message := resp.Choices[0].Message
-		gateCalls := gateToolCalls(message.ToolCalls)
-		if len(gateCalls) == 0 {
-			stripGateToolCalls(&resp)
-			return resp, nil
-		}
-
-		slog.Info("opencode gate tool called, answering as unavailable")
-		messages := append([]openai.ChatCompletionMessage(nil), current.Messages...)
-		messages = append(messages, message)
-		for i, call := range gateCalls {
-			messages = append(messages, openai.ChatCompletionMessage{
-				Role:       openai.ChatMessageRoleTool,
-				Content:    openCodeGateToolUnavailableResult,
-				ToolCallID: toolCallID(call, i),
-			})
-		}
-		current.Messages = messages
+	resp, err := opencode.CreateChatCompletion(ctx, client, req)
+	if err != nil {
+		return openai.ChatCompletionResponse{}, err
 	}
-
-	stripGateToolCalls(&resp)
-	return resp, errors.New("opencode gate tool was called too many times")
-}
-
-// gateToolCalls returns the tool calls that target the OpenCode gate tool.
-func gateToolCalls(calls []openai.ToolCall) []openai.ToolCall {
-	var gate []openai.ToolCall
-	for _, call := range calls {
-		if call.Function.Name == opencode.GateToolName {
-			gate = append(gate, call)
-		}
+	if len(resp.Choices) == 0 {
+		return resp, errors.New("empty response received")
 	}
-	return gate
-}
-
-// stripGateToolCalls removes the internal gate tool calls from a response.
-func stripGateToolCalls(resp *openai.ChatCompletionResponse) {
-	for i := range resp.Choices {
-		calls := resp.Choices[i].Message.ToolCalls
-		kept := calls[:0]
-		for _, call := range calls {
-			if call.Function.Name == opencode.GateToolName {
-				continue
-			}
-			kept = append(kept, call)
-		}
-		if len(kept) == 0 {
-			resp.Choices[i].Message.ToolCalls = nil
-			continue
-		}
-		resp.Choices[i].Message.ToolCalls = kept
-	}
+	return resp, nil
 }
 
 // toolCallID returns the id of a tool call, generating one when the upstream

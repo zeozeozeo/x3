@@ -145,7 +145,7 @@ func (s *Server) upstreamClient(provider, baseURL, token string) *openai.Client 
 		config = openai.DefaultAzureConfig(token, baseURL)
 		config.APIType = openai.APITypeOpenAI
 	}
-	if provider == model.ProviderOpencode {
+	if model.IsOpenCodeProvider(provider) {
 		config.DefaultHeaders = opencodeHeaders()
 	}
 	return openai.NewClientWithConfig(config)

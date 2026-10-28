@@ -4,29 +4,32 @@ import (
 	"crypto/rand"
 	"fmt"
 	"math/big"
-	"runtime"
 	"strings"
-
-	"github.com/zeozeozeo/x3/openai"
 )
 
 const (
 	// DefaultVersion is the OpenCode version advertised in the User-Agent.
-	// The gate requires at least 1.18.0.
-	DefaultVersion = "1.19.3"
+	// OpenCode 2.0 changed the fingerprint format, so 2.2.0 is the version the
+	// Console and free tier recognize.
+	DefaultVersion = "2.2.0"
 
-	// MinVersion is the oldest OpenCode version the Zen free tier accepts.
-	MinVersion = "1.18.0"
+	// MinVersion is the oldest OpenCode version with the v2 fingerprint.
+	MinVersion = "2.0.0"
 
-	// GateToolName is the tool name the free tier gate requires in the
-	// request body.
-	GateToolName = "read"
+	// DefaultChannel is the release channel embedded in the User-Agent.
+	DefaultChannel = "latest"
+
+	// ClientName is the application name embedded in the User-Agent and the
+	// x-opencode-client header.
+	ClientName = "opencode"
+
+	// ProjectID is the global project id used by the CLI for untitled
+	// sessions.
+	ProjectID = "global"
 
 	sessionIDPrefix = "ses_"
-	requestIDPrefix = "msg_"
 	sessionHexLen   = 12
 	sessionB62Len   = 14
-	requestB62Len   = 26
 )
 
 const b62Alphabet = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
@@ -55,68 +58,88 @@ func randomString(alphabet string, n int) string {
 }
 
 // SessionID returns an OpenCode session id: ses_ followed by 12 lowercase hex
-// characters and 14 base62 characters.
+// characters and 14 base62 characters. OpenCode 2.x keeps this format.
 func SessionID() string {
 	return sessionIDPrefix + randomString(hexAlphabet, sessionHexLen) + randomString(b62Alphabet, sessionB62Len)
 }
 
-// RequestID returns an OpenCode request id: msg_ followed by 26 base62
-// characters.
-func RequestID() string {
-	return requestIDPrefix + randomString(b62Alphabet, requestB62Len)
-}
-
-// UserAgent returns the User-Agent value the Zen free tier expects.
+// UserAgent returns the User-Agent value OpenCode 2.x sends:
+// opencode/<channel>/<version>/<name>.
 func UserAgent(version string) string {
+	return UserAgentWithChannel(version, DefaultChannel)
+}
+
+// UserAgentWithChannel is UserAgent with an explicit release channel.
+func UserAgentWithChannel(version, channel string) string {
+	version = NormalizeVersion(version)
+	channel = strings.TrimSpace(channel)
+	if channel == "" {
+		channel = DefaultChannel
+	}
+	return fmt.Sprintf("opencode/%s/%s/%s", channel, version, ClientName)
+}
+
+// NormalizeVersion returns a version string the current OpenCode fingerprint
+// understands. Values older than MinVersion (such as a stale 1.x setting) are
+// upgraded to DefaultVersion instead of advertising the retired v1 client.
+func NormalizeVersion(version string) string {
 	version = strings.TrimSpace(version)
-	if version == "" {
-		version = DefaultVersion
+	if version == "" || compareVersions(version, MinVersion) < 0 {
+		return DefaultVersion
 	}
-	return fmt.Sprintf("opencode/%s (%s; %s)", version, runtime.GOOS, runtime.GOARCH)
+	return version
 }
 
-// Headers returns the headers that make up the client fingerprint.
-func Headers(version string) map[string]string {
-	return map[string]string{
-		"User-Agent":         UserAgent(version),
-		"x-opencode-client":  "cli",
-		"x-opencode-project": "global",
-		"x-opencode-session": SessionID(),
-		"x-opencode-request": RequestID(),
-	}
-}
-
-// ReadTool returns the tool the free tier gate requires. The tool is a stub:
-// the bot cannot read files, so it is described as unavailable.
-func ReadTool() openai.Tool {
-	return openai.Tool{
-		Type: openai.ToolTypeFunction,
-		Function: &openai.FunctionDefinition{
-			Name:        GateToolName,
-			Description: "Read a file from disk. This tool is not available in this environment; never call it.",
-			Parameters: map[string]any{
-				"type":       "object",
-				"properties": map[string]any{},
-			},
-		},
-	}
-}
-
-// HasGateTool reports whether the tool list already contains the tool the
-// free tier gate requires.
-func HasGateTool(tools []openai.Tool) bool {
-	for _, tool := range tools {
-		if tool.Function != nil && tool.Function.Name == GateToolName {
-			return true
+// compareVersions compares dotted numeric versions. It returns -1, 0 or 1.
+func compareVersions(a, b string) int {
+	as := strings.Split(strings.TrimSpace(a), ".")
+	bs := strings.Split(strings.TrimSpace(b), ".")
+	for i := 0; i < len(as) || i < len(bs); i++ {
+		var av, bv int
+		if i < len(as) {
+			av = atoi(as[i])
+		}
+		if i < len(bs) {
+			bv = atoi(bs[i])
+		}
+		switch {
+		case av < bv:
+			return -1
+		case av > bv:
+			return 1
 		}
 	}
-	return false
+	return 0
 }
 
-// EnsureGateTool appends the gate tool to the tool list if it is missing.
-func EnsureGateTool(tools []openai.Tool) []openai.Tool {
-	if HasGateTool(tools) {
-		return tools
+func atoi(s string) int {
+	n := 0
+	for _, r := range s {
+		if r < '0' || r > '9' {
+			break
+		}
+		n = n*10 + int(r-'0')
 	}
-	return append(tools, ReadTool())
+	return n
+}
+
+// Headers returns the headers that make up the OpenCode 2.x client
+// fingerprint. The same session id is used for every cache-affinity header so
+// the upstream can group requests from this conversation.
+func Headers(version string) map[string]string {
+	return HeadersWithChannel(version, DefaultChannel)
+}
+
+// HeadersWithChannel is Headers with an explicit release channel.
+func HeadersWithChannel(version, channel string) map[string]string {
+	sessionID := SessionID()
+	return map[string]string{
+		"User-Agent":            UserAgentWithChannel(version, channel),
+		"x-opencode-client":     ClientName,
+		"x-opencode-project":    ProjectID,
+		"x-opencode-session":    sessionID,
+		"x-opencode-session-id": sessionID,
+		"x-session-affinity":    sessionID,
+		"X-Session-Id":          sessionID,
+	}
 }

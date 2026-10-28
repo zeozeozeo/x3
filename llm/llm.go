@@ -1167,11 +1167,6 @@ const (
 	toolNameCodeInterp    = "code_interpreter"
 )
 
-// openCodeGateToolUnavailableResult is the tool result sent when a model
-// calls the "read" tool the OpenCode Zen free tier gate requires. The tool is
-// a stub, so the model is told to answer without it.
-const openCodeGateToolUnavailableResult = "The read tool is not available in this environment. Answer using only the conversation."
-
 var webSearchTool = openai.Tool{
 	Type: openai.ToolTypeFunction,
 	Function: &openai.FunctionDefinition{
@@ -1366,10 +1361,10 @@ func (l *Llmer) executeSearchTool(ctx context.Context, name, query string, searc
 // The completion router retains the TTFT return value for compatibility, but
 // non-streaming providers are measured using the total request duration.
 //
-// The OpenCode Zen free tier is the exception: its gate only accepts streamed
-// requests, so that provider goes through the opencode package.
+// OpenCode is the exception: its endpoint is streamed by the opencode package
+// and aggregated so both the free tier and OpenCode Go share one code path.
 func createChatCompletionWithTTFT(ctx context.Context, client *openai.Client, req openai.ChatCompletionRequest, provider string) (openai.ChatCompletionResponse, time.Duration, error) {
-	if provider == model.ProviderOpencode {
+	if model.IsOpenCodeProvider(provider) {
 		response, err := opencode.CreateChatCompletion(ctx, client, req)
 		return response, 0, err
 	}
@@ -1423,14 +1418,6 @@ func (l *Llmer) requestCompletionInternal2(
 				break
 			}
 		}
-	}
-
-	// The OpenCode Zen free tier gate requires a tool named "read" in the
-	// body of every request, including the follow-up requests that follow a
-	// tool call.
-	isOpenCode := provider == model.ProviderOpencode
-	if isOpenCode {
-		req.Tools = opencode.EnsureGateTool(req.Tools)
 	}
 
 	completionStart := time.Now()
@@ -1499,7 +1486,7 @@ func (l *Llmer) requestCompletionInternal2(
 		}
 		usage = usage.Add(currentUsage)
 
-		if (!nativeToolCalling && !isOpenCode) || len(message.ToolCalls) == 0 {
+		if !nativeToolCalling || len(message.ToolCalls) == 0 {
 			break
 		}
 		if toolDepth >= 3 {
@@ -1518,21 +1505,12 @@ func (l *Llmer) requestCompletionInternal2(
 			ToolCalls:    toolCalls,
 			ExtraContent: message.ExtraContent, // Google requires that we pass encrypted thought signatures forward
 		})
-		if isOpenCode {
-			// The gate tool has to stay in the body of the next request.
-			req.Tools = opencode.EnsureGateTool(req.Tools)
-		} else {
-			req.Tools = nil
-			req.ToolChoice = nil
-		}
+		req.Tools = nil
+		req.ToolChoice = nil
 		nativeToolCalling = false
 		for i, call := range toolCalls {
 			var results string
-			if isOpenCode && call.Function.Name == opencode.GateToolName {
-				// The gate tool is a stub, the bot cannot read files.
-				slog.Info("opencode gate tool called, answering as unavailable", "model", m.Name, "provider", provider)
-				results = openCodeGateToolUnavailableResult
-			} else if call.Function.Name == toolNameCodeInterp {
+			if call.Function.Name == toolNameCodeInterp {
 				args := parseCodeToolArguments(call.Function.Arguments)
 				slog.Info("executing native tool call", "tool", call.Function.Name, "language", args.Language, "code_len", len(args.Code))
 				results = l.executeCodeTool(ctx, args.Language, args.Code)
@@ -1664,10 +1642,10 @@ func (l *Llmer) requestCompletionInternal(
 				config = openai.DefaultAzureConfig(token, baseUrl)
 				config.APIType = openai.APITypeOpenAI
 			}
-			if provider == model.ProviderOpencode {
+			if model.IsOpenCodeProvider(provider) {
 				version := model.OpenCodeVersion()
-				config.DefaultHeaders = opencode.Headers(version)
-				slog.Info("using opencode free tier client", "version", version, "baseUrl", baseUrl)
+				config.DefaultHeaders = opencode.HeadersWithChannel(version, model.OpenCodeChannel())
+				slog.Info("using opencode client", "version", version, "baseUrl", baseUrl)
 			}
 			client := openai.NewClientWithConfig(config)
 
