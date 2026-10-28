@@ -1,24 +1,16 @@
 {
   "models": [
     {
-      "name": "MiniMax M3.1 Flash",
-      "command": "minimax",
-      "vision": true,
-      "reasoning": true,
-      "providers": {
-        "nim": {
-          "codenames": [
-            "minimaxai/minimax-m3.1-flash"
-          ]
-        }
-      }
-    },
-    {
       "name": "DeepSeek V4.1 Flash",
       "command": "dsflash",
       "vision": true,
       "reasoning": true,
       "providers": {
+        "deepseek": {
+          "codenames": [
+            "deepseek-flash"
+          ]
+        },
         "inferx": {
           "codenames": [
             "deepseek-v4.1-flash"
@@ -27,11 +19,6 @@
         "opencode": {
           "codenames": [
             "deepseek-v4.1-flash-free"
-          ]
-        },
-        "opencode-go": {
-          "codenames": [
-            "deepseek-v4.1-flash"
           ]
         },
         "orcarouter": {
@@ -47,7 +34,21 @@
         "unorouter": {
           "codenames": [
             "deepseek-v4.1-flash-1017",
+            "deepseek-v4.1-flash",
             "deepseek-v4.1-flash:free"
+          ]
+        }
+      }
+    },
+    {
+      "name": "MiniMax M3.1 Flash",
+      "command": "minimax",
+      "vision": true,
+      "reasoning": true,
+      "providers": {
+        "nim": {
+          "codenames": [
+            "minimaxai/minimax-m3.1-flash"
           ]
         }
       }
@@ -61,11 +62,6 @@
         "opencode": {
           "codenames": [
             "mimo-v2.6-flash-free"
-          ]
-        },
-        "opencode-go": {
-          "codenames": [
-            "mimo-v2.6-flash"
           ]
         },
         "tokenharbor": {
@@ -797,12 +793,11 @@
   "providers_order": [
     "unorouter",
     "orcarouter",
+    "deepseek",
     "opencode",
-    "opencode-go",
     "nim",
     "google",
     "openrouter",
-    "deepseek",
     "mimo",
     "ollama",
     "minimax",
@@ -868,9 +863,6 @@
     "opencode": {
       "native_tool_calling": true
     },
-    "opencode-go": {
-      "native_tool_calling": true
-    },
     "orcarouter": {
       "native_tool_calling": true
     },
@@ -881,5 +873,5 @@
       "native_tool_calling": true
     }
   },
-  "current_version": 98
+  "current_version": 99
 }
