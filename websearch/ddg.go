@@ -1,4 +1,4 @@
-package ddg
+package websearch
 
 import (
 	"fmt"
@@ -11,50 +11,43 @@ import (
 	"github.com/PuerkitoBio/goquery"
 )
 
-// DefaultUserAgent defines a default value for user-agent header.
-const DefaultUserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+// defaultUserAgent defines a default value for the user-agent header.
+const defaultUserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
 
-// Result holds the returned query data
-type Result struct {
-	Title string
-	Info  string
-	URL   string
+const ddgRequestTimeout = 5 * time.Second
+
+// queryDDG requests the DuckDuckGo HTML endpoint and parses the results.
+func queryDDG(query string, maxResult int) ([]Result, error) {
+	return queryDDGWithProxy(query, maxResult, "")
 }
 
-// Requests the query and puts the results into an array
-func Query(query string, maxResult int) ([]Result, error) {
-	return QueryWithProxy(query, maxResult, "")
-}
-
-const requestTimeout = 5 * time.Second
-
-func QueryWithProxy(query string, maxResult int, proxyUrl string) ([]Result, error) {
+func queryDDGWithProxy(query string, maxResult int, proxyURL string) ([]Result, error) {
 	results := []Result{}
-	queryUrl := fmt.Sprintf("https://html.duckduckgo.com/html/?q=%s", url.QueryEscape(query))
+	queryURL := fmt.Sprintf("https://html.duckduckgo.com/html/?q=%s", url.QueryEscape(query))
 
 	transport := &http.Transport{
 		DialContext: (&net.Dialer{
-			Timeout: requestTimeout,
+			Timeout: ddgRequestTimeout,
 		}).DialContext,
 	}
-	if proxyUrl != "" {
-		proxy, err := url.Parse(proxyUrl)
+	if proxyURL != "" {
+		proxy, err := url.Parse(proxyURL)
 		if err != nil {
 			return results, fmt.Errorf("parse proxy url error: %w", err)
 		}
 		transport.Proxy = http.ProxyURL(proxy)
 	}
 
-	client := &http.Client{Transport: transport, Timeout: requestTimeout}
-	req, err := http.NewRequest("GET", queryUrl, nil)
+	client := &http.Client{Transport: transport, Timeout: ddgRequestTimeout}
+	req, err := http.NewRequest("GET", queryURL, nil)
 	if err != nil {
 		return results, fmt.Errorf("new request error: %w", err)
 	}
-	req.Header.Set("User-Agent", DefaultUserAgent)
+	req.Header.Set("User-Agent", defaultUserAgent)
 
 	response, err := client.Do(req)
 	if err != nil {
-		return results, fmt.Errorf("get %v error: %w", queryUrl, err)
+		return results, fmt.Errorf("get %v error: %w", queryURL, err)
 	}
 
 	defer response.Body.Close()
@@ -82,17 +75,16 @@ func QueryWithProxy(query string, maxResult int, proxyUrl string) ([]Result, err
 		ref := ""
 
 		if len(titleNode.Nodes) > 0 && len(titleNode.Nodes[0].Attr) > 2 {
-			ref = getDDGUrl(titleNode.Nodes[0].Attr[2].Val)
+			ref = getDDGURL(titleNode.Nodes[0].Attr[2].Val)
 		}
 
-		results = append(results[:], Result{title, info, ref})
-
+		results = append(results[:], Result{Title: title, Info: info, URL: ref})
 	}
 
 	return results, nil
 }
 
-func getDDGUrl(urlStr string) string {
+func getDDGURL(urlStr string) string {
 	trimmed := strings.TrimPrefix(urlStr, "//duckduckgo.com/l/?uddg=")
 	if before, _, ok := strings.Cut(trimmed, "&rut="); ok {
 		decodedStr, err := url.PathUnescape(before)

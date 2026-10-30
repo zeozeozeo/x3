@@ -1479,7 +1479,7 @@ func (l *Llmer) executeSearchTool(ctx context.Context, name, query string, searc
 	var citemap map[int]string
 	switch name {
 	case toolNameWebSearch:
-		results, citemap = getSearchResults(query)
+		results, citemap = getSearchResults(ctx, query)
 	case toolNameDiscordSearch:
 		results, citemap = l.getDiscordSearchResults(ctx, query)
 	default:
@@ -1689,7 +1689,7 @@ func (l *Llmer) requestCompletionInternal2(
 			return nextRes, usage.Add(nextUsage), timeToFirstToken, nextErr
 		}
 		if search := extractSearch(unescaped); search != "" {
-			results, citemap := getSearchResults(search)
+			results, citemap := getSearchResults(ctx, search)
 			nextRes, nextUsage, _, nextErr := l.requestCompletionInternal2(
 				m, codename, provider, settings, client, prepend, thinkPrefill, ctx,
 				searchDepth+1, citemap, results,

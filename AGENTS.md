@@ -2,7 +2,7 @@
 
 ## Project Structure & Module Organization
 
-This is a Go Discord and Matrix bot. The executable entrypoint is `main.go`; auxiliary commands live in `cmd/`. Core bot behavior is in `commands/`, language-model routing in `llm/` and `model/`, persona and character-card logic in `persona/`, and SQLite persistence in `db/`. The `modeled/` package contains the embedded model-editor server, HTML templates, JavaScript, and CSS. The `openaiapi/` package contains the local OpenAI-compatible API server that exposes the models of `models.json` under their short codenames and routes them through the same provider router as the bot. Provider/API integrations are grouped in packages such as `openai/`, `horder/`, `ddg/`, and `site/`. Tests are colocated with implementation files using `_test.go`.
+This is a Go Discord and Matrix bot. The executable entrypoint is `main.go`; auxiliary commands live in `cmd/`. Core bot behavior is in `commands/`, language-model routing in `llm/` and `model/`, persona and character-card logic in `persona/`, and SQLite persistence in `db/`. The `modeled/` package contains the embedded model-editor server, HTML templates, JavaScript, and CSS. The `openaiapi/` package contains the local OpenAI-compatible API server that exposes the models of `models.json` under their short codenames and routes them through the same provider router as the bot. Provider/API integrations are grouped in packages such as `openai/`, `horder/`, `exa/`, and `site/`; `websearch/` combines the Exa search client with its DuckDuckGo fallback. Tests are colocated with implementation files using `_test.go`.
 
 ## Build, Test, and Development Commands
 

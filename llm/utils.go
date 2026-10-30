@@ -1,13 +1,15 @@
 package llm
 
 import (
+	"context"
 	"fmt"
 	"log/slog"
 	"maps"
 	"regexp"
 	"strings"
+	"time"
 
-	"github.com/zeozeozeo/x3/ddg"
+	"github.com/zeozeozeo/x3/websearch"
 )
 
 var thinkingTags = [][2]string{
@@ -241,7 +243,7 @@ func maxCiteID(citemap map[int]string) int {
 	return maxID
 }
 
-func getSearchResults(search string) (string, map[int]string) {
+func getSearchResults(ctx context.Context, search string) (string, map[int]string) {
 	citemap := make(map[int]string)
 	search = strings.TrimSpace(search)
 	if search == "" {
@@ -249,24 +251,18 @@ func getSearchResults(search string) (string, map[int]string) {
 	}
 
 	slog.Info("running search", "query", search)
-	var err error
-	var results []ddg.Result
-	for range 3 {
-		results, err = ddg.Query(search, 10)
-		if err == nil {
-			break
-		}
-	}
+	start := time.Now()
+	results, provider, err := websearch.Query(ctx, search, 10)
 	if err != nil {
 		return fmt.Sprintf("<failed to search for '%s': %v>", search, err), citemap
 	}
-	slog.Info("search: got results", "query", search, "results", len(results))
+	slog.Info("search: got results", "query", search, "provider", provider, "results", len(results), "duration", time.Since(start))
 	if len(results) == 0 {
 		return fmt.Sprintf("<The search for '%s' completed, but returned no results. Try a shorter or different query if the answer requires search.>", search), citemap
 	}
 
 	var sb strings.Builder
-	fmt.Fprintf(&sb, "\n<You ran a search for '%s', here are the 10 search results. If these are not useful, you may run a new search. Make sure to use citing in your response when using relevant sources, e.g. [1]>\n", search)
+	fmt.Fprintf(&sb, "\n<You ran a search for '%s', here are the %d search results. If these are not useful, you may run a new search. Make sure to use citing in your response when using relevant sources, e.g. [1]>\n", search, len(results))
 	for i, res := range results {
 		fmt.Fprintf(&sb, "---\n## Source [%d]: '%s'\nURL: %s\nContent: %s\n---\n", i+1, res.Title, res.URL, res.Info)
 		citemap[i+1] = res.URL
