@@ -13,7 +13,7 @@ import (
 func stubProviders(
 	t *testing.T,
 	cfg exa.Config,
-	exaFn func(context.Context, exa.Config, string, int) ([]exa.Result, error),
+	exaFn func(context.Context, exa.Config, string, int) (exa.SearchOutput, error),
 	ddgFn func(string, int) ([]Result, error),
 	cooldown time.Duration,
 ) {
@@ -42,14 +42,17 @@ func enabledConfig() exa.Config {
 func TestQueryUsesExa(t *testing.T) {
 	exaCalled := false
 	stubProviders(t, enabledConfig(),
-		func(_ context.Context, _ exa.Config, query string, maxResults int) ([]exa.Result, error) {
+		func(_ context.Context, _ exa.Config, query string, maxResults int) (exa.SearchOutput, error) {
 			exaCalled = true
 			if query != "golang" || maxResults != 5 {
 				t.Errorf("query = %q, maxResults = %d", query, maxResults)
 			}
-			return []exa.Result{
-				{Title: " Exa ", URL: " https://exa.example ", Snippet: "snip"},
-				{Title: "No URL"},
+			return exa.SearchOutput{
+				Results: []exa.Result{
+					{Title: " Exa ", URL: " https://exa.example ", Snippet: "snip", PublishedDate: "2026-01-02", Author: "gopher"},
+					{Title: "No URL"},
+				},
+				Notices: []string{"results were relaxed"},
 			}, nil
 		},
 		func(string, int) ([]Result, error) {
@@ -59,45 +62,52 @@ func TestQueryUsesExa(t *testing.T) {
 		time.Minute,
 	)
 
-	results, provider, err := Query(context.Background(), "golang", 5)
+	resp, err := Query(context.Background(), "golang", 5)
 	if err != nil {
 		t.Fatalf("Query: %v", err)
 	}
 	if !exaCalled {
 		t.Error("exa was not called")
 	}
-	if provider != "exa" {
-		t.Errorf("provider = %q, want exa", provider)
+	if resp.Provider != "exa" {
+		t.Errorf("provider = %q, want exa", resp.Provider)
 	}
-	if len(results) != 1 {
-		t.Fatalf("got %d results, want 1", len(results))
+	if len(resp.Results) != 1 {
+		t.Fatalf("got %d results, want 1", len(resp.Results))
 	}
-	if results[0].Title != "Exa" || results[0].URL != "https://exa.example" || results[0].Info != "snip" {
-		t.Errorf("unexpected result: %+v", results[0])
+	got := resp.Results[0]
+	if got.Title != "Exa" || got.URL != "https://exa.example" || got.Info != "snip" {
+		t.Errorf("unexpected result: %+v", got)
+	}
+	if got.Published != "2026-01-02" || got.Author != "gopher" {
+		t.Errorf("metadata lost: %+v", got)
+	}
+	if len(resp.Notices) != 1 || resp.Notices[0] != "results were relaxed" {
+		t.Errorf("notices = %v", resp.Notices)
 	}
 }
 
 func TestQueryFallsBackToDuckDuckGo(t *testing.T) {
 	tests := []struct {
 		name  string
-		exaFn func(context.Context, exa.Config, string, int) ([]exa.Result, error)
+		exaFn func(context.Context, exa.Config, string, int) (exa.SearchOutput, error)
 	}{
 		{
 			name: "exa error",
-			exaFn: func(context.Context, exa.Config, string, int) ([]exa.Result, error) {
-				return nil, errors.New("exa is down")
+			exaFn: func(context.Context, exa.Config, string, int) (exa.SearchOutput, error) {
+				return exa.SearchOutput{}, errors.New("exa is down")
 			},
 		},
 		{
 			name: "exa empty",
-			exaFn: func(context.Context, exa.Config, string, int) ([]exa.Result, error) {
-				return nil, nil
+			exaFn: func(context.Context, exa.Config, string, int) (exa.SearchOutput, error) {
+				return exa.SearchOutput{}, nil
 			},
 		},
 		{
 			name: "exa results without urls",
-			exaFn: func(context.Context, exa.Config, string, int) ([]exa.Result, error) {
-				return []exa.Result{{Title: "No URL"}}, nil
+			exaFn: func(context.Context, exa.Config, string, int) (exa.SearchOutput, error) {
+				return exa.SearchOutput{Results: []exa.Result{{Title: "No URL"}}}, nil
 			},
 		},
 	}
@@ -113,18 +123,18 @@ func TestQueryFallsBackToDuckDuckGo(t *testing.T) {
 				time.Minute,
 			)
 
-			results, provider, err := Query(context.Background(), "query", 10)
+			resp, err := Query(context.Background(), "query", 10)
 			if err != nil {
 				t.Fatalf("Query: %v", err)
 			}
 			if !ddgCalled {
 				t.Error("duckduckgo was not called")
 			}
-			if provider != "duckduckgo" {
-				t.Errorf("provider = %q, want duckduckgo", provider)
+			if resp.Provider != "duckduckgo" {
+				t.Errorf("provider = %q, want duckduckgo", resp.Provider)
 			}
-			if len(results) != 1 || results[0].Title != "DDG" {
-				t.Errorf("unexpected results: %+v", results)
+			if len(resp.Results) != 1 || resp.Results[0].Title != "DDG" {
+				t.Errorf("unexpected results: %+v", resp.Results)
 			}
 		})
 	}
@@ -133,12 +143,12 @@ func TestQueryFallsBackToDuckDuckGo(t *testing.T) {
 func TestQuerySkipsExaDuringCooldown(t *testing.T) {
 	exaCalls := 0
 	stubProviders(t, enabledConfig(),
-		func(context.Context, exa.Config, string, int) ([]exa.Result, error) {
+		func(context.Context, exa.Config, string, int) (exa.SearchOutput, error) {
 			exaCalls++
 			if exaCalls == 1 {
-				return nil, errors.New("network down")
+				return exa.SearchOutput{}, errors.New("network down")
 			}
-			return []exa.Result{{Title: "Exa", URL: "https://exa.example"}}, nil
+			return exa.SearchOutput{Results: []exa.Result{{Title: "Exa", URL: "https://exa.example"}}}, nil
 		},
 		func(string, int) ([]Result, error) {
 			return []Result{{Title: "DDG", URL: "https://ddg.example"}}, nil
@@ -146,19 +156,19 @@ func TestQuerySkipsExaDuringCooldown(t *testing.T) {
 		time.Minute,
 	)
 
-	if _, provider, err := Query(context.Background(), "first", 10); err != nil || provider != "duckduckgo" {
-		t.Fatalf("first query: provider = %q, err = %v", provider, err)
+	if resp, err := Query(context.Background(), "first", 10); err != nil || resp.Provider != "duckduckgo" {
+		t.Fatalf("first query: provider = %q, err = %v", resp.Provider, err)
 	}
-	if _, provider, err := Query(context.Background(), "second", 10); err != nil || provider != "duckduckgo" {
-		t.Fatalf("second query: provider = %q, err = %v", provider, err)
+	if resp, err := Query(context.Background(), "second", 10); err != nil || resp.Provider != "duckduckgo" {
+		t.Fatalf("second query: provider = %q, err = %v", resp.Provider, err)
 	}
 	if exaCalls != 1 {
 		t.Fatalf("exa calls = %d, want 1 while cooling down", exaCalls)
 	}
 
 	cooldownUntil.Store(0)
-	if _, provider, err := Query(context.Background(), "third", 10); err != nil || provider != "exa" {
-		t.Fatalf("third query: provider = %q, err = %v", provider, err)
+	if resp, err := Query(context.Background(), "third", 10); err != nil || resp.Provider != "exa" {
+		t.Fatalf("third query: provider = %q, err = %v", resp.Provider, err)
 	}
 	if exaCalls != 2 {
 		t.Fatalf("exa calls = %d, want 2 after cooldown", exaCalls)
@@ -167,8 +177,8 @@ func TestQuerySkipsExaDuringCooldown(t *testing.T) {
 
 func TestQueryAuthFailureUsesLongCooldown(t *testing.T) {
 	stubProviders(t, enabledConfig(),
-		func(context.Context, exa.Config, string, int) ([]exa.Result, error) {
-			return nil, &exa.HTTPError{StatusCode: 401, Message: "invalid key"}
+		func(context.Context, exa.Config, string, int) (exa.SearchOutput, error) {
+			return exa.SearchOutput{}, &exa.HTTPError{StatusCode: 401, Message: "invalid key"}
 		},
 		func(string, int) ([]Result, error) {
 			return []Result{{Title: "DDG", URL: "https://ddg.example"}}, nil
@@ -176,7 +186,7 @@ func TestQueryAuthFailureUsesLongCooldown(t *testing.T) {
 		time.Minute,
 	)
 
-	if _, _, err := Query(context.Background(), "query", 10); err != nil {
+	if _, err := Query(context.Background(), "query", 10); err != nil {
 		t.Fatalf("Query: %v", err)
 	}
 	remaining := time.Until(time.Unix(0, cooldownUntil.Load()))
@@ -188,8 +198,8 @@ func TestQueryAuthFailureUsesLongCooldown(t *testing.T) {
 func TestQueryBothProvidersFail(t *testing.T) {
 	ddgCalls := 0
 	stubProviders(t, enabledConfig(),
-		func(context.Context, exa.Config, string, int) ([]exa.Result, error) {
-			return nil, errors.New("exa is down")
+		func(context.Context, exa.Config, string, int) (exa.SearchOutput, error) {
+			return exa.SearchOutput{}, errors.New("exa is down")
 		},
 		func(string, int) ([]Result, error) {
 			ddgCalls++
@@ -198,12 +208,12 @@ func TestQueryBothProvidersFail(t *testing.T) {
 		time.Minute,
 	)
 
-	_, provider, err := Query(context.Background(), "query", 10)
+	resp, err := Query(context.Background(), "query", 10)
 	if err == nil {
 		t.Fatal("expected an error")
 	}
-	if provider != "" {
-		t.Errorf("provider = %q, want empty", provider)
+	if resp.Provider != "" {
+		t.Errorf("provider = %q, want empty", resp.Provider)
 	}
 	if !strings.Contains(err.Error(), "duckduckgo") {
 		t.Errorf("error = %v, want duckduckgo context", err)
@@ -216,9 +226,9 @@ func TestQueryBothProvidersFail(t *testing.T) {
 func TestQueryRetriesDuckDuckGo(t *testing.T) {
 	ddgCalls := 0
 	stubProviders(t, exa.Config{},
-		func(context.Context, exa.Config, string, int) ([]exa.Result, error) {
+		func(context.Context, exa.Config, string, int) (exa.SearchOutput, error) {
 			t.Error("exa must not be called without a key")
-			return nil, nil
+			return exa.SearchOutput{}, nil
 		},
 		func(string, int) ([]Result, error) {
 			ddgCalls++
@@ -230,8 +240,8 @@ func TestQueryRetriesDuckDuckGo(t *testing.T) {
 		time.Minute,
 	)
 
-	if _, provider, err := Query(context.Background(), "query", 10); err != nil || provider != "duckduckgo" {
-		t.Fatalf("provider = %q, err = %v", provider, err)
+	if resp, err := Query(context.Background(), "query", 10); err != nil || resp.Provider != "duckduckgo" {
+		t.Fatalf("provider = %q, err = %v", resp.Provider, err)
 	}
 	if ddgCalls != 3 {
 		t.Errorf("duckduckgo calls = %d, want 3", ddgCalls)
@@ -241,7 +251,7 @@ func TestQueryRetriesDuckDuckGo(t *testing.T) {
 func TestQueryEmpty(t *testing.T) {
 	stubProviders(t, enabledConfig(), nil, nil, time.Minute)
 
-	if _, _, err := Query(context.Background(), "  ", 10); err == nil {
+	if _, err := Query(context.Background(), "  ", 10); err == nil {
 		t.Fatal("expected an error for an empty query")
 	}
 }
@@ -258,7 +268,7 @@ func TestQueryCanceledContext(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	if _, _, err := Query(ctx, "query", 10); !errors.Is(err, context.Canceled) {
+	if _, err := Query(ctx, "query", 10); !errors.Is(err, context.Canceled) {
 		t.Fatalf("error = %v, want context.Canceled", err)
 	}
 }

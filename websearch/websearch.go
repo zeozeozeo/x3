@@ -16,10 +16,21 @@ import (
 )
 
 // Result is the common search result shape used by the LLM prompt builder.
+// Published and Author are optional and only come from Exa.
 type Result struct {
-	Title string
-	Info  string
-	URL   string
+	Title     string
+	Info      string
+	URL       string
+	Published string
+	Author    string
+}
+
+// Response is the outcome of a search, including any notes the provider wants
+// shown to the model.
+type Response struct {
+	Results  []Result
+	Provider string
+	Notices  []string
 }
 
 const (
@@ -42,10 +53,10 @@ var (
 
 // Query searches the web, preferring Exa and falling back to DuckDuckGo.
 // The returned provider is "exa" or "duckduckgo".
-func Query(ctx context.Context, query string, maxResults int) ([]Result, string, error) {
+func Query(ctx context.Context, query string, maxResults int) (Response, error) {
 	query = strings.TrimSpace(query)
 	if query == "" {
-		return nil, "", errors.New("search query was empty")
+		return Response{}, errors.New("search query was empty")
 	}
 	if maxResults <= 0 {
 		maxResults = defaultResults
@@ -55,14 +66,22 @@ func Query(ctx context.Context, query string, maxResults int) ([]Result, string,
 		if until := cooldownUntil.Load(); until > time.Now().UnixNano() {
 			slog.Debug("skipping exa during cooldown", "until", time.Unix(0, until))
 		} else {
-			results, err := exaSearch(ctx, exaConfig, query, maxResults)
+			out, err := exaSearch(ctx, exaConfig, query, maxResults)
 			if err == nil {
-				if converted := fromExa(results); len(converted) > 0 {
-					return converted, "exa", nil
+				if converted := fromExa(out.Results); len(converted) > 0 {
+					slog.Debug("exa search usage",
+						"query", query,
+						"cost_usd", out.CostUSD,
+						"search_ms", out.SearchMS,
+						"notices", len(out.Notices))
+					if len(out.Warnings) > 0 {
+						slog.Warn("exa search warnings", "query", query, "warnings", strings.Join(out.Warnings, "; "))
+					}
+					return Response{Results: converted, Provider: "exa", Notices: out.Notices}, nil
 				}
 				slog.Info("exa returned no results, falling back to duckduckgo", "query", query)
 			} else if ctxErr := ctx.Err(); ctxErr != nil {
-				return nil, "", ctxErr
+				return Response{}, ctxErr
 			} else {
 				cooldown := failureCooldown
 				var httpErr *exa.HTTPError
@@ -81,15 +100,15 @@ func Query(ctx context.Context, query string, maxResults int) ([]Result, string,
 	var attempts []error
 	for range ddgAttempts {
 		if err := ctx.Err(); err != nil {
-			return nil, "", err
+			return Response{}, err
 		}
 		results, err := ddgSearch(query, maxResults)
 		if err == nil {
-			return results, "duckduckgo", nil
+			return Response{Results: results, Provider: "duckduckgo"}, nil
 		}
 		attempts = append(attempts, err)
 	}
-	return nil, "", fmt.Errorf("duckduckgo: %w", errors.Join(attempts...))
+	return Response{}, fmt.Errorf("duckduckgo: %w", errors.Join(attempts...))
 }
 
 func fromExa(results []exa.Result) []Result {
@@ -100,9 +119,11 @@ func fromExa(results []exa.Result) []Result {
 			continue
 		}
 		converted = append(converted, Result{
-			Title: strings.TrimSpace(result.Title),
-			Info:  result.Snippet,
-			URL:   resultURL,
+			Title:     strings.TrimSpace(result.Title),
+			Info:      result.Snippet,
+			URL:       resultURL,
+			Published: strings.TrimSpace(result.PublishedDate),
+			Author:    strings.TrimSpace(result.Author),
 		})
 	}
 	return converted

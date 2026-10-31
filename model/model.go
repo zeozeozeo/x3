@@ -457,6 +457,33 @@ func ProviderUsesNativeToolCalling(provider string) bool {
 	return providerSettings[provider].NativeToolCalling
 }
 
+// parallelToolCallProviders lists providers whose OpenAI-compatible endpoint
+// accepts the parallel_tool_calls parameter. Providers that reject unknown
+// parameters stay out of the list so a search turn cannot break them.
+var parallelToolCallProviders = map[string]bool{
+	ProviderGroq:       true,
+	ProviderGoogle:     true,
+	ProviderOpenRouter: true,
+	ProviderDeepseek:   true,
+	ProviderMistral:    true,
+	ProviderTogether:   true,
+	ProviderGithub:     true,
+}
+
+// ProviderSupportsParallelToolCalls reports whether the provider should be
+// told to run several tool calls per assistant turn. Set
+// X3_PARALLEL_TOOL_CALLS=off to disable it everywhere.
+func ProviderSupportsParallelToolCalls(provider string) bool {
+	if !ProviderUsesNativeToolCalling(provider) {
+		return false
+	}
+	switch strings.ToLower(strings.TrimSpace(os.Getenv("X3_PARALLEL_TOOL_CALLS"))) {
+	case "0", "false", "no", "off":
+		return false
+	}
+	return parallelToolCallProviders[provider]
+}
+
 func OpenCodeVersion() string {
 	version := strings.TrimSpace(os.Getenv("X3_OPENCODE_VERSION"))
 	return opencode.NormalizeVersion(version)

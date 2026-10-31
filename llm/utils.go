@@ -7,6 +7,7 @@ import (
 	"maps"
 	"regexp"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/zeozeozeo/x3/websearch"
@@ -157,13 +158,42 @@ func StripThinkingEdgeTags(s string) string {
 	}
 }
 
-// extract stuff in <search></search>
-func extractSearch(s string) string {
-	return extractTaggedContent(s, "<search>", "</search>")
+// extractSearchAll returns every distinct <search> query, up to limit.
+func extractSearchAll(s string, limit int) []string {
+	return extractAllTaggedContent(s, "<search>", "</search>", limit)
 }
 
 func extractDiscordSearch(s string) string {
 	return extractTaggedContent(s, "<discord>", "</discord>")
+}
+
+func extractAllTaggedContent(s, startTag, endTag string, limit int) []string {
+	var queries []string
+	seen := make(map[string]struct{})
+	for {
+		if limit > 0 && len(queries) >= limit {
+			return queries
+		}
+		startIdx := strings.Index(s, startTag)
+		if startIdx == -1 {
+			return queries
+		}
+		endIdx := strings.Index(s[startIdx+len(startTag):], endTag)
+		if endIdx == -1 {
+			return queries
+		}
+		contentStart := startIdx + len(startTag)
+		contentEnd := contentStart + endIdx
+		query := strings.TrimSpace(s[contentStart:contentEnd])
+		if query != "" {
+			key := strings.ToLower(query)
+			if _, ok := seen[key]; !ok {
+				seen[key] = struct{}{}
+				queries = append(queries, query)
+			}
+		}
+		s = s[contentEnd+len(endTag):]
+	}
 }
 
 func extractTaggedContent(s, startTag, endTag string) string {
@@ -243,30 +273,129 @@ func maxCiteID(citemap map[int]string) int {
 	return maxID
 }
 
-func getSearchResults(ctx context.Context, search string) (string, map[int]string) {
+const (
+	// maxSearchesPerTurn caps how many search tool calls one assistant turn can
+	// execute, so a model cannot flood the prompt with results.
+	maxSearchesPerTurn = 4
+	// webSearchConcurrency bounds simultaneous provider requests.
+	webSearchConcurrency = 3
+)
+
+// webQueryResult is one web search in a batch, before it is formatted.
+type webQueryResult struct {
+	Query   string
+	Results []websearch.Result
+	Notices []string
+	Err     error
+}
+
+// resultsPerSearch keeps a multi-search turn close to the token cost of a
+// single search by trading breadth per query for breadth across queries.
+func resultsPerSearch(count int) int {
+	switch {
+	case count <= 1:
+		return 10
+	case count == 2:
+		return 6
+	default:
+		return 4
+	}
+}
+
+var (
+	// webSearch is a variable so tests can inject a fake provider.
+	webSearch = websearch.Query
+)
+
+// runWebSearches runs the queries concurrently and returns their results in
+// the same order as the input, so citation numbering stays deterministic.
+func runWebSearches(ctx context.Context, queries []string) []webQueryResult {
+	out := make([]webQueryResult, len(queries))
+	perQuery := resultsPerSearch(len(queries))
+	sem := make(chan struct{}, webSearchConcurrency)
+	var wg sync.WaitGroup
+	for i, query := range queries {
+		out[i].Query = query
+		wg.Add(1)
+		go func(i int, query string) {
+			defer wg.Done()
+			sem <- struct{}{}
+			defer func() { <-sem }()
+
+			start := time.Now()
+			slog.Info("running search", "query", query)
+			resp, err := webSearch(ctx, query, perQuery)
+			if err != nil {
+				out[i].Err = err
+				return
+			}
+			out[i].Results = resp.Results
+			out[i].Notices = resp.Notices
+			slog.Info("search: got results", "query", query, "provider", resp.Provider,
+				"results", len(resp.Results), "duration", time.Since(start))
+		}(i, query)
+	}
+	wg.Wait()
+	return out
+}
+
+// formatWebQuery renders one query's results as a tool result. Citation ids
+// start at startID, and URLs already present in seen are not repeated.
+func formatWebQuery(res webQueryResult, startID int, seen map[string]int) (string, map[int]string) {
 	citemap := make(map[int]string)
-	search = strings.TrimSpace(search)
-	if search == "" {
-		return "<search query was empty>", citemap
-	}
-
-	slog.Info("running search", "query", search)
-	start := time.Now()
-	results, provider, err := websearch.Query(ctx, search, 10)
-	if err != nil {
-		return fmt.Sprintf("<failed to search for '%s': %v>", search, err), citemap
-	}
-	slog.Info("search: got results", "query", search, "provider", provider, "results", len(results), "duration", time.Since(start))
-	if len(results) == 0 {
-		return fmt.Sprintf("<The search for '%s' completed, but returned no results. Try a shorter or different query if the answer requires search.>", search), citemap
-	}
-
 	var sb strings.Builder
-	fmt.Fprintf(&sb, "\n<You ran a search for '%s', here are the %d search results. If these are not useful, you may run a new search. Make sure to use citing in your response when using relevant sources, e.g. [1]>\n", search, len(results))
-	for i, res := range results {
-		fmt.Fprintf(&sb, "---\n## Source [%d]: '%s'\nURL: %s\nContent: %s\n---\n", i+1, res.Title, res.URL, res.Info)
-		citemap[i+1] = res.URL
+	if res.Err != nil {
+		fmt.Fprintf(&sb, "<failed to search for '%s': %v>", res.Query, res.Err)
+		return sb.String(), citemap
+	}
+	if len(res.Results) == 0 {
+		fmt.Fprintf(&sb, "<The search for '%s' completed, but returned no results. Try a shorter or different query if the answer requires search.>", res.Query)
+		return sb.String(), citemap
 	}
 
+	next := startID
+	fmt.Fprintf(&sb, "\n<You ran a search for '%s', here are the %d search results. If these are not useful, you may run a new search. Make sure to use citing in your response when using relevant sources, e.g. [%d]>\n", res.Query, len(res.Results), next)
+	if len(res.Notices) > 0 {
+		fmt.Fprintf(&sb, "<Search notes: %s>\n", strings.Join(res.Notices, " "))
+	}
+	for _, r := range res.Results {
+		if _, duplicate := seen[r.URL]; duplicate {
+			fmt.Fprintf(&sb, "---\n## Source: '%s'\nURL: %s (already listed above, not repeated)\n---\n", r.Title, r.URL)
+			continue
+		}
+		fmt.Fprintf(&sb, "---\n## Source [%d]: '%s'\nURL: %s\n", next, r.Title, r.URL)
+		if r.Published != "" {
+			fmt.Fprintf(&sb, "Published: %s\n", r.Published)
+		}
+		if r.Author != "" {
+			fmt.Fprintf(&sb, "Author: %s\n", r.Author)
+		}
+		fmt.Fprintf(&sb, "Content: %s\n---\n", r.Info)
+		seen[r.URL] = next
+		citemap[next] = r.URL
+		next++
+	}
+	if len(citemap) == 0 {
+		sb.WriteString("<All results for this query were already listed above.>\n")
+	}
+	return sb.String(), citemap
+}
+
+// searchWeb runs the queries and renders them into one block with continuous
+// citation numbering.
+func searchWeb(ctx context.Context, queries []string) (string, map[int]string) {
+	results := runWebSearches(ctx, queries)
+	citemap := make(map[int]string)
+	seen := make(map[string]int)
+	var sb strings.Builder
+	next := 1
+	for _, res := range results {
+		text, cm := formatWebQuery(res, next, seen)
+		sb.WriteString(text)
+		for id, url := range cm {
+			citemap[id] = url
+		}
+		next += len(cm)
+	}
 	return sb.String(), citemap
 }

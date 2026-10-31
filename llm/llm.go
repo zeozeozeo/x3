@@ -1307,7 +1307,7 @@ var webSearchTool = openai.Tool{
 	Type: openai.ToolTypeFunction,
 	Function: &openai.FunctionDefinition{
 		Name:        toolNameWebSearch,
-		Description: "Search the web for current or external information. Use this for web results. Returns numbered sources that can be cited as [1], [2], etc.",
+		Description: "Search the web for current or external information. Each call runs one query; call this tool multiple times in the same turn to research different angles at once. Returns numbered sources that can be cited as [1], [2], etc.",
 		Parameters: map[string]any{
 			"type":     "object",
 			"required": []string{"query"},
@@ -1476,21 +1476,77 @@ func (l *Llmer) executeCodeTool(ctx context.Context, language, code string) stri
 	return strings.TrimSpace(out.String())
 }
 
-func (l *Llmer) executeSearchTool(ctx context.Context, name, query string, searchCitemap map[int]string) (string, map[int]string) {
-	query = strings.TrimSpace(query)
-	var results string
-	var citemap map[int]string
-	switch name {
-	case toolNameWebSearch:
-		results, citemap = getSearchResults(ctx, query)
-	case toolNameDiscordSearch:
-		results, citemap = l.getDiscordSearchResults(ctx, query)
-	default:
-		return fmt.Sprintf("<unknown tool %q>", name), searchCitemap
+// executeToolCalls runs every tool call in one assistant turn and returns one
+// result per call, in the order the model asked for them. Web searches are
+// fetched concurrently, but results are assembled in call order so citation
+// numbers stay deterministic. Discord searches stay sequential because the
+// search endpoint is rate-limit sensitive.
+func (l *Llmer) executeToolCalls(ctx context.Context, calls []openai.ToolCall, searchCitemap map[int]string) ([]string, map[int]string) {
+	results := make([]string, len(calls))
+	skip := make([]string, len(calls))
+	seenQueries := make(map[string]int, len(calls))
+	seenURLs := make(map[string]int, len(searchCitemap))
+	for id, url := range searchCitemap {
+		seenURLs[url] = id
 	}
 
-	results, citemap = remapSearchCites(results, citemap, maxCiteID(searchCitemap))
-	return results, mergeCitemaps(searchCitemap, citemap)
+	webCallIndex := make(map[int]int, len(calls))
+	var webQueries []string
+	searches := 0
+	for i, call := range calls {
+		name := call.Function.Name
+		if name != toolNameWebSearch && name != toolNameDiscordSearch {
+			continue
+		}
+		searches++
+		if searches > maxSearchesPerTurn {
+			skip[i] = fmt.Sprintf("<search skipped: at most %d searches can run in one turn>", maxSearchesPerTurn)
+			continue
+		}
+		query := strings.TrimSpace(parseToolQuery(call.Function.Arguments))
+		if query == "" {
+			skip[i] = "<search query was empty>"
+			continue
+		}
+		key := strings.ToLower(strings.Join(strings.Fields(query), " "))
+		if previous, ok := seenQueries[key]; ok {
+			skip[i] = fmt.Sprintf("<duplicate search query skipped; its results are in the tool result for call %d>", previous+1)
+			continue
+		}
+		seenQueries[key] = i
+		if name == toolNameWebSearch {
+			webCallIndex[i] = len(webQueries)
+			webQueries = append(webQueries, query)
+		}
+	}
+
+	webResults := runWebSearches(ctx, webQueries)
+
+	for i, call := range calls {
+		switch {
+		case skip[i] != "":
+			results[i] = skip[i]
+		case call.Function.Name == toolNameWebSearch:
+			section, citemap := formatWebQuery(webResults[webCallIndex[i]], 1, seenURLs)
+			section, citemap = remapSearchCites(section, citemap, maxCiteID(searchCitemap))
+			searchCitemap = mergeCitemaps(searchCitemap, citemap)
+			results[i] = section
+		case call.Function.Name == toolNameDiscordSearch:
+			query := strings.TrimSpace(parseToolQuery(call.Function.Arguments))
+			section, citemap := l.getDiscordSearchResults(ctx, query)
+			section, citemap = remapSearchCites(section, citemap, maxCiteID(searchCitemap))
+			searchCitemap = mergeCitemaps(searchCitemap, citemap)
+			results[i] = section
+		case call.Function.Name == toolNameCodeInterp:
+			args := parseCodeToolArguments(call.Function.Arguments)
+			slog.Info("executing native tool call", "tool", call.Function.Name, "language", args.Language, "code_len", len(args.Code))
+			results[i] = l.executeCodeTool(ctx, args.Language, args.Code)
+		default:
+			results[i] = fmt.Sprintf("<unknown tool %q>", call.Function.Name)
+		}
+	}
+
+	return results, searchCitemap
 }
 
 // createChatCompletionWithTTFT intentionally uses the non-streaming endpoint.
@@ -1548,6 +1604,9 @@ func (l *Llmer) requestCompletionInternal2(
 	if nativeToolCalling {
 		req.Tools = nativeSearchTools
 		req.ToolChoice = "auto"
+		if model.ProviderSupportsParallelToolCalls(provider) {
+			req.ParallelToolCalls = true
+		}
 		for i := range req.Messages {
 			if req.Messages[i].Role == RoleSystem {
 				req.Messages[i].Content = persona.StripLegacySearchSystemPrompt(req.Messages[i].Content)
@@ -1564,7 +1623,15 @@ func (l *Llmer) requestCompletionInternal2(
 	var response openai.ChatCompletionResponse
 	var usage Usage
 	var timeToFirstToken time.Duration
+	const maxToolRounds = 3
+	toolsAvailable := nativeToolCalling
 	for toolDepth := 0; ; toolDepth++ {
+		if toolsAvailable && toolDepth >= maxToolRounds {
+			slog.Info("search tool round limit reached", "rounds", toolDepth, "model", m.Name, "provider", provider)
+			req.Tools = nil
+			req.ToolChoice = nil
+			toolsAvailable = false
+		}
 		if provider == model.ProviderCerebras {
 			beforeTokens := estimateChatPromptTokens(m, req.Messages)
 			req.Messages = trimMessagesForCerebras(m, req.Messages, providerPromptTrimTarget)
@@ -1622,11 +1689,11 @@ func (l *Llmer) requestCompletionInternal2(
 		}
 		usage = usage.Add(currentUsage)
 
-		if !nativeToolCalling || len(message.ToolCalls) == 0 {
+		if len(message.ToolCalls) == 0 {
 			break
 		}
-		if toolDepth >= 3 {
-			slog.Warn("native tool call depth limit reached", "model", m.Name, "provider", provider)
+		if !nativeToolCalling {
+			slog.Warn("model returned tool calls but native tool calling is disabled", "model", m.Name, "provider", provider)
 			break
 		}
 
@@ -1641,25 +1708,32 @@ func (l *Llmer) requestCompletionInternal2(
 			ToolCalls:    toolCalls,
 			ExtraContent: message.ExtraContent, // Google requires that we pass encrypted thought signatures forward
 		})
-		req.Tools = nil
-		req.ToolChoice = nil
-		nativeToolCalling = false
-		for i, call := range toolCalls {
-			var results string
-			if call.Function.Name == toolNameCodeInterp {
-				args := parseCodeToolArguments(call.Function.Arguments)
-				slog.Info("executing native tool call", "tool", call.Function.Name, "language", args.Language, "code_len", len(args.Code))
-				results = l.executeCodeTool(ctx, args.Language, args.Code)
-			} else {
-				query := parseToolQuery(call.Function.Arguments)
-				slog.Info("executing native tool call", "tool", call.Function.Name, "query", query)
-				var updatedCitemap map[int]string
-				results, updatedCitemap = l.executeSearchTool(ctx, call.Function.Name, query, searchCitemap)
-				searchCitemap = updatedCitemap
+
+		if !toolsAvailable {
+			// The model asked for more tools after the round limit. Answering
+			// with empty content would fail the whole request, so nudge it to
+			// produce its final answer from the results it already has.
+			if toolDepth >= maxToolRounds+2 {
+				slog.Warn("model kept requesting tools after the round limit", "model", m.Name, "provider", provider)
+				break
 			}
+			for i, call := range toolCalls {
+				req.Messages = append(req.Messages, openai.ChatCompletionMessage{
+					Role:       openai.ChatMessageRoleTool,
+					Content:    "<search budget for this turn is exhausted; answer with the results you already have>",
+					ToolCallID: toolCallID(call, i),
+				})
+			}
+			continue
+		}
+
+		slog.Info("executing native tool calls", "round", toolDepth+1, "calls", len(toolCalls), "model", m.Name, "provider", provider)
+		results, updatedCitemap := l.executeToolCalls(ctx, toolCalls, searchCitemap)
+		searchCitemap = updatedCitemap
+		for i, call := range toolCalls {
 			req.Messages = append(req.Messages, openai.ChatCompletionMessage{
 				Role:       openai.ChatMessageRoleTool,
-				Content:    results,
+				Content:    results[i],
 				ToolCallID: toolCallID(call, i),
 			})
 		}
@@ -1691,8 +1765,8 @@ func (l *Llmer) requestCompletionInternal2(
 			)
 			return nextRes, usage.Add(nextUsage), timeToFirstToken, nextErr
 		}
-		if search := extractSearch(unescaped); search != "" {
-			results, citemap := getSearchResults(ctx, search)
+		if searches := extractSearchAll(unescaped, maxSearchesPerTurn); len(searches) > 0 {
+			results, citemap := searchWeb(ctx, searches)
 			nextRes, nextUsage, _, nextErr := l.requestCompletionInternal2(
 				m, codename, provider, settings, client, prepend, thinkPrefill, ctx,
 				searchDepth+1, citemap, results,
