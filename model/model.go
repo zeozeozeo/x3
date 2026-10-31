@@ -90,6 +90,7 @@ const (
 	orcarouterBaseUrl           = "https://api.orcarouter.ai/v1"
 	aionBaseUrl                 = "https://api.aionlabs.ai/v1"
 	unorouterBaseUrl            = "https://api.unorouter.com/v1"
+	experientialBaseUrl         = "https://api.experientiallabs.ai/v1"
 )
 
 const (
@@ -142,6 +143,7 @@ const (
 	ProviderOrcarouter   = "orcarouter"
 	ProviderAion         = "aion"
 	ProviderUnorouter    = "unorouter"
+	ProviderExperiential = "experiential" // what a horrible name
 )
 
 type ModelProvider struct {
@@ -990,6 +992,8 @@ func (m Model) Client(provider string) (baseUrls []string, tokens []string, code
 		tokenEnvKey, apiVar = "X3_AION_TOKEN", aionBaseUrl
 	case ProviderUnorouter:
 		tokenEnvKey, apiVar = "X3_UNOROUTER_TOKEN", unorouterBaseUrl
+	case ProviderExperiential:
+		tokenEnvKey, apiVar = "X3_EXPERIENTIAL_TOKEN", experientialBaseUrl
 	default:
 		return nil, nil, nil
 	}
