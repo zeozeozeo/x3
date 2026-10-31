@@ -682,3 +682,46 @@ header h1 {
     padding: 9px 12px;
   }
 }
+
+.default-model-item {
+  display: block;
+}
+
+.default-model-row {
+  align-items: center;
+  display: flex;
+  gap: 10px;
+}
+
+.default-model-name {
+  color: #333;
+  flex: 1;
+  flex-shrink: 1;
+  font-size: 14px;
+}
+
+.default-model-command {
+  color: #7f8c8d;
+  flex-shrink: 0;
+  font-size: 12px;
+}
+
+.allowed-providers {
+  border-top: 1px dashed #dde4ea;
+  margin-top: 8px;
+  padding-top: 8px;
+}
+
+.allowed-providers summary {
+  color: #52616f;
+  cursor: pointer;
+  font-size: 12px;
+  user-select: none;
+}
+
+.allowed-provider-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+  margin-top: 6px;
+}

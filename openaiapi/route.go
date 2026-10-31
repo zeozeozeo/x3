@@ -23,6 +23,9 @@ func providerOrder(m model.Model) []*model.ScoredProvider {
 
 	missing := make([]string, 0)
 	for name := range m.Providers {
+		if !m.ProviderEnabled(name) {
+			continue
+		}
 		if !seen[name] {
 			missing = append(missing, name)
 		}

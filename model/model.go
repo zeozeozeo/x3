@@ -148,6 +148,17 @@ const (
 	ProviderExperiential = "experiential" // what a horrible name
 )
 
+// Provider scopes identify the modeled defaults section a model was selected
+// from. Provider exclusions are stored per scope, so the same model can use
+// different providers in different sections.
+const (
+	ProviderScopeDefault       = "default_models"
+	ProviderScopeNarrator      = "narrator_models"
+	ProviderScopeDefaultVision = "default_vision_models"
+	ProviderScopeSite          = "site_models"
+	ProviderScopeABPool        = "ab_pool"
+)
+
 type ModelProvider struct {
 	Codenames []string `json:"codenames"`
 }
@@ -165,6 +176,11 @@ type Model struct {
 	IsEliza             bool                     `json:"is_eliza,omitempty"`
 	IsAlice             bool                     `json:"is_alice,omitempty"`
 	Limited             bool                     `json:"limited,omitempty"` // disable custom inference settings
+
+	// ProviderScope is the modeled section a model was selected from (for
+	// example ProviderScopeDefault). It is not persisted: the router uses it
+	// to apply that section's per-model provider exclusions.
+	ProviderScope string `json:"-"`
 }
 
 func (model Model) IsVeryDumb() bool {
@@ -237,6 +253,11 @@ var (
 	DefaultVisionModels []string
 	SiteModels          []string
 	ABPool              []string
+
+	// disabledProviders maps a provider scope (default_models, narrator_models,
+	// ...) to a model name and the providers disabled for that entry. A model
+	// absent from the map has all of its configured providers enabled.
+	disabledProviders = map[string]map[string][]string{}
 
 	// WorldMemEmbeddingModel is the Workers AI embedding model used by the
 	// worldmem RAG system. Configurable via models.json / modeled.
@@ -312,16 +333,21 @@ var (
 )
 
 type ModelsConfig struct {
-	Models                 []Model                     `json:"models"`
-	DefaultModels          []string                    `json:"default_models"`
-	NarratorModels         []string                    `json:"narrator_models"`
-	DefaultVisionModels    []string                    `json:"default_vision_models"`
-	SiteModels             []string                    `json:"site_models,omitempty"`
-	ABPool                 []string                    `json:"ab_pool,omitempty"`
-	WorldMemEmbeddingModel string                      `json:"world_mem_embedding_model,omitempty"`
-	ProvidersOrder         []string                    `json:"providers_order"`
-	ProviderSettings       map[string]ProviderSettings `json:"provider_settings,omitempty"`
-	CurrentVersion         int                         `json:"current_version"`
+	Models              []Model  `json:"models"`
+	DefaultModels       []string `json:"default_models"`
+	NarratorModels      []string `json:"narrator_models"`
+	DefaultVisionModels []string `json:"default_vision_models"`
+	SiteModels          []string `json:"site_models,omitempty"`
+	ABPool              []string `json:"ab_pool,omitempty"`
+	// DisabledProviders maps a section (default_models, narrator_models,
+	// default_vision_models, site_models, ab_pool) to a model name and the
+	// providers disabled for that model in that section. Entries are omitted
+	// when every configured provider is allowed.
+	DisabledProviders      map[string]map[string][]string `json:"disabled_providers,omitempty"`
+	WorldMemEmbeddingModel string                         `json:"world_mem_embedding_model,omitempty"`
+	ProvidersOrder         []string                       `json:"providers_order"`
+	ProviderSettings       map[string]ProviderSettings    `json:"provider_settings,omitempty"`
+	CurrentVersion         int                            `json:"current_version"`
 }
 
 type ProviderSettings struct {
@@ -388,6 +414,10 @@ func LoadModelsFromJSONData(data []byte) error {
 	DefaultVisionModels = config.DefaultVisionModels
 	SiteModels = config.SiteModels
 	ABPool = config.ABPool
+	disabledProviders = config.DisabledProviders
+	if disabledProviders == nil {
+		disabledProviders = map[string]map[string][]string{}
+	}
 	WorldMemEmbeddingModel = strings.TrimSpace(config.WorldMemEmbeddingModel)
 	if WorldMemEmbeddingModel == "" {
 		WorldMemEmbeddingModel = DefaultWorldMemEmbeddingModel
@@ -565,6 +595,9 @@ func ProvidersForModel(m Model, reasoning bool) []*ScoredProvider {
 			return
 		}
 		if _, configured := m.Providers[name]; !configured {
+			return
+		}
+		if !m.ProviderEnabled(name) {
 			return
 		}
 		if providerCircuitOpen(m.Name, name, now) {
@@ -822,6 +855,41 @@ func GetModelsByNames(names []string) []Model {
 		models[i] = GetModelByName(name)
 	}
 	return models
+}
+
+// GetModelsByNamesForScope is GetModelsByNames with the modeled section
+// attached to every model. ProvidersForModel consults the scope to apply that
+// section's per-model provider exclusions.
+func GetModelsByNamesForScope(names []string, scope string) []Model {
+	models := GetModelsByNames(names)
+	for i := range models {
+		models[i].ProviderScope = scope
+	}
+	return models
+}
+
+// ProviderDisabled reports whether provider is disabled for modelName in the
+// given scope. An empty scope (or no configured exclusions) allows everything.
+func ProviderDisabled(scope, modelName, provider string) bool {
+	if scope == "" {
+		return false
+	}
+	byModel, ok := disabledProviders[scope]
+	if !ok {
+		return false
+	}
+	for _, name := range byModel[modelName] {
+		if name == provider {
+			return true
+		}
+	}
+	return false
+}
+
+// ProviderEnabled reports whether the model may use provider in its current
+// scope. An empty ProviderScope means no restrictions.
+func (model Model) ProviderEnabled(provider string) bool {
+	return !ProviderDisabled(model.ProviderScope, model.Name, provider)
 }
 
 // GetModelByCommand looks a model up by its short codename (the `command`

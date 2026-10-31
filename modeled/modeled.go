@@ -316,5 +316,42 @@ func validateConfig(config model.ModelsConfig) error {
 		}
 	}
 
+	validSections := map[string][]string{
+		model.ProviderScopeDefault:       config.DefaultModels,
+		model.ProviderScopeNarrator:      config.NarratorModels,
+		model.ProviderScopeDefaultVision: config.DefaultVisionModels,
+		model.ProviderScopeSite:          config.SiteModels,
+		model.ProviderScopeABPool:        config.ABPool,
+	}
+	for section, byModel := range config.DisabledProviders {
+		members, ok := validSections[section]
+		if !ok {
+			return fmt.Errorf("unknown provider section: %s", section)
+		}
+		sectionModels := make(map[string]bool, len(members))
+		for _, name := range members {
+			sectionModels[name] = true
+		}
+		for modelName, disabled := range byModel {
+			m, found := names[modelName]
+			if !found {
+				return fmt.Errorf("disabled providers reference unknown model %s in section %s", modelName, section)
+			}
+			if !sectionModels[modelName] {
+				return fmt.Errorf("disabled providers reference model %s, which is not in section %s", modelName, section)
+			}
+			disabledSet := make(map[string]bool, len(disabled))
+			for _, provider := range disabled {
+				if _, configured := m.Providers[provider]; !configured {
+					return fmt.Errorf("disabled provider %s is not configured for model %s", provider, modelName)
+				}
+				disabledSet[provider] = true
+			}
+			if len(disabledSet) >= len(m.Providers) {
+				return fmt.Errorf("at least one provider must remain allowed for model %s in section %s", modelName, section)
+			}
+		}
+	}
+
 	return nil
 }

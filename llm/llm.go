@@ -1976,7 +1976,7 @@ func (l Llmer) applyFallbackVisionModels(models []model.Model) []model.Model {
 			continue
 		}
 		if strings.EqualFold(m.FallbackVisionModel, "Default") {
-			fallbacks := model.GetModelsByNames(model.DefaultVisionModels)
+			fallbacks := model.GetModelsByNamesForScope(model.DefaultVisionModels, model.ProviderScopeDefaultVision)
 			validFallbacks := make([]model.Model, 0, len(fallbacks))
 			for _, fallback := range fallbacks {
 				if fallback.Vision {
@@ -2001,6 +2001,7 @@ func (l Llmer) applyFallbackVisionModels(models []model.Model) []model.Model {
 			modelsToTry = append(modelsToTry, m)
 			continue
 		}
+		fallback.ProviderScope = model.ProviderScopeDefaultVision
 		slog.Info("recent image found; swapping to fallback vision model", "model", m.Name, "fallback", fallback.Name)
 		modelsToTry = append(modelsToTry, fallback)
 		swapped = true

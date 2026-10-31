@@ -94,6 +94,7 @@ async function loadConfig() {
 
     currentConfig = await response.json();
     currentConfig.ab_pool = currentConfig.ab_pool || [];
+    currentConfig.disabled_providers = currentConfig.disabled_providers || {};
     renderConfig();
     await loadABStats();
     showStatus("Configuration loaded successfully", "success");
@@ -350,16 +351,42 @@ function renderDefaultModels(containerId, models, configKey) {
   listContainer.innerHTML = models
     .map((modelName) => {
       const model = currentConfig.models.find((m) => m.name === modelName);
+      const providers = model ? Object.keys(model.providers || {}) : [];
+      const disabled = disabledProvidersFor(configKey, modelName);
+      const allowedCount = providers.filter(
+        (provider) => !disabled.includes(provider),
+      ).length;
+      const providerSettings = providers.length
+        ? `
+                <details class="allowed-providers" onclick="event.stopPropagation()">
+                    <summary>Allowed providers (${allowedCount}/${providers.length})</summary>
+                    <div class="allowed-provider-list">
+                        ${providers
+                          .map(
+                            (provider) => `
+                            <label class="provider-option">
+                                <input type="checkbox" ${disabled.includes(provider) ? "" : "checked"} onchange="setProviderAllowed('${configKey}', '${escapeHtml(modelName)}', '${escapeHtml(provider)}', this.checked, this)">
+                                ${escapeHtml(provider)}
+                            </label>
+                        `,
+                          )
+                          .join("")}
+                    </div>
+                </details>`
+        : "";
       return `
-            <div class="sortable-item">
-                <span class="drag-handle" title="Drag to reorder">Drag</span>
-                <span>${escapeHtml(modelName)}</span>
-                ${model ? `<span style="font-size: 12px; color: #7f8c8d;">/${escapeHtml(model.command)}</span>` : ""}
-                <div class="item-actions">
-                    <button type="button" class="order-btn" onclick="moveDefaultModel('${configKey}', '${escapeHtml(modelName)}', -1, event)">Up</button>
-                    <button type="button" class="order-btn" onclick="moveDefaultModel('${configKey}', '${escapeHtml(modelName)}', 1, event)">Down</button>
+            <div class="sortable-item default-model-item" data-section="${configKey}" data-model-name="${escapeHtml(modelName)}">
+                <div class="default-model-row">
+                    <span class="drag-handle" title="Drag to reorder">Drag</span>
+                    <span class="default-model-name">${escapeHtml(modelName)}</span>
+                    ${model ? `<span class="default-model-command">/${escapeHtml(model.command)}</span>` : ""}
+                    <div class="item-actions">
+                        <button type="button" class="order-btn" onclick="moveDefaultModel('${configKey}', '${escapeHtml(modelName)}', -1, event)">Up</button>
+                        <button type="button" class="order-btn" onclick="moveDefaultModel('${configKey}', '${escapeHtml(modelName)}', 1, event)">Down</button>
+                    </div>
+                    <button class="remove-default-model" onclick="removeFromDefaultModels('${configKey}', '${escapeHtml(modelName)}')" title="Remove from list">×</button>
                 </div>
-                <button class="remove-default-model" onclick="removeFromDefaultModels('${configKey}', '${escapeHtml(modelName)}')" title="Remove from list">×</button>
+                ${providerSettings}
             </div>
         `;
     })
@@ -368,6 +395,87 @@ function renderDefaultModels(containerId, models, configKey) {
   container.appendChild(listContainer);
 
   initDefaultModelsSortable();
+}
+
+function disabledProvidersFor(section, modelName) {
+  return currentConfig.disabled_providers?.[section]?.[modelName] || [];
+}
+
+function setProviderAllowed(
+  section,
+  modelName,
+  provider,
+  allowed,
+  checkbox,
+) {
+  if (!currentConfig.disabled_providers) {
+    currentConfig.disabled_providers = {};
+  }
+  const byModel =
+    currentConfig.disabled_providers[section] ||
+    (currentConfig.disabled_providers[section] = {});
+  const disabled = new Set(byModel[modelName] || []);
+
+  if (!allowed) {
+    const model = currentConfig.models.find((m) => m.name === modelName);
+    const totalProviders = Object.keys(model?.providers || {}).length;
+    if (disabled.size + (disabled.has(provider) ? 0 : 1) >= totalProviders) {
+      if (checkbox) checkbox.checked = true;
+      showStatus("At least one provider must remain allowed", "error");
+      return;
+    }
+  }
+
+  if (allowed) {
+    disabled.delete(provider);
+  } else {
+    disabled.add(provider);
+  }
+
+  if (disabled.size === 0) {
+    delete byModel[modelName];
+  } else {
+    byModel[modelName] = Array.from(disabled).sort();
+  }
+  if (Object.keys(byModel).length === 0) {
+    delete currentConfig.disabled_providers[section];
+  }
+
+  updateAllowedProvidersSummary(section, modelName);
+}
+
+function updateAllowedProvidersSummary(section, modelName) {
+  const model = currentConfig.models.find((m) => m.name === modelName);
+  const total = Object.keys(model?.providers || {}).length;
+  const allowed = total - disabledProvidersFor(section, modelName).length;
+
+  document.querySelectorAll(".default-model-item").forEach((item) => {
+    if (
+      item.dataset.section !== section ||
+      item.dataset.modelName !== modelName
+    ) {
+      return;
+    }
+    const summary = item.querySelector(".allowed-providers summary");
+    if (summary) {
+      summary.textContent = `Allowed providers (${allowed}/${total})`;
+    }
+  });
+}
+
+function clearDisabledProviders(section, modelName) {
+  const byModel = currentConfig.disabled_providers?.[section];
+  if (!byModel) return;
+  delete byModel[modelName];
+  if (Object.keys(byModel).length === 0) {
+    delete currentConfig.disabled_providers[section];
+  }
+  if (
+    currentConfig.disabled_providers &&
+    Object.keys(currentConfig.disabled_providers).length === 0
+  ) {
+    delete currentConfig.disabled_providers;
+  }
 }
 
 function destroySortable(element) {
@@ -550,7 +658,7 @@ function initDefaultModelsSortable() {
 
     createSortable(listContainer, function (evt) {
         const newOrder = Array.from(listContainer.children).map(
-          (div) => div.querySelector("span:not(.drag-handle)").textContent,
+          (div) => div.dataset.modelName,
         );
 
         if (containerId === "default-models") {
@@ -751,6 +859,8 @@ function removeFromDefaultModels(configKey, modelName) {
       currentConfig.ab_pool = currentList;
       break;
     }
+
+    clearDisabledProviders(configKey, modelName);
 
     renderConfig();
     showStatus("Model removed successfully", "success");

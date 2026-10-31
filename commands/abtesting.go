@@ -109,6 +109,7 @@ func chooseABModel(active []model.Model, shouldTry bool) (model.Model, bool) {
 	}
 
 	picked := candidates[rand.IntN(len(candidates))]
+	picked.ProviderScope = model.ProviderScopeABPool
 	candidateNames := make([]string, len(candidates))
 	for i, candidate := range candidates {
 		candidateNames[i] = candidate.Name

@@ -633,6 +633,10 @@ type PersonaMeta struct {
 	Tools                     *bool             `json:"tools,omitempty"`          // Whether grounding/search tools are available. nil means enabled.
 	RespondAlways             bool              `json:"respond_always,omitempty"` // Should x3 always respond to messages inthis channel?
 	Jailbreak                 string            `json:"jailbreak,omitempty"`      // Jailbreak mode: "" (off), "prefill" or "prompt".
+
+	// ProviderScope is the modeled defaults section to use for per-model
+	// provider exclusions. It is set for internal personas and never persisted.
+	ProviderScope string `json:"-"`
 }
 
 // this is kinda hacky, but this is just so i can update the default models
@@ -691,10 +695,14 @@ func renderJailbreakPrompt(meta PersonaMeta, username, botName string, dm bool) 
 }
 
 func (meta PersonaMeta) GetModels() []model.Model {
-	if len(meta.Models) == 0 {
-		return model.GetModelsByNames(model.DefaultModels)
+	scope := meta.ProviderScope
+	if scope == "" {
+		scope = model.ProviderScopeDefault
 	}
-	return model.GetModelsByNames(meta.Models)
+	if len(meta.Models) == 0 {
+		return model.GetModelsByNamesForScope(model.DefaultModels, scope)
+	}
+	return model.GetModelsByNamesForScope(meta.Models, scope)
 }
 
 func (meta PersonaMeta) String() string {
@@ -778,9 +786,10 @@ var (
 		EnableMiniLMContinuations: true,
 	}
 	PersonaStableNarrator = PersonaMeta{
-		Name:   "Stable Narrator",
-		Desc:   "<internal>",
-		Models: clone(model.NarratorModels),
+		Name:          "Stable Narrator",
+		Desc:          "<internal>",
+		Models:        clone(model.NarratorModels),
+		ProviderScope: model.ProviderScopeNarrator,
 	}
 	PersonaImpersonate = PersonaMeta{
 		Name:   "Impersonate",
@@ -788,14 +797,16 @@ var (
 		Models: clone(model.DefaultModels), // not used
 	}
 	PersonaSummaryGenerator = PersonaMeta{
-		Name:   "Summary Generator",
-		Desc:   "<internal>",
-		Models: clone(model.NarratorModels),
+		Name:          "Summary Generator",
+		Desc:          "<internal>",
+		Models:        clone(model.NarratorModels),
+		ProviderScope: model.ProviderScopeNarrator,
 	}
 	PersonaImageDescription = PersonaMeta{
-		Name:   "Image Description",
-		Desc:   "<internal>",
-		Models: clone(model.DefaultVisionModels),
+		Name:          "Image Description",
+		Desc:          "<internal>",
+		Models:        clone(model.DefaultVisionModels),
+		ProviderScope: model.ProviderScopeDefaultVision,
 	}
 
 	AllPersonas = []PersonaMeta{

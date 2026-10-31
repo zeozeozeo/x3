@@ -1334,7 +1334,7 @@ func (m *Manager) removeSessionLocked(session *Session) {
 }
 
 func (m *Manager) generatePage(ctx context.Context, req generationRequest) (string, generationMetrics, error) {
-	models := model.GetModelsByNames(model.SiteModels)
+	models := model.GetModelsByNamesForScope(model.SiteModels, model.ProviderScopeSite)
 	if len(models) == 0 {
 		return "", generationMetrics{}, fmt.Errorf("site_models did not resolve to any models")
 	}
