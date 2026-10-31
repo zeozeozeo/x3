@@ -10,7 +10,7 @@
           "codenames": ["deepseek-flash"]
         },
         "experiential": {
-          "codenames": ["deepseek-v4.1-flash", "deepseek-v4.1-flash-uncensored"]
+          "codenames": ["deepseek-v4.1-flash"]
         },
         "inferx": {
           "codenames": ["deepseek-v4.1-flash"]
@@ -41,16 +41,13 @@
       }
     },
     {
-      "name": "Xiaomi MiMo V2.6 Flash",
-      "command": "mimo",
+      "name": "OpenAI GPT-6 Luna",
+      "command": "luna",
       "vision": true,
       "reasoning": true,
       "providers": {
-        "opencode": {
-          "codenames": ["mimo-v2.6-flash-free"]
-        },
-        "tokenharbor": {
-          "codenames": ["mimo-v2.6-flash:free"]
+        "experiential": {
+          "codenames": ["gpt-6-luna"]
         }
       }
     },
@@ -85,13 +82,16 @@
       }
     },
     {
-      "name": "OpenAI GPT-6 Luna",
-      "command": "luna",
+      "name": "Xiaomi MiMo V2.6 Flash",
+      "command": "mimo",
       "vision": true,
       "reasoning": true,
       "providers": {
-        "experiential": {
-          "codenames": ["gpt-6-luna"]
+        "opencode": {
+          "codenames": ["mimo-v2.6-flash-free"]
+        },
+        "tokenharbor": {
+          "codenames": ["mimo-v2.6-flash:free"]
         }
       }
     },
@@ -532,36 +532,6 @@
       }
     },
     {
-      "name": "Reflection Beam",
-      "command": "beam",
-      "reasoning": true,
-      "providers": {
-        "opencode": {
-          "codenames": ["beam-free"]
-        }
-      }
-    },
-    {
-      "name": "Flint 40B",
-      "command": "flint",
-      "reasoning": true,
-      "providers": {
-        "opencode": {
-          "codenames": ["flint-40b-free"]
-        }
-      }
-    },
-    {
-      "name": "Big Pickle",
-      "command": "bigpickle",
-      "reasoning": true,
-      "providers": {
-        "opencode": {
-          "codenames": ["big-pickle"]
-        }
-      }
-    },
-    {
       "name": "NVIDIA Nemotron 3.5 Bolt E4B",
       "command": "nemotronbolt",
       "reasoning": true,
@@ -608,12 +578,14 @@
   ],
   "narrator_models": ["GLM 4.7 Flash", "NVIDIA Nemotron 3.5 Super VL"],
   "default_vision_models": [
+    "DeepSeek V4.1 Flash",
     "MiniMax M3.1 Flash",
     "NVIDIA Nemotron 3 Nano Omni 30B/A3B",
     "NVIDIA Nemotron 3.5 Super VL",
     "Gemini 3.5 Flash-Lite"
   ],
   "site_models": [
+    "DeepSeek V4.1 Flash",
     "Gemini 3.8 Flash",
     "MiniMax M3.1 Flash",
     "Gemma 4 31B",
@@ -637,8 +609,27 @@
     "GLM 4.7 Flash",
     "DeepSeek V4.1 Flash",
     "Step 5 Preview",
-    "NVIDIA Nemotron 3.5 Super VL"
+    "NVIDIA Nemotron 3.5 Super VL",
+    "MiniMax M3.1 Flash",
+    "OpenAI GPT-6 Luna",
+    "Xiaomi MiMo V2.6 Flash",
+    "Gemini 3.8 Flash",
+    "Gemini 3.7 Flash",
+    "Aion 3.5",
+    "Aion 3.5 Mini"
   ],
+  "disabled_providers": {
+    "site_models": {
+      "DeepSeek V4.1 Flash": [
+        "deepseek",
+        "inferx",
+        "opencode",
+        "orcarouter",
+        "tokenharbor",
+        "unorouter"
+      ]
+    }
+  },
   "world_mem_embedding_model": "@cf/google/embeddinggemma-300m",
   "providers_order": [
     "deepseek",
@@ -727,5 +718,5 @@
       "native_tool_calling": true
     }
   },
-  "current_version": 100
+  "current_version": 101
 }
