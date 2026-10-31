@@ -735,12 +735,46 @@ func defaultKnownUsernames() map[string]struct{} {
 	}
 }
 
+// lastNonSystemMessageID returns the cache key of the newest cached
+// non-system message, or "" when the history has no messages yet.
+func lastNonSystemMessageID(messages []llm.Message) string {
+	for i := len(messages) - 1; i >= 0; i-- {
+		if messages[i].Role == llm.RoleSystem {
+			continue
+		}
+		if key := llm.MessageCacheKey(messages[i]); key != "" {
+			return key
+		}
+	}
+	return ""
+}
+
+// messagesAfterMessageID returns the messages that follow the given cache key
+// in chronological order. The second return value is false when the message is
+// not present, so callers never append an older window after newer history.
+func messagesAfterMessageID(messages []llm.Message, messageID string) ([]llm.Message, bool) {
+	if messageID == "" {
+		return nil, false
+	}
+	for i, msg := range messages {
+		if msg.Role == llm.RoleSystem {
+			continue
+		}
+		if llm.MessageCacheKey(msg) != messageID {
+			continue
+		}
+		return append([]llm.Message(nil), messages[i+1:]...), true
+	}
+	return nil, false
+}
+
 func appendMissingMessages(dst *llm.Llmer, src []llm.Message) int {
 	if dst == nil || len(src) == 0 {
 		return 0
 	}
 	seen := make(map[string]struct{}, len(dst.Messages))
-	for _, msg := range dst.Messages {
+	lastAssistantIdx := -1
+	for i, msg := range dst.Messages {
 		key := msg.MessageID
 		if key == "" && msg.ID != 0 {
 			key = msg.ID.String()
@@ -748,6 +782,13 @@ func appendMissingMessages(dst *llm.Llmer, src []llm.Message) int {
 		if key != "" {
 			seen[key] = struct{}{}
 		}
+		if msg.Role == llm.RoleAssistant {
+			lastAssistantIdx = i
+		}
+	}
+	lastAssistantNorm := ""
+	if lastAssistantIdx >= 0 {
+		lastAssistantNorm = llm.NormalizeMessageForDedupe(dst.Messages[lastAssistantIdx].Content)
 	}
 
 	added := 0
@@ -763,6 +804,23 @@ func appendMissingMessages(dst *llm.Llmer, src []llm.Message) int {
 			if _, ok := seen[key]; ok {
 				continue
 			}
+		}
+		if msg.Role == llm.RoleAssistant && lastAssistantIdx >= 0 {
+			norm := llm.NormalizeMessageForDedupe(msg.Content)
+			if norm != "" && norm == lastAssistantNorm {
+				if msg.MessageID != "" {
+					dst.Messages[lastAssistantIdx].MessageID = msg.MessageID
+				}
+				if dst.Messages[lastAssistantIdx].ID == 0 {
+					dst.Messages[lastAssistantIdx].ID = msg.ID
+				}
+				if key != "" {
+					seen[key] = struct{}{}
+				}
+				continue
+			}
+		}
+		if key != "" {
 			seen[key] = struct{}{}
 		}
 		dst.Messages = append(dst.Messages, msg)

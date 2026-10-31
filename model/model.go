@@ -75,7 +75,8 @@ const (
 	deepseekBaseURL             = "https://api.deepseek.com"
 	mistralBaseURL              = "https://api.mistral.ai/v1"
 	zenBaseURL                  = "https://opencode.ai/zen/v1"
-	opencodeBaseURL             = "https://opencode.ai/zen/v1"
+	opencodeBaseURL             = "https://opencode.ai/inference/openai/v1"
+	opencodeGoBaseURL           = "https://opencode.ai/inference/go/openai/v1"
 	mimoBaseURL                 = "https://token-plan-sgp.xiaomimimo.com/v1"
 	makoraBaseURL               = "https://inference.makora.com/glm-5-1-fp8/v1"
 	openferenceBaseURL          = "https://api.openference.com/v1"
@@ -131,7 +132,8 @@ const (
 	ProviderDeepseek     = "deepseek"
 	ProviderMistral      = "mistral"
 	ProviderZen          = "zen"      // OpenCode Zen
-	ProviderOpencode     = "opencode" // OpenCode Zen free tier
+	ProviderOpencode     = "opencode" // OpenCode Console / free tier
+	ProviderOpencodeGo   = "opencode-go"
 	ProviderMiMo         = "mimo"
 	ProviderMakora       = "makora"
 	ProviderOpenference  = "openference"
@@ -183,9 +185,10 @@ const (
 	// adaptiveSlowStreakNeeded is how many consecutive slow successes it
 	// takes to schedule a probe. A single slow outlier (queue spike, cold
 	// start) must not flip traffic on its own.
-	adaptiveSlowStreakNeeded    = 2
-	adaptiveProviderRouteTTL    = 5 * time.Minute
-	providerCircuitFailureLimit = 3
+	adaptiveSlowStreakNeeded     = 2
+	adaptiveProviderRouteTTL     = 2 * time.Minute
+	providerCircuitFailureLimit  = 3
+	providerCircuitProbeInterval = 2 * time.Minute
 )
 
 type adaptiveProviderRoute struct {
@@ -214,6 +217,7 @@ type ProviderFailureResult struct {
 type providerCircuit struct {
 	failureScore int
 	openUntil    time.Time
+	nextProbeAt  time.Time
 }
 
 // DefaultWorldMemEmbeddingModel is the Workers AI embedding model used by the
@@ -284,6 +288,7 @@ var (
 		{Name: ProviderMistral},
 		{Name: ProviderZen},
 		{Name: ProviderOpencode},
+		{Name: ProviderOpencodeGo},
 		{Name: ProviderMiMo},
 		{Name: ProviderMakora},
 		{Name: ProviderOpenference},
@@ -424,10 +429,24 @@ func ProviderUsesNativeToolCalling(provider string) bool {
 
 func OpenCodeVersion() string {
 	version := strings.TrimSpace(os.Getenv("X3_OPENCODE_VERSION"))
-	if version == "" {
-		return opencode.DefaultVersion
+	return opencode.NormalizeVersion(version)
+}
+
+// OpenCodeChannel returns the release channel embedded in the OpenCode
+// User-Agent.
+func OpenCodeChannel() string {
+	channel := strings.TrimSpace(os.Getenv("X3_OPENCODE_CHANNEL"))
+	if channel == "" {
+		return opencode.DefaultChannel
 	}
-	return version
+	return channel
+}
+
+// IsOpenCodeProvider reports whether provider is served by OpenCode. Both the
+// free/Console endpoint and OpenCode Go share the same client fingerprint and
+// streamed completion path.
+func IsOpenCodeProvider(provider string) bool {
+	return provider == ProviderOpencode || provider == ProviderOpencodeGo
 }
 
 func resetProviderScore() {
@@ -711,7 +730,11 @@ func RecordProviderFailure(m Model, provider string, failure ProviderFailure) Pr
 	if circuit.failureScore >= providerCircuitFailureLimit {
 		circuit.failureScore = 0
 		circuit.openUntil = now.Add(failure.Cooldown)
+		circuit.nextProbeAt = now.Add(providerCircuitProbeInterval)
 		result.CircuitOpened = true
+		slog.Warn("provider circuit opened",
+			"model", m.Name, "provider", provider,
+			"cooldown", failure.Cooldown, "next_probe", providerCircuitProbeInterval)
 	}
 	providerCircuits[key] = circuit
 
@@ -759,6 +782,14 @@ func circuitOpenLocked(modelName, provider string, now time.Time) bool {
 	}
 	if !now.Before(circuit.openUntil) {
 		delete(providerCircuits, key)
+		return false
+	}
+	if circuit.nextProbeAt.IsZero() || !now.Before(circuit.nextProbeAt) {
+		circuit.nextProbeAt = now.Add(providerCircuitProbeInterval)
+		providerCircuits[key] = circuit
+		slog.Info("provider circuit half-open: allowing recovery probe",
+			"model", modelName, "provider", provider,
+			"cooldown_remaining", circuit.openUntil.Sub(now).Round(time.Second))
 		return false
 	}
 	return true
@@ -968,6 +999,20 @@ func (m Model) Client(provider string) (baseUrls []string, tokens []string, code
 			return nil, nil, nil
 		}
 		baseUrls = []string{opencodeBaseURL}
+		SortTokensByError(tokens)
+		return
+	case ProviderOpencodeGo:
+		tokens = getEnvList("X3_OPENCODE_GO_TOKEN")
+		if len(tokens) == 0 {
+			// OpenCode Console API keys work for both the free/Console and
+			// Go endpoints, so reuse the regular token when no Go-specific
+			// token is configured.
+			tokens = getEnvList("X3_OPENCODE_TOKEN")
+		}
+		if len(tokens) == 0 {
+			return nil, nil, nil
+		}
+		baseUrls = []string{opencodeGoBaseURL}
 		SortTokensByError(tokens)
 		return
 	case ProviderMiMo:

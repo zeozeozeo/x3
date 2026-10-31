@@ -9,14 +9,11 @@ import (
 	"github.com/zeozeozeo/x3/openai"
 )
 
-// CreateChatCompletion performs a chat completion against the OpenCode Zen
-// free tier.
+// CreateChatCompletion performs a chat completion against OpenCode. The
+// upstream is always streamed and the chunks are aggregated into one response,
+// which keeps the same code path working for the free tier and OpenCode Go.
 func CreateChatCompletion(ctx context.Context, client *openai.Client, req openai.ChatCompletionRequest) (openai.ChatCompletionResponse, error) {
 	req.Stream = true
-
-	tools := make([]openai.Tool, len(req.Tools))
-	copy(tools, req.Tools)
-	req.Tools = EnsureGateTool(tools)
 
 	stream, err := client.CreateChatCompletionStream(ctx, req)
 	if err != nil {

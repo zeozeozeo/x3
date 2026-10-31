@@ -5,8 +5,7 @@ import (
 	"github.com/zeozeozeo/x3/opencode"
 )
 
-// opencodeHeaders returns the fingerprint headers required by the OpenCode
-// Zen free tier.
+// opencodeHeaders returns the fingerprint headers OpenCode 2.x requires.
 func opencodeHeaders() map[string]string {
-	return opencode.Headers(model.OpenCodeVersion())
+	return opencode.HeadersWithChannel(model.OpenCodeVersion(), model.OpenCodeChannel())
 }

@@ -394,34 +394,33 @@ func TestExtraParametersAreForwarded(t *testing.T) {
 	}
 }
 
-func TestOpenCodeGateToolIsAnsweredInternally(t *testing.T) {
+func TestOpenCodeUsesV2Fingerprint(t *testing.T) {
 	loadTestModels(t, `{
-		"models": [{"name": "OpenCode Model", "command": "ocmodel", "providers": {"opencode": {"codenames": ["zen-model"]}}}],
+		"models": [{"name": "OpenCode Model", "command": "ocmodel", "providers": {"opencode": {"codenames": ["deepseek-v4.1-flash-free"]}}}],
 		"default_models": ["OpenCode Model"],
 		"providers_order": ["opencode"]
 	}`)
 	t.Setenv("X3_OPENCODE_TOKEN", "test-token")
+	t.Setenv("X3_OPENCODE_VERSION", "2.2.0")
+	t.Setenv("X3_OPENCODE_CHANNEL", "latest")
 
-	var mu sync.Mutex
-	var requests []map[string]any
+	var (
+		mu      sync.Mutex
+		headers http.Header
+		body    map[string]any
+	)
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		body, _ := io.ReadAll(r.Body)
+		raw, _ := io.ReadAll(r.Body)
 		var parsed map[string]any
-		_ = json.Unmarshal(body, &parsed)
+		_ = json.Unmarshal(raw, &parsed)
 		mu.Lock()
-		requests = append(requests, parsed)
-		count := len(requests)
+		headers = r.Header.Clone()
+		body = parsed
 		mu.Unlock()
 
 		w.Header().Set("Content-Type", "text/event-stream")
 		flusher := w.(http.Flusher)
-		if count == 1 {
-			_, _ = w.Write([]byte("data: {\"id\":\"oc-1\",\"object\":\"chat.completion.chunk\",\"created\":1,\"model\":\"zen-model\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"tool_calls\":[{\"index\":0,\"id\":\"call_1\",\"type\":\"function\",\"function\":{\"name\":\"read\",\"arguments\":\"{}\"}}]},\"finish_reason\":\"tool_calls\"}]}\n\n"))
-			flusher.Flush()
-			_, _ = w.Write([]byte("data: [DONE]\n\n"))
-			return
-		}
-		_, _ = w.Write([]byte("data: {\"id\":\"oc-2\",\"object\":\"chat.completion.chunk\",\"created\":1,\"model\":\"zen-model\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"content\":\"all done\"},\"finish_reason\":\"stop\"}]}\n\n"))
+		_, _ = w.Write([]byte("data: {\"id\":\"oc-1\",\"object\":\"chat.completion.chunk\",\"created\":1,\"model\":\"deepseek-v4.1-flash-free\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"content\":\"all done\"},\"finish_reason\":\"stop\"}]}\n\n"))
 		flusher.Flush()
 		_, _ = w.Write([]byte("data: [DONE]\n\n"))
 	}))
@@ -439,38 +438,26 @@ func TestOpenCodeGateToolIsAnsweredInternally(t *testing.T) {
 	if !strings.Contains(rec.Body.String(), "all done") {
 		t.Fatalf("unexpected response: %s", rec.Body.String())
 	}
-	if strings.Contains(rec.Body.String(), `"read"`) {
-		t.Fatalf("the internal gate tool call leaked to the client: %s", rec.Body.String())
-	}
 
 	mu.Lock()
 	defer mu.Unlock()
-	if len(requests) != 2 {
-		t.Fatalf("expected 2 upstream requests, got %d", len(requests))
+	if got := headers.Get("User-Agent"); got != "opencode/latest/2.2.0/opencode" {
+		t.Fatalf("unexpected user agent %q", got)
 	}
-	// The gate tool has to be part of every request.
-	for i, request := range requests {
-		tools, ok := request["tools"].([]any)
-		if !ok {
-			t.Fatalf("request %d has no tools: %v", i, request)
-		}
-		found := false
-		for _, tool := range tools {
-			entry, ok := tool.(map[string]any)
-			if !ok {
-				continue
-			}
-			function, ok := entry["function"].(map[string]any)
-			if !ok {
-				continue
-			}
-			if function["name"] == "read" {
-				found = true
-			}
-		}
-		if !found {
-			t.Fatalf("request %d does not contain the gate tool: %v", i, tools)
-		}
+	if got := headers.Get("x-opencode-client"); got != "opencode" {
+		t.Fatalf("unexpected client header %q", got)
+	}
+	if got := headers.Get("x-opencode-project"); got != "global" {
+		t.Fatalf("unexpected project header %q", got)
+	}
+	if got := headers.Get("x-opencode-session"); got == "" {
+		t.Fatalf("missing session header")
+	}
+	if got := headers.Get("x-opencode-session-id"); got == "" {
+		t.Fatalf("missing session-id header")
+	}
+	if _, ok := body["tools"]; ok {
+		t.Fatalf("the opencode client injected a tool into the request: %v", body)
 	}
 }
 

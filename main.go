@@ -90,10 +90,13 @@ func main() {
 		n, err := worldmem.Reindex(ctx)
 		if err != nil {
 			slog.Warn("world memory reindex failed", "err", err, "reembedded", n)
-			return
-		}
-		if n > 0 {
+		} else if n > 0 {
 			slog.Info("world memory reindex complete", "reembedded", n)
+		}
+		if n, err := db.CompactChannelCaches(); err != nil {
+			slog.Warn("channel cache compaction failed", "err", err)
+		} else if n > 0 {
+			slog.Info("channel cache compaction complete", "channels", n)
 		}
 	}()
 

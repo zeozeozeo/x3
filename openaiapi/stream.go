@@ -141,7 +141,7 @@ func (s *Server) openStream(
 				slog.Info("attempting streaming request",
 					"model", m.Command, "provider", provider, "codename", codename)
 
-				if provider == model.ProviderOpencode {
+				if model.IsOpenCodeProvider(provider) {
 					resp, err := s.callOpenCode(ctx, client, upstream)
 					if err != nil {
 						lastErr = err

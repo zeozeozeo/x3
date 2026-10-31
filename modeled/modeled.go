@@ -126,6 +126,8 @@ func (s *Server) handleBackup(w http.ResponseWriter, r *http.Request) {
 
 	// Open a temporary database connection to VACUUM into a temp file
 	tmpFile := s.dbPath + ".backup.tmp"
+	// VACUUM INTO fails if the target file already exists, so remove any stale/leftover copy first.
+	os.Remove(tmpFile)
 	tmpConn, err := sql.Open("sqlite", s.dbPath)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("Error opening database for backup: %v", err), http.StatusInternalServerError)
@@ -133,13 +135,14 @@ func (s *Server) handleBackup(w http.ResponseWriter, r *http.Request) {
 	}
 	defer tmpConn.Close()
 
+	defer os.Remove(tmpFile)
+
 	// VACUUM INTO writes a cleanly-packed copy to the target path
 	_, err = tmpConn.Exec(fmt.Sprintf("VACUUM INTO '%s'", tmpFile))
 	if err != nil {
 		http.Error(w, fmt.Sprintf("Error vacuuming database: %v", err), http.StatusInternalServerError)
 		return
 	}
-	defer os.Remove(tmpFile)
 
 	f, err := os.Open(tmpFile)
 	if err != nil {

@@ -170,6 +170,43 @@ func TestRebuildWorldVecTableKeepsMemories(t *testing.T) {
 	}
 }
 
+func TestMigrateWorldVecPartitionSchema(t *testing.T) {
+	initWorldmemTestDB(t)
+
+	if _, err := DB.Exec(`DROP TABLE IF EXISTS world_vec`); err != nil {
+		t.Fatalf("drop world_vec: %v", err)
+	}
+	if _, err := DB.Exec(`CREATE VIRTUAL TABLE world_vec USING vec0(embedding float[8], channel TEXT PARTITION KEY)`); err != nil {
+		t.Fatalf("create legacy world_vec: %v", err)
+	}
+	if _, err := InsertWorldEntry("chan-a", "the tower fell", unitBasisForTest(8, 0), 3, nil, 8); err != nil {
+		t.Fatalf("insert a: %v", err)
+	}
+	if _, err := InsertWorldEntry("chan-b", "the dragon woke", unitBasisForTest(8, 1), 3, nil, 8); err != nil {
+		t.Fatalf("insert b: %v", err)
+	}
+	if !WorldVecUsesLegacyPartition() {
+		t.Fatal("test setup did not create a partitioned table")
+	}
+
+	if err := MigrateWorldVecPartitionSchema(8); err != nil {
+		t.Fatalf("migrate: %v", err)
+	}
+	if WorldVecUsesLegacyPartition() {
+		t.Fatal("world_vec still reports the legacy partition schema")
+	}
+	if got := worldVecRowCountForTest(t); got != 2 {
+		t.Fatalf("stored vectors = %d, want 2 (migration must preserve them)", got)
+	}
+	hits, err := SearchWorldSimilar("chan-a", unitBasisForTest(8, 0), 5)
+	if err != nil {
+		t.Fatalf("search after migration: %v", err)
+	}
+	if len(hits) != 1 || hits[0].Entry.Text != "the tower fell" {
+		t.Fatalf("hits = %#v, want the tower fact", hits)
+	}
+}
+
 func TestWorldEntriesMissingVectors(t *testing.T) {
 	initWorldmemTestDB(t)
 

@@ -1035,7 +1035,8 @@ func (b *MatrixBot) worldmemHelpText(isDM bool) string {
 	}, "\n")
 }
 
-func (b *MatrixBot) blacklistHelpText(isDM bool, image bool) string {	name := "blacklist"
+func (b *MatrixBot) blacklistHelpText(isDM bool, image bool) string {
+	name := "blacklist"
 	if image {
 		name = "imageblacklist"
 	}
@@ -1837,6 +1838,19 @@ func (b *MatrixBot) handleLlm(ctx context.Context, msg *matrixMessage, isRegener
 		}
 	}
 
+	ctxLen := cache.EffectiveContextLength(false)
+	previousAnchor := cache.CacheAnchorMessageID
+	cacheAnchor := llmer.CacheAnchorFor(previousAnchor, ctxLen)
+	if cacheAnchor != previousAnchor {
+		slog.Debug("moved prompt cache anchor",
+			"room_id", msg.RoomID.String(),
+			"old_anchor", previousAnchor,
+			"new_anchor", cacheAnchor,
+			"num_messages", llmer.NumMessages(),
+		)
+		cache.CacheAnchorMessageID = cacheAnchor
+	}
+
 	slog.Info("requesting Matrix LLM completion",
 		"room_id", msg.RoomID.String(),
 		"num_models", len(models),
@@ -1844,7 +1858,7 @@ func (b *MatrixBot) handleLlm(ctx context.Context, msg *matrixMessage, isRegener
 		"is_regenerate", isRegenerate,
 		"think_prefill", thinkPrefill != "",
 	)
-	response, usage, err := requestCompletionCacheFriendly(llmer, models, cache.PersonaMeta.Settings, prepend, thinkPrefill, cache.EffectiveContextLength(false), ctx)
+	response, usage, err := requestCompletionCacheFriendly(llmer, models, cache.PersonaMeta.Settings, prepend, thinkPrefill, ctxLen, cacheAnchor, ctx)
 	if err != nil {
 		return err
 	}

@@ -421,7 +421,21 @@ func handleLlmInteraction2(
 			messageID,
 			probeLimit,
 		)
-		appendMissingMessages(llmer, probe.Messages)
+		// Only catch up on messages newer than the cached history. Never append
+		// the probe's older window after newer messages, which would both
+		// reorder the conversation and invalidate the cached prefix.
+		if lastID := lastNonSystemMessageID(llmer.Messages); lastID != "" {
+			if newer, found := messagesAfterMessageID(probe.Messages, lastID); found {
+				appendMissingMessages(llmer, newer)
+			} else {
+				slog.Warn("cached history is older than the probe window; keeping cached history",
+					"channel_id", channelID.String(),
+					"last_cached_id", lastID,
+				)
+			}
+		} else {
+			appendMissingMessages(llmer, probe.Messages)
+		}
 		numCtxMessages = llmer.NonSystemMessageCount()
 		for name := range probeUsernames {
 			usernames[name] = struct{}{}
@@ -511,6 +525,21 @@ func handleLlmInteraction2(
 	// so the cached prompt prefix stays stable.
 	llmer.WorldBible = worldmem.FormatBible(worldFacts)
 
+	// Keep the request window anchored so the prompt prefix stays byte-stable
+	// between turns. The anchor only moves when the history exceeds its hard
+	// limit; the full history is still kept in cache.Llmer for DMs/summaries.
+	previousAnchor := cache.CacheAnchorMessageID
+	cacheAnchor := llmer.CacheAnchorFor(previousAnchor, ctxLen)
+	if cacheAnchor != previousAnchor {
+		slog.Debug("moved prompt cache anchor",
+			"channel_id", channelID.String(),
+			"old_anchor", previousAnchor,
+			"new_anchor", cacheAnchor,
+			"num_messages", llmer.NumMessages(),
+		)
+		cache.CacheAnchorMessageID = cacheAnchor
+	}
+
 	thinkPrefill := cache.PersonaMeta.JailbreakThinkPrefill(regeneratePrepend)
 	var prepend string
 	if regeneratePrepend != "" {
@@ -539,6 +568,7 @@ func handleLlmInteraction2(
 					prepend,
 					thinkPrefill,
 					ctxLen,
+					cacheAnchor,
 					ctx,
 				)
 				abDone <- abCompletionResult{response: abResponse, usage: abUsage, err: abErr}
@@ -554,7 +584,7 @@ func handleLlmInteraction2(
 		"think_prefill", thinkPrefill != "",
 		"isDM", isDM,
 	)
-	response, usage, err := requestCompletionCacheFriendly(llmer, models, cache.PersonaMeta.Settings, prepend, thinkPrefill, ctxLen, ctx)
+	response, usage, err := requestCompletionCacheFriendly(llmer, models, cache.PersonaMeta.Settings, prepend, thinkPrefill, ctxLen, cacheAnchor, ctx)
 	if err != nil {
 		slog.Error("LLM request failed", "err", err)
 		return "", 0, fmt.Errorf("LLM request failed: %w", err)
@@ -611,6 +641,7 @@ func handleLlmInteraction2(
 
 	var jumpURL string
 	var botMessage *discord.Message
+	var firstBotMessage *discord.Message
 	var messages []string
 	if isRegenerate {
 		// delete trailing split messages of the previous response, keeping
@@ -684,6 +715,9 @@ func handleLlmInteraction2(
 			if err != nil {
 				slog.Error("failed to send message split", "err", err, slog.Int("split_index", i))
 				return response, 0, fmt.Errorf("failed to send message split %d: %w", i+1, err)
+			}
+			if i == 0 {
+				firstBotMessage = botMessage
 			}
 			event = nil // updated the event, send the next split as a new message
 		}
@@ -761,11 +795,17 @@ func handleLlmInteraction2(
 	}
 
 	cache.IsLastRandomDM = timeInteraction
-	setLatestAssistantMessageMetadata(llmer, botMessage)
+	metadataMessage := botMessage
+	if firstBotMessage != nil {
+		metadataMessage = firstBotMessage
+	}
+	setLatestAssistantMessageMetadata(llmer, metadataMessage)
 	if !isRegenerate {
-		cache.Llmer = llmer
+		persisted := *llmer
+		persisted.Messages = llm.MessagesForStorage(llmer.Messages, llm.ContextHardMessageLimit(db.MaxContextMessages))
+		cache.Llmer = &persisted
 		if cache.ImportedHistory != nil {
-			cache.ImportedHistory.Messages = append([]llm.Message(nil), llmer.Messages...)
+			cache.ImportedHistory.Messages = append([]llm.Message(nil), persisted.Messages...)
 		}
 	}
 	cache.UpdateInteractionTime()
@@ -814,9 +854,16 @@ func requestCompletionCacheFriendly(
 	prepend string,
 	thinkPrefill string,
 	softMessageLimit int,
+	anchor string,
 	ctx context.Context,
 ) (string, llm.Usage, error) {
 	requestLlmer := cloneLlmerForCompletion(llmer)
+	// Use the persisted anchor so the request prefix is append-only between
+	// anchor moves. This is what lets provider prompt caches hit.
+	if anchor != "" {
+		requestLlmer.TrimBeforeMessageID(anchor)
+	}
+	// Safety net for imported history or an anchor that is no longer present.
 	requestLlmer.TrimCacheFriendlyContext(softMessageLimit)
 	beforeRequest := len(requestLlmer.Messages)
 	response, usage, err := requestLlmer.RequestCompletionWithThinkPrefill(models, settings, prepend, thinkPrefill, ctx)

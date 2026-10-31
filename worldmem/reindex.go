@@ -57,6 +57,16 @@ func Reindex(ctx context.Context) (int, error) {
 	reindexMu.Lock()
 	defer reindexMu.Unlock()
 
+	if db.WorldVecUsesLegacyPartition() {
+		tableDim := db.CurrentWorldVecDim()
+		if tableDim > 0 {
+			if err := db.MigrateWorldVecPartitionSchema(tableDim); err != nil {
+				return 0, fmt.Errorf("worldmem reindex: migrating vector table: %w", err)
+			}
+			db.Vacuum()
+		}
+	}
+
 	if !EmbeddingsAvailable() {
 		slog.Info("worldmem reindex skipped: no embedding accounts configured")
 		return 0, nil
@@ -104,12 +114,14 @@ func Reindex(ctx context.Context) (int, error) {
 		dim = len(probe)
 	}
 
+	rebuilt := false
 	if dim != tableDim {
 		slog.Warn("worldmem reindex: embedding dimension changed, rebuilding vector index",
 			"stored_dim", tableDim, "configured_dim", dim, "model", modelName, "facts", total)
 		if err := db.RebuildWorldVecTable(dim); err != nil {
 			return 0, fmt.Errorf("worldmem reindex: rebuilding vector table: %w", err)
 		}
+		rebuilt = true
 	}
 
 	reembedded := 0
@@ -157,6 +169,9 @@ func Reindex(ctx context.Context) (int, error) {
 
 	if reembedded > 0 {
 		slog.Info("worldmem reindex: re-embedded facts", "count", reembedded, "model", modelName, "dim", dim)
+	}
+	if rebuilt {
+		db.Vacuum()
 	}
 	return reembedded, nil
 }

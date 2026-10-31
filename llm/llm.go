@@ -428,6 +428,139 @@ func (l *Llmer) TrimCacheFriendlyContext(softLimit int) bool {
 	return l.TrimNonSystemMessages(softLimit)
 }
 
+// MessageCacheKey returns the stable cache key for a message. MessageID is
+// preferred because it survives history re-renders; ID is the Discord fallback.
+func MessageCacheKey(msg Message) string {
+	if msg.MessageID != "" {
+		return msg.MessageID
+	}
+	if msg.ID != 0 {
+		return msg.ID.String()
+	}
+	return ""
+}
+
+// CacheAnchorFor returns the message ID that should start the next request.
+// The returned anchor is kept stable while the non-system history fits within
+// the hard message limit. When it does not, the anchor moves forward to leave
+// at most softLimit non-system messages, preferring to start on a user message.
+// Passing an empty or unknown anchor starts from the oldest cached message.
+func (l *Llmer) CacheAnchorFor(anchor string, softLimit int) string {
+	if softLimit <= 0 {
+		return ""
+	}
+	hardLimit := ContextHardMessageLimit(softLimit)
+	if hardLimit <= 0 {
+		return ""
+	}
+
+	start := -1
+	if anchor != "" {
+		for i, msg := range l.Messages {
+			if msg.Role == RoleSystem {
+				continue
+			}
+			if MessageCacheKey(msg) == anchor {
+				start = i
+				break
+			}
+		}
+	}
+	if start < 0 {
+		for i, msg := range l.Messages {
+			if msg.Role != RoleSystem {
+				start = i
+				break
+			}
+		}
+	}
+	for start >= 0 && start < len(l.Messages) && l.Messages[start].Role == RoleSystem {
+		start++
+	}
+	if start < 0 || start >= len(l.Messages) {
+		return ""
+	}
+
+	count := 0
+	for i := start; i < len(l.Messages); i++ {
+		if l.Messages[i].Role != RoleSystem {
+			count++
+		}
+	}
+	if count > hardLimit {
+		start = l.advanceCacheAnchor(start, softLimit)
+	}
+	for i := start; i < len(l.Messages); i++ {
+		if l.Messages[i].Role == RoleSystem {
+			continue
+		}
+		if key := MessageCacheKey(l.Messages[i]); key != "" {
+			return key
+		}
+	}
+	return ""
+}
+
+// advanceCacheAnchor moves start forward until at most keep non-system messages
+// remain, then prefers to start the window on a user message.
+func (l *Llmer) advanceCacheAnchor(start, keep int) int {
+	remaining := 0
+	for i := start; i < len(l.Messages); i++ {
+		if l.Messages[i].Role != RoleSystem {
+			remaining++
+		}
+	}
+
+	idx := start
+	for idx < len(l.Messages) && remaining > keep {
+		if l.Messages[idx].Role != RoleSystem {
+			remaining--
+		}
+		idx++
+	}
+	for i := idx; i < len(l.Messages); i++ {
+		if l.Messages[i].Role == RoleUser {
+			idx = i
+			break
+		}
+	}
+	for idx < len(l.Messages) && l.Messages[idx].Role == RoleSystem {
+		idx++
+	}
+	if idx >= len(l.Messages) {
+		idx = len(l.Messages) - 1
+	}
+	return idx
+}
+
+// TrimBeforeMessageID drops all non-system messages before messageID while
+// preserving the leading system prompt. It returns false when the ID is empty
+// or not present.
+func (l *Llmer) TrimBeforeMessageID(messageID string) bool {
+	if messageID == "" {
+		return false
+	}
+	for i, msg := range l.Messages {
+		if msg.Role == RoleSystem {
+			continue
+		}
+		if MessageCacheKey(msg) != messageID {
+			continue
+		}
+		if i == 0 {
+			return false
+		}
+		newMessages := make([]Message, 0, len(l.Messages)-i+1)
+		if len(l.Messages) > 0 && l.Messages[0].Role == RoleSystem {
+			newMessages = append(newMessages, l.Messages[0])
+		}
+		newMessages = append(newMessages, l.Messages[i:]...)
+		l.Messages = newMessages
+		return true
+	}
+	return false
+}
+
 func IsContextLengthError(err error) bool {
 	if err == nil {
 		return false
@@ -526,7 +659,12 @@ func (l *Llmer) AddMessageWithID(role, content string, id snowflake.ID, messageI
 		// previous message is also an assistant message, merge this
 		// (this is required when x3 splits the message up into multiple parts to bypass
 		// discord's 2000 character message limit)
-		l.Messages[len(l.Messages)-1].Content += content
+		prev := &l.Messages[len(l.Messages)-1]
+		if prev.Content != "" && content != "" &&
+			!strings.HasSuffix(prev.Content, "\n") && !strings.HasPrefix(content, "\n") {
+			prev.Content += "\n\n"
+		}
+		prev.Content += content
 		return
 	}
 
@@ -1162,11 +1300,6 @@ const (
 	toolNameCodeInterp    = "code_interpreter"
 )
 
-// openCodeGateToolUnavailableResult is the tool result sent when a model
-// calls the "read" tool the OpenCode Zen free tier gate requires. The tool is
-// a stub, so the model is told to answer without it.
-const openCodeGateToolUnavailableResult = "The read tool is not available in this environment. Answer using only the conversation."
-
 var webSearchTool = openai.Tool{
 	Type: openai.ToolTypeFunction,
 	Function: &openai.FunctionDefinition{
@@ -1346,7 +1479,7 @@ func (l *Llmer) executeSearchTool(ctx context.Context, name, query string, searc
 	var citemap map[int]string
 	switch name {
 	case toolNameWebSearch:
-		results, citemap = getSearchResults(query)
+		results, citemap = getSearchResults(ctx, query)
 	case toolNameDiscordSearch:
 		results, citemap = l.getDiscordSearchResults(ctx, query)
 	default:
@@ -1361,10 +1494,10 @@ func (l *Llmer) executeSearchTool(ctx context.Context, name, query string, searc
 // The completion router retains the TTFT return value for compatibility, but
 // non-streaming providers are measured using the total request duration.
 //
-// The OpenCode Zen free tier is the exception: its gate only accepts streamed
-// requests, so that provider goes through the opencode package.
+// OpenCode is the exception: its endpoint is streamed by the opencode package
+// and aggregated so both the free tier and OpenCode Go share one code path.
 func createChatCompletionWithTTFT(ctx context.Context, client *openai.Client, req openai.ChatCompletionRequest, provider string) (openai.ChatCompletionResponse, time.Duration, error) {
-	if provider == model.ProviderOpencode {
+	if model.IsOpenCodeProvider(provider) {
 		response, err := opencode.CreateChatCompletion(ctx, client, req)
 		return response, 0, err
 	}
@@ -1418,14 +1551,6 @@ func (l *Llmer) requestCompletionInternal2(
 				break
 			}
 		}
-	}
-
-	// The OpenCode Zen free tier gate requires a tool named "read" in the
-	// body of every request, including the follow-up requests that follow a
-	// tool call.
-	isOpenCode := provider == model.ProviderOpencode
-	if isOpenCode {
-		req.Tools = opencode.EnsureGateTool(req.Tools)
 	}
 
 	completionStart := time.Now()
@@ -1494,7 +1619,7 @@ func (l *Llmer) requestCompletionInternal2(
 		}
 		usage = usage.Add(currentUsage)
 
-		if (!nativeToolCalling && !isOpenCode) || len(message.ToolCalls) == 0 {
+		if !nativeToolCalling || len(message.ToolCalls) == 0 {
 			break
 		}
 		if toolDepth >= 3 {
@@ -1513,21 +1638,12 @@ func (l *Llmer) requestCompletionInternal2(
 			ToolCalls:    toolCalls,
 			ExtraContent: message.ExtraContent, // Google requires that we pass encrypted thought signatures forward
 		})
-		if isOpenCode {
-			// The gate tool has to stay in the body of the next request.
-			req.Tools = opencode.EnsureGateTool(req.Tools)
-		} else {
-			req.Tools = nil
-			req.ToolChoice = nil
-		}
+		req.Tools = nil
+		req.ToolChoice = nil
 		nativeToolCalling = false
 		for i, call := range toolCalls {
 			var results string
-			if isOpenCode && call.Function.Name == opencode.GateToolName {
-				// The gate tool is a stub, the bot cannot read files.
-				slog.Info("opencode gate tool called, answering as unavailable", "model", m.Name, "provider", provider)
-				results = openCodeGateToolUnavailableResult
-			} else if call.Function.Name == toolNameCodeInterp {
+			if call.Function.Name == toolNameCodeInterp {
 				args := parseCodeToolArguments(call.Function.Arguments)
 				slog.Info("executing native tool call", "tool", call.Function.Name, "language", args.Language, "code_len", len(args.Code))
 				results = l.executeCodeTool(ctx, args.Language, args.Code)
@@ -1573,7 +1689,7 @@ func (l *Llmer) requestCompletionInternal2(
 			return nextRes, usage.Add(nextUsage), timeToFirstToken, nextErr
 		}
 		if search := extractSearch(unescaped); search != "" {
-			results, citemap := getSearchResults(search)
+			results, citemap := getSearchResults(ctx, search)
 			nextRes, nextUsage, _, nextErr := l.requestCompletionInternal2(
 				m, codename, provider, settings, client, prepend, thinkPrefill, ctx,
 				searchDepth+1, citemap, results,
@@ -1659,10 +1775,10 @@ func (l *Llmer) requestCompletionInternal(
 				config = openai.DefaultAzureConfig(token, baseUrl)
 				config.APIType = openai.APITypeOpenAI
 			}
-			if provider == model.ProviderOpencode {
+			if model.IsOpenCodeProvider(provider) {
 				version := model.OpenCodeVersion()
-				config.DefaultHeaders = opencode.Headers(version)
-				slog.Info("using opencode free tier client", "version", version, "baseUrl", baseUrl)
+				config.DefaultHeaders = opencode.HeadersWithChannel(version, model.OpenCodeChannel())
+				slog.Info("using opencode client", "version", version, "baseUrl", baseUrl)
 			}
 			client := openai.NewClientWithConfig(config)
 
