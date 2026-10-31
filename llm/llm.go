@@ -237,6 +237,9 @@ func applyReasoningSettings(req *openai.ChatCompletionRequest, provider, codenam
 	req.Reasoning.Exclude = new(!reasoning)
 	req.Thinking = &openai.ThinkingConfig{Type: thinkingType}
 	req.ChatTemplateKwargs = map[string]any{"enable_thinking": reasoning}
+	if provider == model.ProviderExperiential {
+		return
+	}
 	req.ProviderOptions = map[string]any{
 		"zai": map[string]any{
 			"thinking": req.Thinking,
