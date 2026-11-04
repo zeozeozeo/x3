@@ -92,6 +92,7 @@ const (
 	aionBaseUrl                 = "https://api.aionlabs.ai/v1"
 	unorouterBaseUrl            = "https://api.unorouter.com/v1"
 	experientialBaseUrl         = "https://api.experientiallabs.ai/v1"
+	refuselessBaseUrl           = "https://api.refuseless.com/v1"
 )
 
 const (
@@ -146,6 +147,7 @@ const (
 	ProviderAion         = "aion"
 	ProviderUnorouter    = "unorouter"
 	ProviderExperiential = "experiential" // what a horrible name
+	ProviderRefuseless   = "refuseless"
 )
 
 // Provider scopes identify the modeled defaults section a model was selected
@@ -1134,6 +1136,8 @@ func (m Model) Client(provider string) (baseUrls []string, tokens []string, code
 		tokenEnvKey, apiVar = "X3_UNOROUTER_TOKEN", unorouterBaseUrl
 	case ProviderExperiential:
 		tokenEnvKey, apiVar = "X3_EXPERIENTIAL_TOKEN", experientialBaseUrl
+	case ProviderRefuseless:
+		tokenEnvKey, apiVar = "X3_REFUSELESS_TOKEN", refuselessBaseUrl
 	default:
 		return nil, nil, nil
 	}
