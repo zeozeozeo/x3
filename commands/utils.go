@@ -947,7 +947,13 @@ func isVideoAttachment(attachment discord.Attachment) bool {
 			return true
 		}
 	}
-	switch strings.ToLower(filepath.Ext(attachment.Filename)) {
+	return isVideoFilename(attachment.Filename)
+}
+
+// isVideoFilename reports whether the filename extension conventionally
+// denotes a video container.
+func isVideoFilename(filename string) bool {
+	switch strings.ToLower(filepath.Ext(filename)) {
 	case ".mp4", ".webm", ".mov", ".mkv", ".m4v":
 		return true
 	}

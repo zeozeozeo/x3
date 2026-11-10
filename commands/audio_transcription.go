@@ -39,7 +39,13 @@ func isAudioAttachment(a discord.Attachment) bool {
 	if a.ContentType != nil && strings.HasPrefix(strings.ToLower(*a.ContentType), "audio/") {
 		return true
 	}
-	switch strings.ToLower(filepath.Ext(a.Filename)) {
+	return isAudioFilename(a.Filename)
+}
+
+// isAudioFilename reports whether the filename extension conventionally
+// denotes an audio file.
+func isAudioFilename(filename string) bool {
+	switch strings.ToLower(filepath.Ext(filename)) {
 	case ".mp3", ".m4a", ".aac", ".ogg", ".oga", ".opus", ".wav", ".flac", ".wma", ".amr", ".mp4":
 		return true
 	}
@@ -60,27 +66,60 @@ func audioAttachmentNote(a discord.Attachment) string {
 	return fmt.Sprintf("[audio attachment: %s]", a.Filename)
 }
 
-func audioLabel(a discord.Attachment) string {
-	switch {
-	case isVoiceMessageAttachment(a):
+type audioMediaKind int
+
+const (
+	audioMediaAudio audioMediaKind = iota
+	audioMediaVoice
+	audioMediaVideo
+)
+
+type audioMedia struct {
+	ID       string
+	Filename string
+	Size     int
+	Duration time.Duration
+	Kind     audioMediaKind
+	Download func(context.Context) ([]byte, error)
+}
+
+func (m audioMedia) label() string {
+	switch m.Kind {
+	case audioMediaVoice:
 		return "voice message"
-	case isVideoAttachment(a):
-		return "video attachment: " + a.Filename
+	case audioMediaVideo:
+		return "video attachment: " + m.Filename
 	default:
-		return "audio attachment: " + a.Filename
+		return "audio attachment: " + m.Filename
 	}
 }
 
-func tooLongAudioLine(a discord.Attachment) string {
-	return fmt.Sprintf("[%s: audio is too long to transcribe (over 3 minutes)]", audioLabel(a))
+func (m audioMedia) tooLongLine() string {
+	return fmt.Sprintf("[%s: audio is too long to transcribe (over 3 minutes)]", m.label())
 }
 
-func unavailableAudioLine(a discord.Attachment, reason string) string {
-	return fmt.Sprintf("[%s: transcription unavailable (%s)]", audioLabel(a), reason)
+func (m audioMedia) unavailableLine(reason string) string {
+	return fmt.Sprintf("[%s: transcription unavailable (%s)]", m.label(), reason)
 }
 
-func tooLargeAudioLine(a discord.Attachment) string {
-	return fmt.Sprintf("[%s: file too large to transcribe]", audioLabel(a))
+func (m audioMedia) tooLargeLine() string {
+	return fmt.Sprintf("[%s: file too large to transcribe]", m.label())
+}
+
+// transcriptLine formats a normalized transcript for the prompt.
+func (m audioMedia) transcriptLine(transcript string) string {
+	value := noSpeechTranscript
+	if transcript != "" {
+		value = fmt.Sprintf("%q", transcript)
+	}
+	switch m.Kind {
+	case audioMediaVoice:
+		return fmt.Sprintf("[voice message transcript: %s]", value)
+	case audioMediaVideo:
+		return fmt.Sprintf("[video transcript (%s): %s]", m.Filename, value)
+	default:
+		return fmt.Sprintf("[audio transcript (%s): %s]", m.Filename, value)
+	}
 }
 
 func appendAudioTranscriptionLines(ctx context.Context, content string, attachments []discord.Attachment) string {
@@ -94,108 +133,126 @@ func appendAudioTranscriptionLines(ctx context.Context, content string, attachme
 }
 
 func audioTranscriptionLine(ctx context.Context, attachment discord.Attachment) string {
+	return transcribeAudioMedia(ctx, discordAudioMedia(attachment))
+}
+
+// discordAudioMedia adapts a Discord attachment to the shared transcription
+// pipeline.
+func discordAudioMedia(attachment discord.Attachment) audioMedia {
+	kind := audioMediaAudio
+	switch {
+	case isVoiceMessageAttachment(attachment):
+		kind = audioMediaVoice
+	case isVideoAttachment(attachment):
+		kind = audioMediaVideo
+	}
+	media := audioMedia{
+		ID:       attachment.ID.String(),
+		Filename: attachment.Filename,
+		Size:     attachment.Size,
+		Kind:     kind,
+	}
+	if duration, ok := attachmentDuration(attachment); ok {
+		media.Duration = duration
+	}
+	if attachment.URL != "" {
+		media.Download = func(ctx context.Context) ([]byte, error) {
+			return downloadMedia(ctx, attachment.URL, videothumb.MaxDownloadBytes())
+		}
+	}
+	return media
+}
+
+// transcribeAudioMedia runs the shared transcription pipeline: cache, size and
+// duration gates, download, ffprobe, audio extraction, Whisper, and prompt
+// formatting.
+func transcribeAudioMedia(ctx context.Context, media audioMedia) string {
 	cfg := whisper.ConfigFromEnv()
 	if !cfg.Enabled {
 		return ""
 	}
-	if transcript, ok := readAudioTranscriptCache(attachment.ID.String()); ok {
-		return transcriptLine(attachment, transcript)
+	if transcript, ok := readAudioTranscriptCache(media.ID); ok {
+		return media.transcriptLine(transcript)
 	}
-	if known, ok := attachmentDuration(attachment); ok && known > whisper.MaxDuration {
-		return tooLongAudioLine(attachment)
+	if media.Duration > whisper.MaxDuration {
+		return media.tooLongLine()
 	}
 	limit := videothumb.MaxDownloadBytes()
-	if attachment.Size > limit {
-		return unavailableAudioLine(attachment, "media exceeds the download limit")
+	if media.Size > limit {
+		return media.unavailableLine("media exceeds the download limit")
 	}
-	if attachment.URL == "" {
-		return unavailableAudioLine(attachment, "missing URL")
+	if media.Download == nil {
+		return media.unavailableLine("missing URL")
 	}
 	if len(cfg.Tokens) == 0 {
 		return ""
 	}
 
-	data, err := downloadMedia(ctx, attachment.URL, limit)
+	data, err := media.Download(ctx)
 	if err != nil {
 		slog.Warn("audio transcription: download failed",
-			"err", err, "attachment_id", attachment.ID.String(), "filename", attachment.Filename)
-		return unavailableAudioLine(attachment, "download failed")
+			"err", err, "attachment_id", media.ID, "filename", media.Filename)
+		return media.unavailableLine("download failed")
 	}
 
-	if _, ok := attachmentDuration(attachment); !ok {
+	if media.Duration == 0 {
 		if !mediaBackend("ffprobe") {
-			return unavailableAudioLine(attachment, "duration unknown")
+			return media.unavailableLine("duration unknown")
 		}
 		probed, probeErr := probeDuration(ctx, data)
 		if probeErr != nil {
 			slog.Warn("audio transcription: duration probe failed",
-				"err", probeErr, "attachment_id", attachment.ID.String(), "filename", attachment.Filename)
-			return unavailableAudioLine(attachment, "duration unreadable")
+				"err", probeErr, "attachment_id", media.ID, "filename", media.Filename)
+			return media.unavailableLine("duration unreadable")
 		}
 		if probed > whisper.MaxDuration {
-			return tooLongAudioLine(attachment)
+			return media.tooLongLine()
 		}
 	}
 
-	filename := attachment.Filename
+	filename := media.Filename
 	audio := data
-	if isVideoAttachment(attachment) {
+	if media.Kind == audioMediaVideo {
 		if !mediaBackend("ffmpeg") {
-			return unavailableAudioLine(attachment, "ffmpeg backend unavailable")
+			return media.unavailableLine("ffmpeg backend unavailable")
 		}
 		extracted, extractErr := extractAudio(ctx, data, cfg.MaxAudioBytes)
 		if extractErr != nil {
 			slog.Warn("audio transcription: audio extraction failed",
-				"err", extractErr, "attachment_id", attachment.ID.String(), "filename", attachment.Filename)
-			return unavailableAudioLine(attachment, "audio extraction failed")
+				"err", extractErr, "attachment_id", media.ID, "filename", media.Filename)
+			return media.unavailableLine("audio extraction failed")
 		}
 		audio = extracted
-		filename = audioFlacName(attachment.Filename)
-	} else if !groqSupportedAudioFilename(attachment.Filename) || len(data) > cfg.MaxAudioBytes {
+		filename = audioFlacName(media.Filename)
+	} else if !groqSupportedAudioFilename(media.Filename) || len(data) > cfg.MaxAudioBytes {
 		if len(data) > cfg.MaxAudioBytes && !mediaBackend("ffmpeg") {
-			return tooLargeAudioLine(attachment)
+			return media.tooLargeLine()
 		}
 		if !mediaBackend("ffmpeg") {
-			return unavailableAudioLine(attachment, "ffmpeg backend unavailable")
+			return media.unavailableLine("ffmpeg backend unavailable")
 		}
 		extracted, extractErr := extractAudio(ctx, data, cfg.MaxAudioBytes)
 		if extractErr != nil {
 			slog.Warn("audio transcription: audio extraction failed",
-				"err", extractErr, "attachment_id", attachment.ID.String(), "filename", attachment.Filename)
-			return unavailableAudioLine(attachment, "audio extraction failed")
+				"err", extractErr, "attachment_id", media.ID, "filename", media.Filename)
+			return media.unavailableLine("audio extraction failed")
 		}
 		audio = extracted
-		filename = audioFlacName(attachment.Filename)
+		filename = audioFlacName(media.Filename)
 	}
 
 	transcript, err := whisperTranscribe(ctx, filename, audio)
 	if err != nil {
 		slog.Warn("audio transcription: transcription failed",
-			"err", err, "attachment_id", attachment.ID.String(), "filename", attachment.Filename)
-		return unavailableAudioLine(attachment, "transcription failed")
+			"err", err, "attachment_id", media.ID, "filename", media.Filename)
+		return media.unavailableLine("transcription failed")
 	}
 
 	normalized := normalizeTranscript(transcript)
 	if normalized != "" {
-		writeAudioTranscriptCache(attachment.ID.String(), normalized)
+		writeAudioTranscriptCache(media.ID, normalized)
 	}
-	return transcriptLine(attachment, normalized)
-}
-
-// transcriptLine formats a normalized transcript for the prompt.
-func transcriptLine(attachment discord.Attachment, transcript string) string {
-	value := noSpeechTranscript
-	if transcript != "" {
-		value = fmt.Sprintf("%q", transcript)
-	}
-	switch {
-	case isVoiceMessageAttachment(attachment):
-		return fmt.Sprintf("[voice message transcript: %s]", value)
-	case isVideoAttachment(attachment):
-		return fmt.Sprintf("[video transcript (%s): %s]", attachment.Filename, value)
-	default:
-		return fmt.Sprintf("[audio transcript (%s): %s]", attachment.Filename, value)
-	}
+	return media.transcriptLine(normalized)
 }
 
 func normalizeTranscript(transcript string) string {

@@ -63,6 +63,11 @@ type matrixAttachment struct {
 	DataURI     string
 	IsImage     bool
 	IsVideo     bool
+	IsAudio     bool
+	IsVoice     bool
+	Duration    time.Duration
+	URL         id.ContentURIString
+	EncryptedFile *event.EncryptedFileInfo
 }
 
 type matrixMessage struct {
@@ -590,9 +595,12 @@ func (b *MatrixBot) buildMessage(ctx context.Context, evt *event.Event) *matrixM
 			slog.Warn("failed to read matrix attachment", "room_id", evt.RoomID.String(), "event_id", evt.ID.String(), "err", err)
 		} else if att != nil {
 			msg.Attachments = append(msg.Attachments, *att)
-			if att.IsVideo {
+			switch {
+			case att.IsVideo:
 				// keep history readable even when no thumbnail is available
 				msg.Content = appendContextLine(msg.Content, fmt.Sprintf("[video attachment: %s]", att.Filename))
+			case att.IsAudio:
+				msg.Content = appendContextLine(msg.Content, matrixAudioAttachmentNote(*att))
 			}
 		}
 	}
@@ -675,11 +683,25 @@ func (b *MatrixBot) attachmentFromContent(ctx context.Context, content *event.Me
 	}
 	isImage := strings.HasPrefix(contentType, "image/")
 	att := &matrixAttachment{
-		Filename:    filename,
-		ContentType: contentType,
-		Size:        len(data),
-		Data:        data,
-		IsImage:     isImage,
+		Filename:      filename,
+		ContentType:   contentType,
+		Size:          len(data),
+		Data:          data,
+		IsImage:       isImage,
+		URL:           content.URL,
+		EncryptedFile: content.File,
+	}
+	if !isImage {
+		att.IsAudio = content.MsgType == event.MsgAudio ||
+			strings.HasPrefix(strings.ToLower(contentType), "audio/") ||
+			(isAudioFilename(filename) && !isVideoFilename(filename))
+		if att.IsAudio {
+			att.IsVoice = content.MSC3245Voice != nil ||
+				strings.HasPrefix(strings.ToLower(filename), "voice-message")
+			if content.Info != nil && content.Info.Duration > 0 {
+				att.Duration = time.Duration(content.Info.Duration) * time.Millisecond
+			}
+		}
 	}
 	if isImage {
 		if len(data) > llm.MaxImageBytes {
@@ -696,7 +718,8 @@ func (b *MatrixBot) attachmentFromContent(ctx context.Context, content *event.Me
 // data URI: the client-provided info thumbnail when present, otherwise a
 // frame extracted by the videothumb ffmpeg backend. The video itself is only
 // downloaded when extraction is possible and its size fits the configured
-// cap; the raw bytes are never retained on the attachment.
+// cap; downloaded bytes are retained so audio transcription does not fetch
+// them a second time.
 func (b *MatrixBot) videoAttachmentFromContent(ctx context.Context, content *event.MessageEventContent, filename string) (*matrixAttachment, error) {
 	contentType := ""
 	if content.Info != nil {
@@ -706,9 +729,17 @@ func (b *MatrixBot) videoAttachmentFromContent(ctx context.Context, content *eve
 		contentType = "video/mp4"
 	}
 	att := &matrixAttachment{
-		Filename:    filename,
-		ContentType: contentType,
-		IsVideo:     true,
+		Filename:      filename,
+		ContentType:   contentType,
+		IsVideo:       true,
+		URL:           content.URL,
+		EncryptedFile: content.File,
+	}
+	if content.Info != nil {
+		att.Size = content.Info.Size
+		if content.Info.Duration > 0 {
+			att.Duration = time.Duration(content.Info.Duration) * time.Millisecond
+		}
 	}
 
 	if uri, ok := b.downloadMatrixVideoThumbnail(ctx, content.Info); ok {
@@ -750,6 +781,7 @@ func (b *MatrixBot) videoAttachmentFromContent(ctx context.Context, content *eve
 		}
 	}
 	att.Size = len(data)
+	att.Data = data
 
 	dataURI := videothumb.Thumbnail(ctx, videothumb.Source{
 		Data:        data,
@@ -841,6 +873,98 @@ func matrixDocumentBlocks(ctx context.Context, attachments []matrixAttachment) s
 		sb.WriteByte('\n')
 	}
 	return strings.TrimSpace(sb.String())
+}
+
+// matrixAudioAttachmentNote keeps audio history readable when transcription is
+// disabled or unavailable, mirroring the Discord attachment note.
+func matrixAudioAttachmentNote(a matrixAttachment) string {
+	if a.IsVoice {
+		return "[voice message]"
+	}
+	return fmt.Sprintf("[audio attachment: %s]", a.Filename)
+}
+
+// appendMatrixAudioTranscriptionLines appends transcript lines for the audio
+// and video attachments of a Matrix message to its prompt content.
+func (b *MatrixBot) appendMatrixAudioTranscriptionLines(ctx context.Context, content string, eventID id.EventID, attachments []matrixAttachment) string {
+	for _, attachment := range attachments {
+		if !attachment.IsAudio && !attachment.IsVideo {
+			continue
+		}
+		content = appendContextLine(content, b.matrixAudioTranscriptionLine(ctx, eventID, attachment))
+	}
+	return content
+}
+
+func (b *MatrixBot) matrixAudioTranscriptionLine(ctx context.Context, eventID id.EventID, attachment matrixAttachment) string {
+	return transcribeAudioMedia(ctx, b.matrixAudioMedia(eventID, attachment))
+}
+
+// matrixAudioMedia adapts a Matrix attachment to the shared transcription
+// pipeline. Audio bytes are already downloaded by buildMessage; video bytes
+// are downloaded lazily (and decrypted) unless the thumbnail path retained
+// them.
+func (b *MatrixBot) matrixAudioMedia(eventID id.EventID, attachment matrixAttachment) audioMedia {
+	kind := audioMediaAudio
+	switch {
+	case attachment.IsVideo:
+		kind = audioMediaVideo
+	case attachment.IsVoice:
+		kind = audioMediaVoice
+	}
+	size := attachment.Size
+	if size == 0 {
+		size = len(attachment.Data)
+	}
+	media := audioMedia{
+		ID:       fmt.Sprintf("%s:%s", eventID, attachment.Filename),
+		Filename: attachment.Filename,
+		Size:     size,
+		Duration: attachment.Duration,
+		Kind:     kind,
+	}
+	encryptedURL := ""
+	if attachment.EncryptedFile != nil {
+		encryptedURL = string(attachment.EncryptedFile.URL)
+	}
+	if len(attachment.Data) > 0 || attachment.URL != "" || encryptedURL != "" {
+		media.Download = func(ctx context.Context) ([]byte, error) {
+			return b.matrixAttachmentBytes(ctx, attachment)
+		}
+	}
+	return media
+}
+
+// matrixAttachmentBytes returns the plaintext media bytes, downloading and
+// decrypting them when buildMessage did not retain them.
+func (b *MatrixBot) matrixAttachmentBytes(ctx context.Context, attachment matrixAttachment) ([]byte, error) {
+	if len(attachment.Data) > 0 {
+		return attachment.Data, nil
+	}
+	uri := attachment.URL
+	if attachment.EncryptedFile != nil && attachment.EncryptedFile.URL != "" {
+		uri = attachment.EncryptedFile.URL
+	}
+	if uri == "" {
+		return nil, errors.New("missing media URL")
+	}
+	parsed, err := uri.Parse()
+	if err != nil {
+		return nil, err
+	}
+	data, err := b.client.DownloadBytes(ctx, parsed)
+	if err != nil {
+		return nil, err
+	}
+	if attachment.EncryptedFile != nil {
+		if err := attachment.EncryptedFile.DecryptInPlace(data); err != nil {
+			return nil, err
+		}
+	}
+	if limit := videothumb.MaxDownloadBytes(); len(data) > limit {
+		return nil, fmt.Errorf("media exceeds the download limit (%d > %d bytes)", len(data), limit)
+	}
+	return data, nil
 }
 
 func (b *MatrixBot) handleCommand(ctx context.Context, msg *matrixMessage, raw string, isDM bool) error {
@@ -1804,6 +1928,7 @@ func (b *MatrixBot) handleLlm(ctx context.Context, msg *matrixMessage, isRegener
 		if docBlocks := matrixDocumentBlocks(ctx, msg.Attachments); docBlocks != "" {
 			content = appendContextLine(content, docBlocks)
 		}
+		content = b.appendMatrixAudioTranscriptionLines(ctx, content, msg.EventID, msg.Attachments)
 		llmer.AddMessageWithID(llm.RoleUser, content, 0, msg.EventID.String())
 		var added *llm.Message
 		if len(llmer.Messages) > 0 {
