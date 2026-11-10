@@ -7,13 +7,13 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
-	"os"
 	"path/filepath"
 	"strings"
 	"time"
 	"unicode/utf8"
 
 	"github.com/disgoorg/disgo/discord"
+	"github.com/zeozeozeo/x3/cache"
 	"github.com/zeozeozeo/x3/ffmpegbox"
 	"github.com/zeozeozeo/x3/videothumb"
 	"github.com/zeozeozeo/x3/whisper"
@@ -21,7 +21,6 @@ import (
 
 const maxTranscriptRunes = 8000
 const noSpeechTranscript = `"(no speech detected)"`
-const audioCacheDir = "x3-audio-cache"
 
 var (
 	whisperTranscribe = whisper.Transcribe
@@ -231,16 +230,16 @@ func attachmentDuration(a discord.Attachment) (time.Duration, bool) {
 	return time.Duration(*a.DurationSecs * float64(time.Second)), true
 }
 
-func audioTranscriptCachePath(id string) string {
-	return filepath.Join(audioCacheDir, id+".txt")
-}
-
 func readAudioTranscriptCache(id string) (string, bool) {
 	if id == "" || id == "0" {
 		return "", false
 	}
-	data, err := os.ReadFile(audioTranscriptCachePath(id))
+	data, ok, err := cache.Get(cache.NamespaceAudioTranscript, id)
 	if err != nil {
+		slog.Warn("audio transcription: cache read failed", "err", err, "attachment_id", id)
+		return "", false
+	}
+	if !ok {
 		return "", false
 	}
 	transcript := strings.TrimSpace(string(data))
@@ -258,11 +257,7 @@ func writeAudioTranscriptCache(id, transcript string) {
 	if transcript == "" {
 		return
 	}
-	if err := os.MkdirAll(audioCacheDir, 0755); err != nil {
-		slog.Warn("audio transcription: create cache dir failed", "err", err)
-		return
-	}
-	if err := os.WriteFile(audioTranscriptCachePath(id), []byte(transcript), 0644); err != nil {
+	if err := cache.Put(cache.NamespaceAudioTranscript, id, []byte(transcript)); err != nil {
 		slog.Warn("audio transcription: cache write failed", "err", err, "attachment_id", id)
 	}
 }

@@ -3,9 +3,7 @@ package commands
 import (
 	"bytes"
 	"context"
-	"database/sql"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -20,7 +18,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/PuerkitoBio/goquery"
-	"github.com/zeozeozeo/x3/db"
+	"github.com/zeozeozeo/x3/cache"
 )
 
 const (
@@ -145,32 +143,33 @@ func normalizeLinkURL(raw string) string {
 	return parsed.String()
 }
 
+type linkMetadataCacheEntry struct {
+	Metadata string `json:"metadata,omitempty"`
+	Error    string `json:"error,omitempty"`
+}
+
 func getCachedLinkMetadataSummary(ctx context.Context, raw string) (string, error) {
-	now := time.Now().UTC()
-	entry, err := db.GetLinkMetadata(raw)
-	if err == nil {
-		ttl := linkMetadataSuccessTTL
-		if entry.Error != "" {
-			ttl = linkMetadataFailureTTL
-		}
-		staleKnownSiteFailure := entry.Error != "" && entry.Metadata == "" && shouldBypassCachedFailure(raw)
-		if !staleKnownSiteFailure && now.Sub(entry.FetchedAt) < ttl {
+	if data, ok, err := cache.Get(cache.NamespaceLinkMetadata, raw); err != nil {
+		slog.Warn("failed to read link metadata cache", "err", err, "url", raw)
+	} else if ok {
+		var entry linkMetadataCacheEntry
+		if err := json.Unmarshal(data, &entry); err != nil {
+			slog.Warn("failed to decode cached link metadata", "err", err, "url", raw)
+		} else if !(entry.Error != "" && entry.Metadata == "" && shouldBypassCachedFailure(raw)) {
 			return entry.Metadata, nil
 		}
-	} else if !errors.Is(err, sql.ErrNoRows) {
-		slog.Warn("failed to read link metadata cache", "err", err, "url", raw)
 	}
 
 	summary, fetchErr := fetchLinkMetadataSummary(ctx, raw)
-	entry = db.LinkMetadataCacheEntry{
-		URL:       raw,
-		Metadata:  summary,
-		FetchedAt: now,
-	}
+	entry := linkMetadataCacheEntry{Metadata: summary}
+	ttl := linkMetadataSuccessTTL
 	if fetchErr != nil {
 		entry.Error = fetchErr.Error()
+		ttl = linkMetadataFailureTTL
 	}
-	if err := db.WriteLinkMetadata(entry); err != nil {
+	if data, err := json.Marshal(entry); err != nil {
+		slog.Warn("failed to encode link metadata cache entry", "err", err, "url", raw)
+	} else if err := cache.PutWithTTL(cache.NamespaceLinkMetadata, raw, data, ttl); err != nil {
 		slog.Warn("failed to cache link metadata", "err", err, "url", raw)
 	}
 	return summary, fetchErr

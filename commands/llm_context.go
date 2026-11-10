@@ -8,7 +8,6 @@ import (
 	"log/slog"
 	"net/http"
 	"net/url"
-	"os"
 	"path/filepath"
 	"regexp"
 	"strconv"
@@ -21,6 +20,7 @@ import (
 	"github.com/disgoorg/disgo/bot"
 	"github.com/disgoorg/disgo/discord"
 	"github.com/disgoorg/snowflake/v2"
+	"github.com/zeozeozeo/x3/cache"
 	"github.com/zeozeozeo/x3/db"
 	"github.com/zeozeozeo/x3/docs"
 	"github.com/zeozeozeo/x3/llm"
@@ -408,20 +408,17 @@ func setLatestAssistantMessageMetadata(llmer *llm.Llmer, message *discord.Messag
 	}
 }
 
-// writeTxtCache saves downloaded text attachment content to a local cache file
 func writeTxtCache(attachmentID snowflake.ID, content []byte) error {
-	if err := os.MkdirAll("x3-txt-cache", 0755); err != nil {
-		return fmt.Errorf("failed to create txt cache directory: %w", err)
-	}
-	filePath := fmt.Sprintf("x3-txt-cache/%s.txt", attachmentID)
-	return os.WriteFile(filePath, content, 0644)
+	return cache.Put(cache.NamespaceDocumentText, attachmentID.String(), content)
 }
 
-// readTxtCache reads text attachment content from the local cache if available
 func readTxtCache(attachmentID snowflake.ID) ([]byte, bool) {
-	filePath := fmt.Sprintf("x3-txt-cache/%s.txt", attachmentID)
-	content, err := os.ReadFile(filePath)
-	return content, err == nil
+	content, ok, err := cache.Get(cache.NamespaceDocumentText, attachmentID.String())
+	if err != nil {
+		slog.Warn("failed to read txt cache", "err", err, "id", attachmentID.String())
+		return nil, false
+	}
+	return content, ok
 }
 
 func isPlainTextAttachment(attachment discord.Attachment) bool {

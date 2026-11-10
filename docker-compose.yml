@@ -6,9 +6,9 @@ services:
     restart: unless-stopped
     working_dir: /app
     volumes:
-      # Run this from the cloned repo directory. .env, models.json, x3.db and
-      # models/ all live there and are mounted into the container, so config and
-      # data persist across upgrades.
+      # Run this from the cloned repo directory. .env, models.json, x3.db,
+      # x3-cache.db and models/ all live there and are mounted into the
+      # container, so config and data persist across upgrades.
       - .:/app
       # Required only if you enable the sandboxed code interpreter
       # (X3_CODE_INTERPRETER_ENABLED=true). Mounting the Docker socket is a

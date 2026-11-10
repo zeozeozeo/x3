@@ -20,9 +20,10 @@ import (
 	"github.com/disgoorg/disgo/handler"
 	"github.com/disgoorg/disgo/sharding"
 
+	"github.com/zeozeozeo/x3/cache"
 	"github.com/zeozeozeo/x3/commands"
 	"github.com/zeozeozeo/x3/db"
-	"github.com/zeozeozeo/x3/imagedesc"
+	_ "github.com/zeozeozeo/x3/imagedesc"
 	"github.com/zeozeozeo/x3/logstream"
 	"github.com/zeozeozeo/x3/modeled"
 	"github.com/zeozeozeo/x3/openaiapi"
@@ -77,7 +78,19 @@ func main() {
 		}
 	}()
 
-	imagedesc.DB = db.DB
+	cacheCfg := cache.ConfigFromEnv()
+	cacheStore, cacheErr := cache.Open(cacheCfg)
+	if cacheErr != nil {
+		slog.Warn("persistent cache disabled", "err", cacheErr)
+	} else {
+		cache.Default = cacheStore
+		defer cacheStore.Close()
+		slog.Info("persistent cache opened",
+			"path", cacheCfg.Path,
+			"ttl", cacheCfg.DefaultTTL,
+			"max_bytes", cacheCfg.MaxBytes,
+		)
+	}
 
 	// Re-embed any world-memory facts whose vectors are missing: this happens
 	// after an embedding-model change (a vec0 column has a fixed width) and for
@@ -97,6 +110,11 @@ func main() {
 			slog.Warn("channel cache compaction failed", "err", err)
 		} else if n > 0 {
 			slog.Info("channel cache compaction complete", "channels", n)
+		}
+		if dropped, err := db.DropLegacyCaches(); err != nil {
+			slog.Warn("legacy cache table drop failed", "err", err)
+		} else if dropped {
+			slog.Info("legacy cache migration complete")
 		}
 	}()
 
