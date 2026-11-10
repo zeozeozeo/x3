@@ -490,6 +490,7 @@ func handleLlmInteraction2(
 	}
 	contentWithLinks := augmentContentWithLinkMetadata(content)
 	contentWithLinks = appendImageLinks(contentWithLinks, messageImageURLs(content, attachments, embeds))
+	contentWithLinks = appendAudioTranscriptionLines(ctx, contentWithLinks, attachments)
 	llmer.AddMessage(llm.RoleUser, formatMsg(contentWithLinks, username, reference), messageID)
 	if len(llmer.Messages) > 0 {
 		msg := &llmer.Messages[len(llmer.Messages)-1]

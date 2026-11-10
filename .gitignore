@@ -4,6 +4,7 @@ x3*.json
 x3*.db
 .env
 x3-txt-cache/
+x3-audio-cache/
 x3-temp/
 status/
 models/minilm/*.onnx

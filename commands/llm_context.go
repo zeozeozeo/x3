@@ -555,6 +555,11 @@ func getMessageContent(message discord.Message) string {
 				continue
 			}
 
+			if isAudioAttachment(attachment) {
+				content = appendContextLine(content, audioAttachmentNote(attachment))
+				continue
+			}
+
 			contentType := ""
 			if attachment.ContentType != nil {
 				contentType = *attachment.ContentType
@@ -850,13 +855,24 @@ func addContextMessages(
 	}
 
 	latestImageIdx := -1
+	latestMediaIdx := -1
 	for i, msg := range messages { // newest to oldest
-		if !isCodeRunResultMessage(msg) && (slices.ContainsFunc(msg.Attachments, isImageAttachment) ||
+		if isCodeRunResultMessage(msg) {
+			continue
+		}
+		if latestMediaIdx < 0 && !msg.Author.Bot &&
+			(slices.ContainsFunc(msg.Attachments, isAudioAttachment) ||
+				slices.ContainsFunc(msg.Attachments, isVideoAttachment)) {
+			latestMediaIdx = i
+		}
+		if latestImageIdx < 0 && (slices.ContainsFunc(msg.Attachments, isImageAttachment) ||
 			slices.ContainsFunc(msg.Attachments, isVideoAttachment) ||
 			len(imageURLsFromContent(msg.Content)) > 0 ||
 			len(imageURLsFromEmbeds(msg.Embeds)) > 0) {
 			latestImageIdx = i
-			break // found the newest image
+		}
+		if latestMediaIdx >= 0 && latestImageIdx >= 0 {
+			break // found both newest anchors
 		}
 	}
 
@@ -961,6 +977,10 @@ func addContextMessages(
 				reference = nil
 			}
 			content = formatMsg(content, username, reference)
+		}
+
+		if i == latestMediaIdx {
+			content = appendAudioTranscriptionLines(context.Background(), content, msg.Attachments)
 		}
 
 		if content != "" {

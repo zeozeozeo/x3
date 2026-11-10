@@ -1,8 +1,3 @@
-// Package videothumb extracts a thumbnail frame from videos so the LLM can
-// see them like images. Discord's media proxy thumbnail and Matrix
-// client-provided thumbnails are preferred (via Source.Probe / caller-side
-// handling); an ffmpeg backend (sandboxed with gVisor or a host binary) is
-// the fallback that decodes a frame locally.
 package videothumb
 
 import (
@@ -16,8 +11,13 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"os"
+	"strconv"
+	"strings"
 	"sync"
 	"time"
+
+	"github.com/zeozeozeo/x3/ffmpegbox"
 )
 
 // MaxThumbnailBytes caps the JPEG frame produced for LLM context, matching
@@ -44,20 +44,18 @@ type Source struct {
 // Enabled reports whether video thumbnail support is turned on.
 func Enabled() bool { return envBool("X3_VIDEO_THUMBNAILS", true) }
 
-// BackendAvailable reports whether an ffmpeg backend (sandbox or host binary)
-// could run, i.e. whether downloading a video for frame extraction can pay
-// off. Cheap sources (media proxy, Matrix info thumbnails) work without it.
-func BackendAvailable() bool {
-	cfg := ConfigFromEnv()
-	if cfg.SandboxEnabled {
-		return true
+func envBool(key string, fallback bool) bool {
+	value := strings.TrimSpace(os.Getenv(key))
+	if value == "" {
+		return fallback
 	}
-	return resolveFfmpegPath(cfg.FfmpegPath) != ""
+	parsed, err := strconv.ParseBool(value)
+	return err == nil && parsed
 }
 
-// MaxDownloadBytes returns the cap on video bytes downloaded for frame
-// extraction.
-func MaxDownloadBytes() int { return ConfigFromEnv().MaxDownloadBytes }
+func BackendAvailable() bool { return ffmpegbox.Available(ffmpegbox.ToolFFmpeg) }
+
+func MaxDownloadBytes() int { return ffmpegbox.MaxDownloadBytes() }
 
 // Thumbnail resolves a JPEG data URI for the video: cache hit, then Probe,
 // then an ffmpeg backend. Returns "" when no thumbnail is available.
@@ -98,7 +96,7 @@ func extract(ctx context.Context, src Source) string {
 	if !BackendAvailable() {
 		return ""
 	}
-	cfg := ConfigFromEnv()
+	cfg := ffmpegbox.ConfigFromEnv()
 
 	data := src.Data
 	if len(data) == 0 {
@@ -128,7 +126,7 @@ func extract(ctx context.Context, src Source) string {
 
 // extractFrame seeks one second in so fade-from-black intros are skipped and
 // falls back to the first frame for clips shorter than that.
-func extractFrame(ctx context.Context, cfg Config, data []byte) ([]byte, error) {
+func extractFrame(ctx context.Context, cfg ffmpegbox.Config, data []byte) ([]byte, error) {
 	for _, seek := range []string{"1", "0"} {
 		frame, err := runFFmpegImpl(ctx, cfg, data, seek)
 		if err != nil {
@@ -140,9 +138,6 @@ func extractFrame(ctx context.Context, cfg Config, data []byte) ([]byte, error) 
 	}
 	return nil, errors.New("ffmpeg produced no decodable frame")
 }
-
-// runFFmpegImpl is indirected so tests can fake the backend.
-var runFFmpegImpl = runFFmpeg
 
 func looksLikeJPEG(data []byte) bool {
 	return len(data) > 3 && len(data) <= MaxThumbnailBytes &&

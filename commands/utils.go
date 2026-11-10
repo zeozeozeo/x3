@@ -937,10 +937,15 @@ func isImageAttachment(attachment discord.Attachment) bool {
 	return attachment.ContentType != nil && strings.HasPrefix(*attachment.ContentType, "image/")
 }
 
-// isVideoAttachment checks if a message attachment is a video.
 func isVideoAttachment(attachment discord.Attachment) bool {
-	if attachment.ContentType != nil && strings.HasPrefix(*attachment.ContentType, "video/") {
-		return true
+	if attachment.ContentType != nil {
+		contentType := strings.ToLower(*attachment.ContentType)
+		if strings.HasPrefix(contentType, "audio/") {
+			return false
+		}
+		if strings.HasPrefix(contentType, "video/") {
+			return true
+		}
 	}
 	switch strings.ToLower(filepath.Ext(attachment.Filename)) {
 	case ".mp4", ".webm", ".mov", ".mkv", ".m4v":
