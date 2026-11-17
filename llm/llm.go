@@ -240,6 +240,9 @@ func applyReasoningSettings(req *openai.ChatCompletionRequest, provider, codenam
 	if provider == model.ProviderExperiential {
 		return
 	}
+	if provider == model.ProviderNumes {
+		return
+	}
 	req.ProviderOptions = map[string]any{
 		"zai": map[string]any{
 			"thinking": req.Thinking,
