@@ -13,10 +13,16 @@
           "codenames": ["deepseek-v4.1-flash"]
         },
         "inferx": {
-          "codenames": ["deepseek-v4.1-flash"]
+          "codenames": ["deepseek-v4.1-flash-1017-basic"]
+        },
+        "numes": {
+          "codenames": ["deepseek/deepseek-v4.1-flash:free"]
         },
         "opencode": {
           "codenames": ["deepseek-v4.1-flash-free"]
+        },
+        "opencode-go": {
+          "codenames": ["deepseek-v4.1-flash"]
         },
         "orcarouter": {
           "codenames": ["deepseek/deepseek-v4.1-flash-free"]
@@ -26,6 +32,47 @@
         },
         "unorouter": {
           "codenames": ["deepseek-v4.1-flash:free"]
+        }
+      }
+    },
+    {
+      "name": "DeepSeek V4.1 Flash Uncensored",
+      "command": "uncensored",
+      "vision": true,
+      "reasoning": true,
+      "providers": {
+        "numes": {
+          "codenames": ["dealignai/deepseek-v4.1-flash-uncensored-fp8:free"]
+        },
+        "refuseless": {
+          "codenames": ["deepseek-v4.1-flash-abliterated-free"]
+        }
+      }
+    },
+    {
+      "name": "GLM 5.3 Uncensored",
+      "command": "glm",
+      "reasoning": true,
+      "providers": {
+        "numes": {
+          "codenames": [
+            "dealignai/glm-5.3-uncensored-fp8:free",
+            "z-ai/glm-5.3:free"
+          ]
+        },
+        "unorouter": {
+          "codenames": ["glm-5.3:free"]
+        }
+      }
+    },
+    {
+      "name": "Kimi K3.1 Pro",
+      "command": "kimi",
+      "vision": true,
+      "reasoning": true,
+      "providers": {
+        "numes": {
+          "codenames": ["moonshotai/kimi-k3.1-pro:free"]
         }
       }
     },
@@ -60,24 +107,14 @@
         "nim": {
           "codenames": ["z-ai/glm-5.3-flash"]
         },
+        "numes": {
+          "codenames": ["z-ai/glm-5.3-flash:free"]
+        },
         "openrouter": {
           "codenames": ["glm-5.3-flash-free"]
         },
         "orcarouter": {
           "codenames": ["z-ai/glm-5.3-flash-free"]
-        }
-      }
-    },
-    {
-      "name": "GLM 5.3",
-      "command": "glm",
-      "reasoning": true,
-      "providers": {
-        "nim": {
-          "codenames": ["z-ai/glm-5.3"]
-        },
-        "unorouter": {
-          "codenames": ["glm-5.3:free"]
         }
       }
     },
@@ -158,16 +195,6 @@
       "providers": {
         "aion": {
           "codenames": ["aion-labs/aion-3.5"]
-        }
-      }
-    },
-    {
-      "name": "GLM 5.2",
-      "command": "glm52",
-      "reasoning": true,
-      "providers": {
-        "openrouter": {
-          "codenames": ["z-ai/glm-5.2:free"]
         }
       }
     },
@@ -559,13 +586,13 @@
   ],
   "default_models": [
     "DeepSeek V4.1 Flash",
+    "GLM 5.3 Uncensored",
     "MiniMax M3.1 Flash",
     "Xiaomi MiMo V2.6 Flash",
     "NVIDIA Nemotron 3.5 Super VL",
     "Step 5 Preview",
     "Aion 3.5 Mini",
     "GLM 5.3 Flash",
-    "GLM 5.3",
     "Gemma 4 26B A4B",
     "Gemini 3.6 Flash",
     "Gemini 3.7 Flash",
@@ -604,7 +631,6 @@
     "Gemma 4 26B A4B",
     "Gemma 4 31B",
     "Qwen 3.8 27B",
-    "GLM 5.3",
     "GLM 5.3 Flash",
     "GLM 4.7 Flash",
     "DeepSeek V4.1 Flash",
@@ -616,26 +642,17 @@
     "Gemini 3.8 Flash",
     "Gemini 3.7 Flash",
     "Aion 3.5",
-    "Aion 3.5 Mini"
+    "Aion 3.5 Mini",
+    "GLM 5.3 Uncensored"
   ],
-  "disabled_providers": {
-    "site_models": {
-      "DeepSeek V4.1 Flash": [
-        "deepseek",
-        "inferx",
-        "opencode",
-        "orcarouter",
-        "tokenharbor",
-        "unorouter"
-      ]
-    }
-  },
   "world_mem_embedding_model": "@cf/google/embeddinggemma-300m",
   "providers_order": [
-    "deepseek",
+    "opencode-go",
     "experiential",
+    "numes",
     "unorouter",
     "orcarouter",
+    "inferx",
     "opencode",
     "nim",
     "google",
@@ -669,7 +686,8 @@
     "mistral",
     "modelscope",
     "tokenrouter",
-    "aion"
+    "aion",
+    "refuseless"
   ],
   "provider_settings": {
     "aion": {
@@ -678,13 +696,13 @@
     "cloudflare": {
       "native_tool_calling": true
     },
-    "deepseek": {
-      "native_tool_calling": true
-    },
     "experiential": {
       "native_tool_calling": true
     },
     "google": {
+      "native_tool_calling": true
+    },
+    "inferx": {
       "native_tool_calling": true
     },
     "mimo": {
@@ -702,13 +720,22 @@
     "nim": {
       "native_tool_calling": true
     },
+    "numes": {
+      "native_tool_calling": true
+    },
     "ollama": {
       "native_tool_calling": true
     },
     "opencode": {
       "native_tool_calling": true
     },
+    "opencode-go": {
+      "native_tool_calling": true
+    },
     "orcarouter": {
+      "native_tool_calling": true
+    },
+    "refuseless": {
       "native_tool_calling": true
     },
     "tokenrouter": {
@@ -718,5 +745,5 @@
       "native_tool_calling": true
     }
   },
-  "current_version": 101
+  "current_version": 102
 }
