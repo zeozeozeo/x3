@@ -33,6 +33,6 @@ services:
       - gotenberg
 
   gotenberg:
-    image: gotenberg/gotenberg:8
+    image: gotenberg/gotenberg:9
     container_name: x3-gotenberg
     restart: unless-stopped
