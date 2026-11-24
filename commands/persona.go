@@ -9,7 +9,6 @@ import (
 	"reflect"
 	"strconv"
 	"strings"
-	"time"
 	"unicode/utf8"
 
 	"github.com/disgoorg/disgo/discord"
@@ -203,66 +202,19 @@ func enabledDisabled(v bool) string {
 func handlePersonaInfo(event *handler.CommandEvent, ephemeral bool) error {
 	cache := db.GetChannelCache(event.Channel().ID())
 	promptContext, _ := buildPromptContext(event.Client(), event.Channel().ID(), event.GuildID(), cache, "")
-
-	meta, _ := persona.GetMetaByName(cache.PersonaMeta.Name)
-
-	settings := cache.PersonaMeta.Settings.Fixup()
-	remappedSettings := settings
-	remappedSettings.Remap()
-
-	builder := discord.NewEmbed().
-		WithTitle("Persona").
-		WithColor(0x0085ff).
-		WithDescription("Current persona settings in channel. Use `/stats` to view usage stats.").
-		WithFooter("x3", x3Icon).
-		WithTimestamp(time.Now()).
-		AddField("Name", cache.PersonaMeta.Name, true).
-		AddField("Description", meta.Desc, true).
-		AddField("Temperature", fmt.Sprintf("%s (remapped to %s)", ftoa(settings.Temperature), ftoa(remappedSettings.Temperature)), true).
-		AddField("Top P", fmt.Sprintf("%s (remapped to %s)", ftoa(settings.TopP), ftoa(remappedSettings.TopP)), true).
-		AddField("Flags", fmt.Sprintf("images: %s, reasoning: %s, minilm: %s, tools: %s", enabledDisabled(cache.PersonaMeta.EnableImages), enabledDisabled(cache.PersonaMeta.Settings.Reasoning), enabledDisabled(cache.PersonaMeta.EnableMiniLMContinuations), enabledDisabled(cache.PersonaMeta.ToolsEnabled())), true).
-		AddField("Frequency Penalty", ftoa(settings.FrequencyPenalty), true).
-		AddField("Context length", fmt.Sprintf("%d", cache.ContextLength), true)
-	if cache.Llmer != nil {
-		builder.AddField("Message cache", fmt.Sprintf("%d messages", cache.Llmer.NumMessages()), true)
-	}
-	if cache.PersonaMeta.ChatPreset != nil {
-		builder.AddField("SillyTavern preset", cache.PersonaMeta.ChatPreset.DisplayName(), true)
-	}
-	builder.AddField("HTML rendering", enabledDisabled(cache.PersonaMeta.RenderHTML), true).
-		AddField("Jailbreak", cache.PersonaMeta.JailbreakMode(), true)
-
-	models := cache.PersonaMeta.Models
-	if len(models) > 0 {
-		if len(models) == 1 {
-			builder.AddField("Model", models[0], true)
-		} else {
-			builder.AddField("Models", strings.Join(models, ", "), true)
-		}
-	}
-
-	if len(cache.Memories) > 0 {
-		builder.AddField("Memories", ellipsisTrim(strings.Join(cache.Memories, "\n"), 1024), false)
-	}
-	if summariesEnabled() && len(cache.Summaries) > 0 {
-		builder.AddField("Summary", ellipsisTrim(cache.Summaries[0].Str, 1024), false)
-	}
+	builder, systemPrompt := personaInfoEmbed(cache, "user", discordBotName(event.Client()), event.GuildID() == nil, promptContext, "Current persona settings in channel. Use `/stats` to view usage stats.")
 
 	var files []*discord.File
-	systemPrompt := persona.GetPersonaByMetaWithBotName(cache.PersonaMeta, "user", discordBotName(event.Client()), event.GuildID() == nil, promptContext).System
-	if systemPrompt != "" {
-		builder.AddField("System prompt", ellipsisTrim(systemPrompt, 1024), false)
-		if utf8.RuneCountInString(systemPrompt) > 1024 {
-			files = append(files, &discord.File{
-				Name:   "system-prompt-full.txt",
-				Reader: strings.NewReader(systemPrompt),
-			})
-		}
+	if utf8.RuneCountInString(systemPrompt) > 1024 {
+		files = append(files, &discord.File{
+			Name:   "system-prompt-full.txt",
+			Reader: strings.NewReader(systemPrompt),
+		})
 	}
 
 	return event.CreateMessage(
 		discord.NewMessageCreate().
-			AddEmbeds(builder).
+			AddEmbeds(builder.toDiscord()).
 			WithEphemeral(ephemeral).
 			AddFiles(files...),
 	)
@@ -551,7 +503,6 @@ func HandlePersona(event *handler.CommandEvent) error {
 		return sendInteractionError(event, err.Error(), true)
 	}
 
-	var sb strings.Builder
 	remappedSettings := cache.PersonaMeta.Settings
 	remappedSettings.Remap()
 	if cache.PersonaMeta.Name != prevMeta.Name && cache.PersonaMeta.Name != "" {
@@ -676,45 +627,26 @@ func HandlePersona(event *handler.CommandEvent) error {
 		}
 	}
 
-	if len(didWhat) > 0 {
-		sb.WriteString("Updated persona for this channel")
-		sb.WriteString(" (")
-		sb.WriteString(strings.Join(didWhat, ", "))
-		sb.WriteString(")")
-	} else {
-		sb.WriteString("No changes made")
-	}
-
-	builder := discord.NewEmbed().
-		WithColor(0x0085ff).
-		WithTitle("Updated persona").
-		WithFooter("x3", x3Icon).
-		WithTimestamp(time.Now()).
-		WithDescription(sb.String())
+	builder := personaUpdateEmbed(didWhat, creatorNotes)
 
 	files := []*discord.File{}
-	if creatorNotes != "" {
-		builder.AddField("Creator notes", ellipsisTrim(creatorNotes, 1024), false)
-		// if creator notes are > 1024 chars, attach them as a file
-		if utf8.RuneCountInString(creatorNotes) > 1024 {
-			files = append(files, &discord.File{
-				Reader: strings.NewReader(creatorNotes),
-				Name:   "creator-notes-full.txt",
-			})
-		}
+	if creatorNotes != "" && utf8.RuneCountInString(creatorNotes) > 1024 {
+		files = append(files, &discord.File{
+			Reader: strings.NewReader(creatorNotes),
+			Name:   "creator-notes-full.txt",
+		})
 	}
-
 	if dataCard == "" && !hasDataCardFile && dataPreset == "" && !hasDataPresetFile {
 		return event.CreateMessage(
 			discord.NewMessageCreate().
-				AddEmbeds(builder).
+				AddEmbeds(builder.toDiscord()).
 				WithEphemeral(ephemeral).
 				AddFiles(files...),
 		)
 	} else {
 		_, err := event.UpdateInteractionResponse(
 			discord.NewMessageUpdate().
-				AddEmbeds(builder).
+				AddEmbeds(builder.toDiscord()).
 				AddFiles(files...),
 		)
 		return err

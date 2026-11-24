@@ -1,4 +1,4 @@
-﻿package commands
+package commands
 
 import (
 	"fmt"
@@ -68,9 +68,6 @@ func HandleStats(event *handler.CommandEvent) error {
 	}
 	cache := db.GetChannelCache(event.Channel().ID())
 
-	prompt, response, total := formatUsageStrings(cache.Usage)
-	promptLast, responseLast, totalLast := formatUsageStrings(cache.LastUsage)
-	promptTotal, responseTotal, totalTotal := formatUsageStrings(stats.Usage)
 	upSince := fmt.Sprintf("since <t:%d:R>", StartTime.Unix())
 	lastProcessed := "never"
 	if !stats.LastMessageTime.IsZero() {
@@ -79,27 +76,7 @@ func HandleStats(event *handler.CommandEvent) error {
 
 	return event.CreateMessage(
 		discord.NewMessageCreate().
-			AddEmbeds(
-				discord.NewEmbed().
-					WithTitle("Stats").
-					WithColor(0x0085ff).
-					WithDescription("Per-channel and global bot stats").
-					WithFooter("x3", x3Icon).
-					WithTimestamp(time.Now()).
-					AddField("Prompt tokens (channel)", prompt, true).
-					AddField("Response tokens (channel)", response, true).
-					AddField("Total tokens (channel)", total, true).
-					AddField("Prompt tokens (last)", promptLast, true).
-					AddField("Response tokens (last)", responseLast, true).
-					AddField("Total tokens (last)", totalLast, true).
-					AddField("Prompt tokens (global)", promptTotal, true).
-					AddField("Response tokens (global)", responseTotal, true).
-					AddField("Total tokens (global)", totalTotal, true).
-					AddField("Bot uptime", upSince, true).
-					AddField("Messages processed", humanize.Comma(int64(stats.MessageCount)), true).
-					AddField("Last message processed", lastProcessed, true).
-					AddField("Images generated", humanize.Comma(int64(stats.ImagesGenerated)), true),
-			).
+			AddEmbeds(statsEmbed(cache, stats, upSince, lastProcessed).toDiscord()).
 			WithEphemeral(ephemeral),
 	)
 }

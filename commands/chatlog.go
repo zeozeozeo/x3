@@ -23,6 +23,7 @@ import (
 
 const chatArchiveVersion = 1
 const chatArchiveMaxSize = 2 * 1024 * 1024
+const chatArchivePageSize = 5
 
 var errNoChatInteractions = errors.New("there were no interactions in this channel")
 var chatArchiveFilenameRegexp = regexp.MustCompile(`(?i)^x3-chatlog-\d{4}-\d{1,2}-\d{1,2}\.json$`)
@@ -207,7 +208,7 @@ func handleChatArchiveImport(event *handler.CommandEvent) error {
 		UserID:   event.User().ID,
 		Archive:  archive,
 		Page:     0,
-		PageSize: 5,
+		PageSize: chatArchivePageSize,
 	})
 	return nil
 }
@@ -531,50 +532,11 @@ func (a chatArchive) toLLMMessages() []llm.Message {
 }
 
 func chatArchiveBrowserMessage(archive chatArchive, page, pageSize int) discord.MessageUpdate {
-	total := len(archive.Messages)
-	maxPage := max((total+pageSize-1)/pageSize-1, 0)
-	if page < 0 {
-		page = 0
-	}
-	if page > maxPage {
-		page = maxPage
-	}
-	start := page * pageSize
-	end := min(start+pageSize, total)
-
-	var b strings.Builder
-	if total == 0 {
-		b.WriteString("Archive contains no messages.")
-	} else {
-		for i := start; i < end; i++ {
-			msg := archive.Messages[i]
-			author := msg.Author
-			if author == "" {
-				author = msg.Role
-			}
-			fmt.Fprintf(&b, "**%d. %s**", i+1, author)
-			if !msg.Timestamp.IsZero() {
-				fmt.Fprintf(&b, " <t:%d:f>", msg.Timestamp.Unix())
-			}
-			b.WriteString("\n")
-			b.WriteString(ellipsisTrim(stripSplitWarning(msg.Content), 450))
-			if len(msg.Images) > 0 {
-				fmt.Fprintf(&b, "\n-# %s", pluralize(len(msg.Images), "image"))
-			}
-			if i < end-1 {
-				b.WriteString("\n\n")
-			}
-		}
-	}
-
-	embed := discord.NewEmbed().
-		WithColor(0x0085ff).
-		WithTitle("Imported chat archive").
-		WithDescription(ellipsisTrim(b.String(), 4096)).
-		WithFooter(fmt.Sprintf("Page %d/%d", page+1, maxPage+1), x3Icon)
+	page, maxPage := commandEmbedPage(len(archive.Messages), page, pageSize)
+	embed := chatArchiveEmbed(archive, page, pageSize, discordTimestamp)
 
 	return discord.NewMessageUpdate().
-		AddEmbeds(embed).
+		AddEmbeds(embed.toDiscord()).
 		WithComponents(discord.NewActionRow(
 			discord.ButtonComponent{
 				Style:    discord.ButtonStyleSecondary,

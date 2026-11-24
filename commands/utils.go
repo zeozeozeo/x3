@@ -314,14 +314,7 @@ func sendInteractionError(event *handler.CommandEvent, msg string, ephemeral boo
 				RepliedUser: false,
 			}).
 			WithEphemeral(ephemeral).
-			AddEmbeds(
-				discord.NewEmbed().
-					WithColor(0xf54242).
-					WithTitle("❌ Error").
-					WithFooter("x3", x3ErrorIcon).
-					WithTimestamp(time.Now()).
-					WithDescription(toTitle(msg)),
-			),
+			AddEmbeds(commandErrorEmbed(msg).toDiscord()),
 	)
 }
 
@@ -332,14 +325,7 @@ func sendInteractionErrorComponent(event *handler.ComponentEvent, msg string, ep
 				RepliedUser: false,
 			}).
 			WithEphemeral(ephemeral).
-			AddEmbeds(
-				discord.NewEmbed().
-					WithColor(0xf54242).
-					WithTitle("❌ Error").
-					WithFooter("x3", x3ErrorIcon).
-					WithTimestamp(time.Now()).
-					WithDescription(toTitle(msg)),
-			),
+			AddEmbeds(commandErrorEmbed(msg).toDiscord()),
 	)
 }
 
@@ -350,13 +336,7 @@ func sendInteractionOk(event *handler.CommandEvent, title, msg string, ephemeral
 				RepliedUser: false,
 			}).
 			WithEphemeral(ephemeral).
-			AddEmbeds(
-				discord.NewEmbed().
-					WithColor(0x0085ff).
-					WithTitle(title).
-					WithFooter("x3", x3Icon).
-					WithDescription(ellipsisTrim(msg, 1024)),
-			),
+			AddEmbeds(commandOKEmbed(title, msg).toDiscord()),
 	)
 }
 
@@ -364,48 +344,31 @@ func sendInteractionOk(event *handler.CommandEvent, title, msg string, ephemeral
 func updateInteractionError(event *handler.CommandEvent, msg string) error {
 	_, err := event.UpdateInteractionResponse(
 		discord.NewMessageUpdate().
-			AddEmbeds(
-				discord.NewEmbed().
-					WithColor(0xf54242).
-					WithTitle("❌ Error").
-					WithFooter("x3", x3ErrorIcon).
-					WithTimestamp(time.Now()).
-					WithDescription(toTitle(msg)),
-			),
+			AddEmbeds(commandErrorEmbed(msg).toDiscord()),
 	)
 	return err
 }
 
 func sendPrettyEmbed(client *bot.Client, channelID snowflake.ID, title, text string) error {
+	embed := newCommandEmbed(title, ellipsisTrim(text, 1024))
+	embed.Color = embedColorQuote
 	_, err := client.Rest.CreateMessage(
 		channelID,
 		discord.NewMessageCreate().
-			AddEmbeds(
-				discord.NewEmbed().
-					WithColor(0xFFD700).
-					WithTitle(title).
-					WithDescription(ellipsisTrim(text, 1024)).
-					WithFooter("x3", x3Icon).
-					WithTimestamp(time.Now()),
-			),
+			AddEmbeds(embed.toDiscord()),
 	)
 	return err
 }
 
 func sendPrettyEmbedReply(client *bot.Client, channelID snowflake.ID, replyMessageID snowflake.ID, title, text string) error {
+	embed := newCommandEmbed(title, ellipsisTrim(text, 1024))
+	embed.Color = embedColorQuote
 	_, err := client.Rest.CreateMessage(
 		channelID,
 		discord.NewMessageCreate().
 			WithMessageReferenceByID(replyMessageID).
 			WithAllowedMentions(&discord.AllowedMentions{RepliedUser: false}).
-			AddEmbeds(
-				discord.NewEmbed().
-					WithColor(0xFFD700).
-					WithTitle(title).
-					WithDescription(ellipsisTrim(text, 1024)).
-					WithFooter("x3", x3Icon).
-					WithTimestamp(time.Now()),
-			),
+			AddEmbeds(embed.toDiscord()),
 	)
 	return err
 }
@@ -419,14 +382,7 @@ func sendPrettyError(client *bot.Client, msg string, channelID, messageID snowfl
 			WithAllowedMentions(&discord.AllowedMentions{
 				RepliedUser: false,
 			}).
-			AddEmbeds(
-				discord.NewEmbed().
-					WithColor(0xf54242).
-					WithTitle("❌ Error").
-					WithFooter("x3", x3ErrorIcon).
-					WithTimestamp(time.Now()).
-					WithDescription(toTitle(msg)),
-			),
+			AddEmbeds(commandErrorEmbed(msg).toDiscord()),
 	)
 	return err
 }

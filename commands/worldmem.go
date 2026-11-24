@@ -316,37 +316,11 @@ type worldmemBrowserSession struct {
 var worldmemBrowserSessions sync.Map // string(message id) -> *worldmemBrowserSession
 
 func worldmemBrowserMessage(entries []db.WorldEntry, page, pageSize int) discord.MessageUpdate {
-	total := len(entries)
-	maxPage := max((total+pageSize-1)/pageSize-1, 0)
-	if page < 0 {
-		page = 0
-	}
-	if page > maxPage {
-		page = maxPage
-	}
-	start := page * pageSize
-	end := min(start+pageSize, total)
-
-	var b strings.Builder
-	if total == 0 {
-		b.WriteString("No world facts stored for this channel yet.")
-	} else {
-		for i := start; i < end; i++ {
-			fmt.Fprintf(&b, "**%d.** %s", i+1, ellipsisTrim(entries[i].Text, 450))
-			if i < end-1 {
-				b.WriteString("\n\n")
-			}
-		}
-	}
-
-	embed := discord.NewEmbed().
-		WithColor(0x0085ff).
-		WithTitle("World memory").
-		WithDescription(ellipsisTrim(b.String(), 4096)).
-		WithFooter(fmt.Sprintf("Page %d/%d • %s", page+1, maxPage+1, pluralize(total, "fact")), x3Icon)
+	page, maxPage := commandEmbedPage(len(entries), page, pageSize)
+	embed := worldmemEmbed(entries, page, pageSize)
 
 	return discord.NewMessageUpdate().
-		AddEmbeds(embed).
+		AddEmbeds(embed.toDiscord()).
 		WithComponents(discord.NewActionRow(
 			discord.ButtonComponent{
 				Style:    discord.ButtonStyleSecondary,

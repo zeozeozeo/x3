@@ -4,11 +4,13 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/disgoorg/disgo/discord"
+	fluxer "github.com/invaliduser231/fluxer-go"
 	"github.com/zeozeozeo/x3/db"
 	"github.com/zeozeozeo/x3/llm"
 	"github.com/zeozeozeo/x3/persona"
@@ -256,7 +258,15 @@ func (b *FluxerBot) handlePersonaCommand(ctx context.Context, msg *fluxerMessage
 	key := b.channelKey(msg.ChannelID)
 	cache := db.GetChannelCacheByKey(key)
 	if strings.TrimSpace(rest) == "" {
-		return b.sendText(ctx, msg.ChannelID, msg.MessageID, personaInfoText(cache, b.userName(msg), b.selfDisplayName(), msg.IsDM))
+		promptContext := persona.PromptContext{
+			Memories: append([]string(nil), cache.Memories...),
+			Context:  append([]string(nil), cache.Context...),
+		}
+		if summariesEnabled() {
+			promptContext.Summaries = append([]persona.Summary(nil), cache.Summaries...)
+		}
+		card, _ := personaInfoEmbed(cache, b.userName(msg), b.selfDisplayName(), msg.IsDM, promptContext, "Current persona settings in channel.")
+		return b.sendCommandCard(ctx, msg.ChannelID, msg.MessageID, "", card)
 	}
 	parsed := parseTextCommandArgs(rest)
 	actionToken := parsed.At(0)
@@ -311,7 +321,7 @@ func (b *FluxerBot) handlePersonaCommand(ctx context.Context, msg *fluxerMessage
 		if err := userCache.WriteKey(b.userKey(msg.SenderID)); err != nil {
 			return err
 		}
-		return b.sendText(ctx, msg.ChannelID, msg.MessageID, "Updated username.")
+		return b.sendCommandOK(ctx, msg.ChannelID, msg.MessageID, "Names updated", "Updated username.")
 	case "botname":
 		if strings.EqualFold(value, "reset") {
 			cache.PersonaMeta.BotName = ""
@@ -524,10 +534,7 @@ func (b *FluxerBot) writePersonaUpdate(ctx context.Context, msg *fluxerMessage, 
 	if cache.PersonaMeta.JailbreakMode() != prev.JailbreakMode() {
 		changes = append(changes, fmt.Sprintf("jailbreak=%s", cache.PersonaMeta.JailbreakMode()))
 	}
-	if len(changes) == 0 {
-		changes = append(changes, "settings updated")
-	}
-	return b.sendText(ctx, msg.ChannelID, msg.MessageID, "Updated persona: "+strings.Join(changes, ", "))
+	return b.sendCommandCard(ctx, msg.ChannelID, msg.MessageID, "", personaUpdateEmbed(changes, ""))
 }
 
 func (b *FluxerBot) handleContextCommand(ctx context.Context, msg *fluxerMessage, rest string, isDM bool) error {
@@ -544,29 +551,36 @@ func (b *FluxerBot) handleContextCommand(ctx context.Context, msg *fluxerMessage
 	valueRest := parsed.RestAfter(0)
 	key := b.channelKey(msg.ChannelID)
 	cache := db.GetChannelCacheByKey(key)
+	var title, description string
 	switch action {
 	case "add":
 		if strings.TrimSpace(valueRest) == "" {
 			return b.sendText(ctx, msg.ChannelID, msg.MessageID, textMissingValueDiagnostic(rest, actionToken, "context", action, b.commandUsage("context", isDM)+" add <text>"))
 		}
 		cache.Context = append(cache.Context, valueRest)
+		title = "Context added"
+		description = fmt.Sprintf("Added to context: `%s`", valueRest)
 	case "clear":
 		if len(parsed.Args) > 1 {
 			return b.sendText(ctx, msg.ChannelID, msg.MessageID, textUnexpectedTokenDiagnostic(rest, valueToken, "context clear"))
 		}
+		prevLen := len(cache.Context)
 		cache.Context = nil
+		title = "Context cleared"
+		description = fmt.Sprintf("Cleared %s from context.", pluralize(prevLen, "item"))
 	case "list":
 		if len(parsed.Args) > 1 {
 			return b.sendText(ctx, msg.ChannelID, msg.MessageID, textUnexpectedTokenDiagnostic(rest, valueToken, "context list"))
 		}
 		if len(cache.Context) == 0 {
-			return b.sendText(ctx, msg.ChannelID, msg.MessageID, "No context set for this channel.")
+			return b.sendCommandOK(ctx, msg.ChannelID, msg.MessageID, "Chat context", "No context set for this channel.")
 		}
 		var sb strings.Builder
+		sb.WriteString("**Current Context:**\n")
 		for i, item := range cache.Context {
 			fmt.Fprintf(&sb, "%d. %s\n", i+1, item)
 		}
-		return b.sendText(ctx, msg.ChannelID, msg.MessageID, strings.TrimSpace(sb.String()))
+		return b.sendCommandOK(ctx, msg.ChannelID, msg.MessageID, "Chat context", strings.TrimSpace(sb.String()))
 	case "delete":
 		if value == "" {
 			return b.sendText(ctx, msg.ChannelID, msg.MessageID, textMissingValueDiagnostic(rest, actionToken, "context", action, b.commandUsage("context", isDM)+" delete <n>"))
@@ -578,7 +592,10 @@ func (b *FluxerBot) handleContextCommand(ctx context.Context, msg *fluxerMessage
 		if n < 1 || n > len(cache.Context) {
 			return b.sendText(ctx, msg.ChannelID, msg.MessageID, textCommandDiagnostic(rest, valueToken, "Context index out of range.", fmt.Sprintf("Expected an index from 1 to %d.", len(cache.Context))))
 		}
+		removed := cache.Context[n-1]
 		cache.Context = append(cache.Context[:n-1], cache.Context[n:]...)
+		title = "Context item removed"
+		description = fmt.Sprintf("Removed item #%d: `%s`", n, removed)
 	case "get":
 		if value == "" {
 			return b.sendText(ctx, msg.ChannelID, msg.MessageID, textMissingValueDiagnostic(rest, actionToken, "context", action, b.commandUsage("context", isDM)+" get <n>"))
@@ -590,7 +607,7 @@ func (b *FluxerBot) handleContextCommand(ctx context.Context, msg *fluxerMessage
 		if n < 1 || n > len(cache.Context) {
 			return b.sendText(ctx, msg.ChannelID, msg.MessageID, textCommandDiagnostic(rest, valueToken, "Context index out of range.", fmt.Sprintf("Expected an index from 1 to %d.", len(cache.Context))))
 		}
-		return b.sendText(ctx, msg.ChannelID, msg.MessageID, cache.Context[n-1])
+		return b.sendCommandOK(ctx, msg.ChannelID, msg.MessageID, fmt.Sprintf("Context item #%d", n), cache.Context[n-1])
 	case "edit":
 		if value == "" {
 			return b.sendText(ctx, msg.ChannelID, msg.MessageID, textMissingValueDiagnostic(rest, actionToken, "context", action, b.commandUsage("context", isDM)+" edit <n> <new text>"))
@@ -606,14 +623,17 @@ func (b *FluxerBot) handleContextCommand(ctx context.Context, msg *fluxerMessage
 		if strings.TrimSpace(newText) == "" {
 			return b.sendText(ctx, msg.ChannelID, msg.MessageID, textCommandDiagnostic(rest, valueToken, "Missing replacement text for `context edit`.", "Expected: `"+b.commandUsage("context", isDM)+" edit <n> <new text>`"))
 		}
+		oldText := cache.Context[n-1]
 		cache.Context[n-1] = strings.TrimSpace(newText)
+		title = "Context item edited"
+		description = fmt.Sprintf("Updated item #%d:\nOld: `%s`\nNew: `%s`", n, oldText, cache.Context[n-1])
 	default:
 		return b.sendText(ctx, msg.ChannelID, msg.MessageID, textCommandDiagnostic(rest, actionToken, "Unknown context action `"+actionToken.Text+"`.", "Valid actions: add, list, clear, delete, get, edit.")+"\n\n"+b.contextHelpText(isDM))
 	}
 	if err := cache.WriteKey(key); err != nil {
 		return err
 	}
-	return b.sendText(ctx, msg.ChannelID, msg.MessageID, "Context updated.")
+	return b.sendCommandOK(ctx, msg.ChannelID, msg.MessageID, title, description)
 }
 
 func (b *FluxerBot) handleLobotomyCommand(ctx context.Context, msg *fluxerMessage, rest string) error {
@@ -680,18 +700,12 @@ func (b *FluxerBot) handleStatsCommand(ctx context.Context, msg *fluxerMessage) 
 		return err
 	}
 	cache := db.GetChannelCacheByKey(b.channelKey(msg.ChannelID))
-	prompt, response, total := formatUsageStrings(cache.Usage)
-	promptLast, responseLast, totalLast := formatUsageStrings(cache.LastUsage)
-	promptTotal, responseTotal, totalTotal := formatUsageStrings(stats.Usage)
-	text := fmt.Sprintf("Stats\nChannel tokens: prompt %s, response %s, total %s\nLast response: prompt %s, response %s, total %s\nGlobal tokens: prompt %s, response %s, total %s\nUptime: %s\nMessages processed: %d\nImages generated: %d",
-		prompt, response, total,
-		promptLast, responseLast, totalLast,
-		promptTotal, responseTotal, totalTotal,
-		time.Since(StartTime).Round(time.Second),
-		stats.MessageCount,
-		stats.ImagesGenerated,
-	)
-	return b.sendText(ctx, msg.ChannelID, msg.MessageID, text)
+	uptime := fmt.Sprintf("since %s", time.Since(StartTime).Round(time.Second))
+	lastProcessed := "never"
+	if !stats.LastMessageTime.IsZero() {
+		lastProcessed = fmt.Sprintf("%s ago", time.Since(stats.LastMessageTime).Round(time.Second))
+	}
+	return b.sendCommandCard(ctx, msg.ChannelID, msg.MessageID, "", statsEmbed(cache, stats, uptime, lastProcessed))
 }
 
 func (b *FluxerBot) handleBlacklistCommand(ctx context.Context, msg *fluxerMessage, rest string, image bool) error {
@@ -756,7 +770,7 @@ func (b *FluxerBot) handleChatlogCommand(ctx context.Context, msg *fluxerMessage
 		if err != nil {
 			return err
 		}
-		_, err = b.sendCommandText(ctx, msg.ChannelID, msg.MessageID, "Exported chatlog.", []fluxerOutFile{fluxerChatArchiveFile(data, archive.ExportedAt)})
+		_, err = b.sendCommandText(ctx, msg.ChannelID, msg.MessageID, fmt.Sprintf("Exported %s.", pluralize(len(archive.Messages), "message")), []fluxerOutFile{fluxerChatArchiveFile(data, archive.ExportedAt)})
 		return err
 	case "import":
 		return b.sendText(ctx, msg.ChannelID, msg.MessageID, "Fluxer imports chatlog archives automatically. Upload an `x3-chatlog-<year>-<month>-<day>.json` file in the channel.")
@@ -785,7 +799,7 @@ func (b *FluxerBot) handleWorldmemCommand(ctx context.Context, msg *fluxerMessag
 		if err := cache.WriteKey(key); err != nil {
 			return err
 		}
-		return b.sendText(ctx, msg.ChannelID, msg.MessageID, "World memory on: world-bible retrieval is now enabled in this channel.")
+		return b.sendCommandOK(ctx, msg.ChannelID, msg.MessageID, "World memory on", "World-bible retrieval is now enabled in this channel.")
 	case "off":
 		if len(parsed.Args) > 1 {
 			return b.sendText(ctx, msg.ChannelID, msg.MessageID, textUnexpectedTokenDiagnostic(rest, parsed.At(1), "worldmem off"))
@@ -794,7 +808,7 @@ func (b *FluxerBot) handleWorldmemCommand(ctx context.Context, msg *fluxerMessag
 		if err := cache.WriteKey(key); err != nil {
 			return err
 		}
-		return b.sendText(ctx, msg.ChannelID, msg.MessageID, "World memory off: retrieval disabled. Stored facts are kept and new facts are still recorded.")
+		return b.sendCommandOK(ctx, msg.ChannelID, msg.MessageID, "World memory off", "World-bible retrieval is disabled. Stored facts are kept and new facts are still recorded.")
 	case "clear":
 		if len(parsed.Args) > 1 {
 			return b.sendText(ctx, msg.ChannelID, msg.MessageID, textUnexpectedTokenDiagnostic(rest, parsed.At(1), "worldmem clear"))
@@ -803,7 +817,7 @@ func (b *FluxerBot) handleWorldmemCommand(ctx context.Context, msg *fluxerMessag
 		if err != nil {
 			return err
 		}
-		return b.sendText(ctx, msg.ChannelID, msg.MessageID, fmt.Sprintf("Deleted %s from this channel's world memory.", pluralize(n, "fact")))
+		return b.sendCommandOK(ctx, msg.ChannelID, msg.MessageID, "World memory cleared", fmt.Sprintf("Deleted %s from this channel's world memory.", pluralize(n, "fact")))
 	case "export":
 		if len(parsed.Args) > 1 {
 			return b.sendText(ctx, msg.ChannelID, msg.MessageID, textUnexpectedTokenDiagnostic(rest, parsed.At(1), "worldmem export"))
@@ -830,22 +844,11 @@ func (b *FluxerBot) handleWorldmemCommand(ctx context.Context, msg *fluxerMessag
 		if err != nil {
 			return err
 		}
-		if len(entries) == 0 {
-			return b.sendText(ctx, msg.ChannelID, msg.MessageID, "No world facts stored for this channel yet.")
+		content := ""
+		if len(entries) > worldBrowserPageSize {
+			content = fmt.Sprintf("…and %d more.", len(entries)-worldBrowserPageSize)
 		}
-		var sb strings.Builder
-		sb.WriteString(fmt.Sprintf("World memory (%s):\n", pluralize(len(entries), "fact")))
-		shown := entries
-		if len(shown) > 10 {
-			shown = shown[:10]
-		}
-		for i, entry := range shown {
-			fmt.Fprintf(&sb, "%d. %s\n", i+1, ellipsisTrim(entry.Text, 300))
-		}
-		if len(entries) > len(shown) {
-			fmt.Fprintf(&sb, "…and %d more.", len(entries)-len(shown))
-		}
-		return b.sendText(ctx, msg.ChannelID, msg.MessageID, strings.TrimSpace(sb.String()))
+		return b.sendCommandCard(ctx, msg.ChannelID, msg.MessageID, content, worldmemEmbed(entries, 0, worldBrowserPageSize))
 	case "import":
 		if len(parsed.Args) > 1 {
 			return b.sendText(ctx, msg.ChannelID, msg.MessageID, textUnexpectedTokenDiagnostic(rest, parsed.At(1), "worldmem import"))
@@ -879,7 +882,12 @@ func (b *FluxerBot) tryAutoImportWorldmem(ctx context.Context, msg *fluxerMessag
 		if err != nil {
 			return true, b.sendText(ctx, msg.ChannelID, msg.MessageID, "World memory import failed: "+err.Error())
 		}
-		return true, b.sendText(ctx, msg.ChannelID, msg.MessageID, fmt.Sprintf("Imported %s into this channel's world memory.", pluralize(imported, "fact")))
+		stored, err := db.GetWorldEntries(key)
+		if err != nil {
+			return true, err
+		}
+		content := fmt.Sprintf("Imported %s into this channel's world memory.", pluralize(imported, "fact"))
+		return true, b.sendCommandCard(ctx, msg.ChannelID, msg.MessageID, content, worldmemEmbed(stored, 0, worldBrowserPageSize))
 	}
 
 	return false, nil
@@ -912,7 +920,8 @@ func (b *FluxerBot) tryAutoImportChatArchive(ctx context.Context, msg *fluxerMes
 		if err := cache.WriteKey(key); err != nil {
 			return true, err
 		}
-		return true, b.sendText(ctx, msg.ChannelID, msg.MessageID, fmt.Sprintf("Imported %s into cached context.", pluralize(len(importedMessages), "message")))
+		content := fmt.Sprintf("Imported %s into cached context.", pluralize(len(importedMessages), "message"))
+		return true, b.sendCommandCard(ctx, msg.ChannelID, msg.MessageID, content, chatArchiveEmbed(archive, 0, chatArchivePageSize, plainTimestamp))
 	}
 
 	return false, nil
@@ -1028,4 +1037,37 @@ func (b *FluxerBot) handleSiteCommand(ctx context.Context, msg *fluxerMessage, r
 		_ = siteManager.AttachDiscordMessage(result.SiteID, sentID)
 	}
 	return nil
+}
+
+// sendCommandEmbed sends an embed reply. content, when non-empty, is shown
+// above the embed. The message carries the command-result marker so history
+// backfill skips it.
+func (b *FluxerBot) sendCommandEmbed(ctx context.Context, channelID, replyToID, content string, embed *fluxer.Embed) error {
+	send := fluxer.MessageSend{
+		Content:         fluxerCommandResultMarker + content,
+		Embeds:          []fluxer.Embed{*embed},
+		AllowedMentions: suppressFluxerMentions(),
+	}
+	if replyToID != "" {
+		send.MessageReference = &fluxer.MessageReference{
+			MessageID: replyToID,
+			ChannelID: channelID,
+			Type:      fluxer.ReferenceDefault,
+		}
+	}
+	if _, err := b.client.SendMessage(ctx, channelID, send); err != nil {
+		slog.Warn("fluxer send failed", "err", err, "channel_id", channelID)
+		return err
+	}
+	return nil
+}
+
+// sendCommandCard renders a shared command card as a Fluxer embed.
+func (b *FluxerBot) sendCommandCard(ctx context.Context, channelID, replyToID, content string, card *commandEmbed) error {
+	return b.sendCommandEmbed(ctx, channelID, replyToID, content, card.toFluxer())
+}
+
+// sendCommandOK sends the success card used by command results.
+func (b *FluxerBot) sendCommandOK(ctx context.Context, channelID, replyToID, title, message string) error {
+	return b.sendCommandCard(ctx, channelID, replyToID, "", commandOKEmbed(title, message))
 }
