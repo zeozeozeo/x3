@@ -1264,10 +1264,17 @@ func chunkFluxerFiles(files []fluxerOutFile, size int) [][]fluxerOutFile {
 	return append(groups, files)
 }
 
+// suppressFluxerMentions returns an allowed-mentions object that disables all
+// mention parsing, so replies never ping users. Parse must be a non-nil empty
+// slice: fluxer-go serializes a nil slice as null, which Fluxer rejects.
+func suppressFluxerMentions() *fluxer.AllowedMentions {
+	return &fluxer.AllowedMentions{Parse: []string{}}
+}
+
 func (b *FluxerBot) sendFluxerMessage(ctx context.Context, channelID, replyToID, content string, files []fluxerOutFile) (*fluxer.Message, error) {
 	send := fluxer.MessageSend{
 		Content:         content,
-		AllowedMentions: &fluxer.AllowedMentions{},
+		AllowedMentions: suppressFluxerMentions(),
 	}
 	if replyToID != "" {
 		send.MessageReference = &fluxer.MessageReference{
@@ -1350,7 +1357,7 @@ func (b *FluxerBot) editResponse(ctx context.Context, channelID, targetID, text 
 	}
 	edit := fluxer.MessageEdit{
 		Content:         &content,
-		AllowedMentions: &fluxer.AllowedMentions{},
+		AllowedMentions: suppressFluxerMentions(),
 	}
 	if _, err := b.client.EditMessageUploads(ctx, channelID, targetID, edit, uploads); err != nil {
 		return "", err
