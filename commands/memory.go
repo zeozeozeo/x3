@@ -27,6 +27,16 @@ func extractMemoryTags(response string) (string, []string) {
 	return response, memories
 }
 
+// extractThinkingForDisplay splits reasoning text from a model response. When
+// the response has no separate answer, it is returned unchanged.
+func extractThinkingForDisplay(response string) (thinking, display string) {
+	thinking, answer := llm.ExtractThinking(response)
+	if thinking != "" && answer != "" {
+		return thinking, answer
+	}
+	return thinking, response
+}
+
 func setLatestAssistantMessageContent(llmer *llm.Llmer, content string) {
 	if llmer == nil {
 		return

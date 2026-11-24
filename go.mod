@@ -7,6 +7,7 @@ require (
 	github.com/disgoorg/disgo v0.20.0
 	github.com/forPelevin/gomoji v1.4.1
 	github.com/fsnotify/fsnotify v1.10.1
+	github.com/invaliduser231/fluxer-go v0.2.0
 	github.com/ledongthuc/pdf v0.0.0-20261020125853-5e46805f718e
 	github.com/microcosm-cc/bluemonday v1.0.27
 	github.com/rs/zerolog v1.35.1
@@ -25,6 +26,7 @@ require (
 	filippo.io/edwards25519 v1.2.0 // indirect
 	github.com/andybalholm/cascadia v1.3.5 // indirect
 	github.com/aymerick/douceur v0.2.0 // indirect
+	github.com/coder/websocket v1.8.15 // indirect
 	github.com/disgoorg/godave v0.3.0 // indirect
 	github.com/disgoorg/json/v2 v2.0.0 // indirect
 	github.com/disgoorg/omit v1.0.0 // indirect

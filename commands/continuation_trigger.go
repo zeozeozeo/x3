@@ -23,6 +23,10 @@ type candidate struct {
 	// ChannelID and BotID locate the message and the bot in that buffer.
 	ChannelID snowflake.ID
 	BotID     snowflake.ID
+	// turns, when set, replaces the Discord channel-history lookup for the
+	// unanswered messages since the bot's last reply. Platforms that keep
+	// their own history buffer supply it; Discord leaves it nil.
+	turns func(wanted int) []decide.Turn
 	// Content is the message text.
 	Content string
 	// AuthorName is who said it.
@@ -59,7 +63,7 @@ func shouldTriggerContinuation(cache *db.ChannelCache, cand candidate) bool {
 		Candidate:       cand.Content,
 		CandidateName:   cand.AuthorName,
 		History:         cacheHistoryForContinuation(cache),
-		Unanswered:      unansweredSinceLastReply(cand, cfg.HistoryTurns),
+		Unanswered:      cand.unansweredFor(cfg.HistoryTurns),
 		BotNames:        cand.BotNames,
 		ChannelName:     cand.ChannelName,
 		PersonaName:     cand.PersonaName,
@@ -74,6 +78,16 @@ func shouldTriggerContinuation(cache *db.ChannelCache, cand candidate) bool {
 		"kind", decision.Kind,
 	)
 	return decision.Trigger
+}
+
+// unansweredFor returns the turns since the bot's last reply, from the
+// platform override when one is set and otherwise from the Discord channel
+// history buffer.
+func (c candidate) unansweredFor(wanted int) []decide.Turn {
+	if c.turns != nil {
+		return c.turns(wanted)
+	}
+	return unansweredSinceLastReply(c, wanted)
 }
 
 // unansweredSinceLastReply collects the messages that arrived after the bot's

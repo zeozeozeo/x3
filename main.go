@@ -223,6 +223,18 @@ func main() {
 		}()
 	}
 
+	fluxerRuntime, err := commands.StartFluxerBot(context.Background())
+	if err != nil {
+		slog.Error("error while starting Fluxer bot", "err", err)
+		return
+	}
+	if fluxerRuntime != nil {
+		defer func() {
+			fluxerRuntime.Cancel()
+			<-fluxerRuntime.Done
+		}()
+	}
+
 	// start GUI server
 	modelEditorServer := modeled.NewServer(dbPath)
 	slog.Info("model editor available", "url", modelEditorServer.URL())
