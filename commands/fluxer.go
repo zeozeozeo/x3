@@ -1622,7 +1622,12 @@ type cachedFluxerEnvironment struct {
 	updatedAt time.Time
 }
 
-const fluxerEnvironmentCacheTTL = 12 * time.Hour
+const (
+	fluxerEnvironmentCacheTTL = 12 * time.Hour
+	// An empty channel list usually means the bot lacks View Channel or the
+	// guild listing failed transiently, so re-probe it sooner.
+	fluxerEnvironmentEmptyCacheTTL = 5 * time.Minute
+)
 
 var fluxerEnvironmentCache sync.Map // channel ID -> cachedFluxerEnvironment
 
@@ -1644,8 +1649,14 @@ func cachedFluxerChannelName(channelID string) string {
 
 func (b *FluxerBot) fluxerEnvironment(ctx context.Context, channelID, guildID string) *persona.FluxerEnvironment {
 	if cached, ok := fluxerEnvironmentCache.Load(channelID); ok {
-		if entry, ok := cached.(*cachedFluxerEnvironment); ok && time.Since(entry.updatedAt) <= fluxerEnvironmentCacheTTL {
-			return entry.env
+		if entry, ok := cached.(*cachedFluxerEnvironment); ok {
+			ttl := fluxerEnvironmentCacheTTL
+			if entry.env == nil || len(entry.env.VisibleChannels) == 0 {
+				ttl = fluxerEnvironmentEmptyCacheTTL
+			}
+			if time.Since(entry.updatedAt) <= ttl {
+				return entry.env
+			}
 		}
 	}
 	env := b.buildFluxerEnvironment(ctx, channelID, guildID)
@@ -1672,7 +1683,9 @@ func (b *FluxerBot) buildFluxerEnvironment(ctx context.Context, channelID, guild
 		} else if err != nil {
 			slog.Warn("failed to fetch fluxer guild for environment", "err", err, "guild_id", guildID)
 		}
-		if channels, err := b.client.GuildChannels(ctx, guildID); err == nil {
+		if channels, err := b.client.GuildChannels(ctx, guildID); err != nil {
+			slog.Warn("failed to list fluxer guild channels for environment", "err", err, "guild_id", guildID)
+		} else {
 			env.VisibleChannels = fluxerVisibleChannelRefs(channels, channelID)
 		}
 	}

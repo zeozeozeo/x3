@@ -84,8 +84,19 @@ type channelRef struct {
 }
 
 // renderEnvironmentBlock renders the shared environment-block layout for a
-// platform ("Discord" or "Fluxer").
+// platform ("Discord" or "Fluxer"). An environment with no usable channel
+// list is not rendered: server and current-channel names alone only add noise.
 func renderEnvironmentBlock(platform, guildName, guildDescription, channelID, channelName, channelDescription string, visible []channelRef) string {
+	channels := make([]channelRef, 0, len(visible))
+	for _, ch := range visible {
+		if strings.TrimSpace(ch.name) != "" {
+			channels = append(channels, ch)
+		}
+	}
+	if len(channels) == 0 {
+		return ""
+	}
+
 	var sb strings.Builder
 	fmt.Fprintf(&sb, "**%s context:**\n", platform)
 	if guildName != "" {
@@ -104,32 +115,27 @@ func renderEnvironmentBlock(platform, guildName, guildDescription, channelID, ch
 	if channelDescription != "" {
 		fmt.Fprintf(&sb, "- Current channel description: %s\n", html.UnescapeString(channelDescription))
 	}
-	if len(visible) > 0 {
-		channels := append([]channelRef(nil), visible...)
-		sort.SliceStable(channels, func(i, j int) bool {
-			if channels[i].category != channels[j].category {
-				return strings.ToLower(channels[i].category) < strings.ToLower(channels[j].category)
-			}
-			return strings.ToLower(channels[i].name) < strings.ToLower(channels[j].name)
-		})
-		sb.WriteString("- Accessible text channels:\n")
-		for _, ch := range channels {
-			chName := html.UnescapeString(strings.TrimSpace(ch.name))
-			if chName == "" {
-				continue
-			}
-			fmt.Fprintf(&sb, "  - #%s", chName)
-			if id := strings.TrimSpace(ch.id); id != "" {
-				fmt.Fprintf(&sb, " (id: %s)", id)
-			}
-			if cat := strings.TrimSpace(ch.category); cat != "" {
-				fmt.Fprintf(&sb, " [%s]", html.UnescapeString(cat))
-			}
-			if desc := html.UnescapeString(strings.TrimSpace(ch.description)); desc != "" {
-				fmt.Fprintf(&sb, " - %s", html.UnescapeString(desc))
-			}
-			sb.WriteRune('\n')
+	sorted := append([]channelRef(nil), channels...)
+	sort.SliceStable(sorted, func(i, j int) bool {
+		if sorted[i].category != sorted[j].category {
+			return strings.ToLower(sorted[i].category) < strings.ToLower(sorted[j].category)
 		}
+		return strings.ToLower(sorted[i].name) < strings.ToLower(sorted[j].name)
+	})
+	sb.WriteString("- Accessible text channels:\n")
+	for _, ch := range sorted {
+		chName := html.UnescapeString(strings.TrimSpace(ch.name))
+		fmt.Fprintf(&sb, "  - #%s", chName)
+		if id := strings.TrimSpace(ch.id); id != "" {
+			fmt.Fprintf(&sb, " (id: %s)", id)
+		}
+		if cat := strings.TrimSpace(ch.category); cat != "" {
+			fmt.Fprintf(&sb, " [%s]", html.UnescapeString(cat))
+		}
+		if desc := html.UnescapeString(strings.TrimSpace(ch.description)); desc != "" {
+			fmt.Fprintf(&sb, " - %s", html.UnescapeString(desc))
+		}
+		sb.WriteRune('\n')
 	}
 	return strings.TrimSpace(sb.String())
 }
