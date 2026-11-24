@@ -57,18 +57,23 @@ var imageURLExtensions = map[string]struct{}{
 }
 
 func getLobotomyAmountFromMessage(msg discord.Message) int {
-	matches := lobotomyMessagesRegex.FindStringSubmatch(msg.Content)
+	amount, _ := parseLobotomyRemoval(msg.Content)
+	return amount
+}
+
+func parseLobotomyRemoval(text string) (int, bool) {
+	matches := lobotomyMessagesRegex.FindStringSubmatch(text)
 	if len(matches) != 3 {
-		return 0
+		return 0, false
 	}
 	n, err := strconv.Atoi(matches[1])
 	if err != nil {
-		return 0
+		return 0, false
 	}
 	if strings.EqualFold(matches[2], "turns") {
-		return n * 2
+		return n * 2, true
 	}
-	return n
+	return n, true
 }
 
 func isLobotomyMessage(msg discord.Message) bool {

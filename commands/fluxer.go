@@ -952,6 +952,11 @@ func (b *FluxerBot) appendFluxerContextBatch(llmer *llm.Llmer, batch []fluxer.Me
 	for i := len(batch) - 1; i >= 0; i-- {
 		m := &batch[i]
 		if m.Author.ID == b.selfUserID() {
+			if amount, ok := fluxerLobotomyAmount(m.Content); ok {
+				llmer.Lobotomize(amount)
+				lastAssistantID = m.ID
+				continue
+			}
 			b.appendFluxerBotContextMessage(llmer, m)
 			lastAssistantID = m.ID
 			continue
@@ -1014,6 +1019,20 @@ func (b *FluxerBot) isFluxerCommandInvocation(m *fluxer.Message) bool {
 		return true
 	}
 	return false
+}
+
+// fluxerLobotomyAmount reports whether content is a Fluxer lobotomy command
+// result and how many context messages it removed. Zero with ok means the
+// command cleared all non-system messages.
+func fluxerLobotomyAmount(content string) (int, bool) {
+	if !strings.HasPrefix(content, fluxerCommandResultMarker) {
+		return 0, false
+	}
+	content = strings.TrimSpace(strings.TrimPrefix(content, fluxerCommandResultMarker))
+	if strings.HasPrefix(content, "Lobotomized for this channel") {
+		return 0, true
+	}
+	return parseLobotomyRemoval(content)
 }
 
 // appendFluxerBotContextMessage reconstructs one of the bot's own messages
